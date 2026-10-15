@@ -1,0 +1,225 @@
+'use strict';
+
+var PerformanceDiagnostics = {
+  _items: {},
+
+  reset: function() {
+    this._items = {};
+  },
+
+  record: function(operation, sheetName, elapsedMs, extra) {
+    var key = String(operation || '') + '|' + String(sheetName || '');
+    var item = this._items[key];
+
+    if (!item) {
+      item = {
+        operation: operation || '',
+        sheet: sheetName || '',
+        count: 0,
+        totalMs: 0,
+        maxMs: 0
+      };
+      this._items[key] = item;
+    }
+
+    var elapsed = Number(elapsedMs) || 0;
+    item.count++;
+    item.totalMs += elapsed;
+    item.maxMs = Math.max(item.maxMs, elapsed);
+
+    if (extra) {
+      if (extra.lockWaitMs !== undefined) {
+        item.lockWaitMs = (item.lockWaitMs || 0) + extra.lockWaitMs;
+      }
+      if (extra.writeMs !== undefined) {
+        item.writeMs = (item.writeMs || 0) + extra.writeMs;
+      }
+      if (extra.updateMs !== undefined) {
+        item.updateMs = (item.updateMs || 0) + extra.updateMs;
+      }
+    }
+  },
+
+  getSummary: function() {
+    return Object.keys(this._items)
+      .map(function(key) {
+        var item = PerformanceDiagnostics._items[key];
+        return Object.assign({}, item);
+      })
+      .sort(function(a, b) {
+        return b.totalMs - a.totalMs;
+      })
+      .slice(0, 25);
+  }
+};
+
+function resetRequestCaches_() {
+  if (
+    typeof DepartmentRepository !== 'undefined' &&
+    DepartmentRepository &&
+    typeof DepartmentRepository.resetRequestCache === 'function'
+  ) {
+    DepartmentRepository.resetRequestCache();
+  }
+
+  if (
+    typeof GoogleSheetsRepository !== 'undefined' &&
+    GoogleSheetsRepository &&
+    typeof GoogleSheetsRepository.resetRequestCache === 'function'
+  ) {
+    GoogleSheetsRepository.resetRequestCache();
+  }
+}
+
+function webAppDoGet(e) {
+  var startedAt = Date.now();
+  var timing = {};
+
+  PerformanceDiagnostics.reset();
+  resetRequestCaches_();
+
+  try {
+    var t = Date.now();
+    var request = RequestParser.parseGet(e);
+    timing.parseMs = Date.now() - t;
+
+    t = Date.now();
+    AccessControlService.enforceRouteAccess(
+      'GET',
+      request.path,
+      request.params
+    );
+    timing.accessMs = Date.now() - t;
+
+    t = Date.now();
+    var result = Router.get(request.path, request.params);
+    timing.routerMs = Date.now() - t;
+
+    timing.totalMs = Date.now() - startedAt;
+    return buildHttpResponse_(result, timing, false);
+
+  } catch (error) {
+    timing.totalMs = Date.now() - startedAt;
+    return buildErrorResponse_(error, timing, false);
+  }
+}
+
+function webAppDoPost(e) {
+  var startedAt = Date.now();
+  var timing = {};
+  var isEventCreation = false;
+
+  PerformanceDiagnostics.reset();
+  resetRequestCaches_();
+
+  try {
+    var t = Date.now();
+    var request = RequestParser.parsePost(e);
+    timing.parseMs = Date.now() - t;
+
+    isEventCreation =
+      request.method === 'POST' &&
+      String(request.path || '').trim() === '/events';
+
+    t = Date.now();
+    AccessControlService.enforceRouteAccess(
+      request.method,
+      request.path,
+      request.params
+    );
+    timing.accessMs = Date.now() - t;
+
+    t = Date.now();
+    var result;
+
+    if (request.method === 'POST') {
+      result = Router.post(
+        request.path,
+        request.body,
+        request.params
+      );
+    } else if (request.method === 'PUT') {
+      result = Router.put(
+        request.path,
+        request.body,
+        request.params
+      );
+    } else if (request.method === 'DELETE') {
+      var deleteParams = Object.assign({}, request.params);
+
+      if (
+        request.body &&
+        request.body.reason !== undefined
+      ) {
+        deleteParams.reason = request.body.reason;
+      }
+
+      result = Router.delete(request.path, deleteParams);
+    } else {
+      throw ErrorHandler.create(
+        Constants.ERROR.INVALID_OPERATION,
+        'متد درخواست پشتیبانی نمی‌شود.'
+      );
+    }
+
+    timing.routerMs = Date.now() - t;
+    timing.totalMs = Date.now() - startedAt;
+
+    return buildHttpResponse_(result, timing, isEventCreation);
+
+  } catch (error) {
+    timing.totalMs = Date.now() - startedAt;
+    return buildErrorResponse_(error, timing, isEventCreation);
+  }
+}
+
+function buildHttpResponse_(result, timing, includeTiming) {
+  var response = result || {
+    success: true,
+    data: null
+  };
+
+  if (includeTiming && response && typeof response === 'object') {
+    response._diagnostics = Object.assign({}, timing, {
+      sheetOperations: PerformanceDiagnostics.getSummary()
+    });
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function buildErrorResponse_(error, timing, includeTiming) {
+  var response;
+
+  if (error && error.code) {
+    response = {
+      success: false,
+      error: {
+        code: error.code,
+        message: error.message || 'خطای نامشخص.'
+      }
+    };
+  } else {
+    response = {
+      success: false,
+      error: {
+        code: Constants.ERROR.INTERNAL_ERROR,
+        message: error && error.message
+          ? error.message
+          : 'خطای داخلی سیستم.'
+      }
+    };
+  }
+
+  if (includeTiming) {
+    response._diagnostics = Object.assign({}, timing, {
+      sheetOperations: PerformanceDiagnostics.getSummary()
+    });
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify(response))
+    .setMimeType(ContentService.MimeType.JSON);
+}

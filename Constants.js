@@ -1,0 +1,162 @@
+/**
+ * ============================================================
+ * SYSTEM CONSTANTS
+ * ============================================================
+ */
+
+const Constants = {
+
+  STATUS: {
+
+    ACTIVE: 'ACTIVE',
+
+    INACTIVE: 'INACTIVE',
+
+    ON_HOLD: 'ON_HOLD',
+
+    COMPLETED: 'COMPLETED',
+
+    CANCELLED: 'CANCELLED',
+
+    VOID: 'VOID',
+
+    DELETED: 'DELETED'
+  },
+
+
+  CATEGORIES: [
+
+    'PROCESS',
+
+    'MATERIAL',
+
+    'QUALITY',
+
+    'WAREHOUSE',
+
+    'ADMIN',
+
+    'SYSTEM'
+  ],
+
+
+  ENTITY: {
+
+    TENANT: 'TENANT',
+
+    USER: 'USER',
+
+    DEPARTMENT: 'DEPARTMENT',
+
+    ROLE: 'ROLE',
+
+    PERMISSION: 'PERMISSION',
+
+    PROJECT: 'PROJECT',
+
+    WORKFLOW: 'WORKFLOW',
+
+    WORKFLOW_STEP: 'WORKFLOW_STEP',
+
+    EVENT_TYPE: 'EVENT_TYPE',
+
+    EVENT: 'EVENT',
+
+    EVENT_FIELD: 'EVENT_FIELD',
+
+    ATTACHMENT: 'ATTACHMENT'
+  },
+
+
+  ACTION: {
+
+    CREATE: 'CREATE',
+
+    UPDATE: 'UPDATE',
+
+    DELETE: 'DELETE',
+
+    VOID: 'VOID',
+
+    LOGIN: 'LOGIN',
+
+    LOGOUT: 'LOGOUT',
+
+    UPLOAD: 'UPLOAD',
+
+    DOWNLOAD: 'DOWNLOAD',
+
+    PERMISSION_DENIED: 'PERMISSION_DENIED'
+  },
+
+
+  ERROR: {
+
+    UNAUTHORIZED: 'UNAUTHORIZED',
+
+    PERMISSION_DENIED: 'PERMISSION_DENIED',
+
+    VALIDATION_ERROR: 'VALIDATION_ERROR',
+
+    NOT_FOUND: 'NOT_FOUND',
+
+    DUPLICATE: 'DUPLICATE',
+
+    INVALID_STATUS: 'INVALID_STATUS',
+
+    INVALID_OPERATION: 'INVALID_OPERATION',
+
+    INVALID_EVENT_TYPE: 'INVALID_EVENT_TYPE',
+
+    INVALID_WORKFLOW: 'INVALID_WORKFLOW',
+
+    PROJECT_NOT_FOUND: 'PROJECT_NOT_FOUND',
+
+    USER_NOT_FOUND: 'USER_NOT_FOUND',
+
+    EVENT_NOT_FOUND: 'EVENT_NOT_FOUND',
+
+    FILE_NOT_FOUND: 'FILE_NOT_FOUND',
+
+    UPLOAD_FAILED: 'UPLOAD_FAILED',
+
+    STORAGE_ERROR: 'STORAGE_ERROR',
+
+    CONFLICT: 'CONFLICT',
+
+    INTERNAL_ERROR: 'INTERNAL_ERROR'
+  },
+
+
+  ID_PREFIX: {
+
+    TENANT: 'TEN',
+
+    USER: 'USR',
+
+    DEPARTMENT: 'DEP',
+
+    ROLE: 'ROL',
+
+    PERMISSION: 'PER',
+
+    PROJECT: 'PRJ',
+
+    WORKFLOW: 'WF',
+
+    WORKFLOW_STEP: 'STEP',
+
+    EVENT_TYPE: 'ET',
+
+    EVENT_FIELD: 'EF',
+
+    EVENT: 'EVT',
+
+    ATTACHMENT: 'ATT',
+
+    AUDIT: 'AUD',
+
+    SESSION: 'SES'
+  }
+
+};

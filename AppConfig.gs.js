@@ -1,0 +1,34 @@
+const AppConfig = {
+  APP_NAME: 'Production Management System',
+  VERSION: '1.0.0',
+  ENVIRONMENT: 'MVP',
+
+  DATABASE: {
+    SPREADSHEET_ID: '',
+  },
+
+  API: {
+    DEFAULT_PAGE: 1,
+    DEFAULT_PAGE_SIZE: 20,
+    MAX_PAGE_SIZE: 100
+  },
+
+  AUTH: {
+    SESSION_DURATION_HOURS: 12
+  },
+
+  FILES: {
+    MAX_SIZE_MB: 10,
+
+    GOOGLE_DRIVE_FOLDER_ID: '',
+
+    ALLOWED_MIME_TYPES: [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ]
+  }
+};
