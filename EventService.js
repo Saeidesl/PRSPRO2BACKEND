@@ -479,7 +479,7 @@ const EventService = {
     (EventDataRepository.getAll() || []).forEach(function(record) {
       const eventId = String(record.EventID || '');
       // Tenant isolation is inherited from the tenant-validated event ID.
-      if (!eventIds[eventId]) return;
+      if (!eventIds[eventId] || Object.prototype.hasOwnProperty.call(eventData, eventId)) return;
 
       let parsed = {};
       if (record.DataJSON !== undefined && record.DataJSON !== null &&
