@@ -13,8 +13,9 @@ const Router = {
       return user;
     }
 
+    const grantedCodes = AccessControlService.getUserPermissions(user.ID);
     const allowed = (permissionCodes || []).some(function(code) {
-      return PermissionService.hasPermission(user.ID, code);
+      return grantedCodes.indexOf(String(code)) !== -1;
     });
 
     if (!allowed) {
