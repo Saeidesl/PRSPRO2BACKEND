@@ -308,6 +308,63 @@ const ProjectService = {
 
     const updateData = {};
 
+    if (data.WorkflowID !== undefined) {
+      const requestedWorkflowId = String(data.WorkflowID || '').trim();
+      const currentWorkflowId = String(existing.WorkflowID || '');
+
+      if (!requestedWorkflowId) {
+        throw ErrorHandler.create(
+          Constants.ERROR.INVALID_WORKFLOW,
+          'انتخاب گردش‌کار برای پروژه الزامی است.'
+        );
+      }
+
+      if (requestedWorkflowId !== currentWorkflowId) {
+        const projectEvents = EventRepository.getAll().filter(function(item) {
+          return String(item.ProjectID) === String(existing.ID) &&
+            String(item.TenantID) === String(user.TenantID);
+        });
+
+        // هر رویدادی، حتی رویداد باطل‌شده، بخشی از تاریخچه پروژه است.
+        if (projectEvents.length > 0) {
+          throw ErrorHandler.create(
+            Constants.ERROR.INVALID_WORKFLOW,
+            'پس از ثبت اولین رویداد، تغییر گردش‌کار پروژه مجاز نیست.'
+          );
+        }
+
+        const workflow = WorkflowRepository.findById(requestedWorkflowId);
+
+        if (
+          !workflow ||
+          String(workflow.TenantID) !== String(user.TenantID) ||
+          String(workflow.Status || Constants.STATUS.ACTIVE).toUpperCase() !==
+            String(Constants.STATUS.ACTIVE).toUpperCase()
+        ) {
+          throw ErrorHandler.create(
+            Constants.ERROR.INVALID_WORKFLOW,
+            'گردش‌کار انتخاب‌شده معتبر یا فعال نیست.'
+          );
+        }
+
+        const firstStep = WorkflowStepRepository.findFirstByWorkflowId(workflow.ID);
+
+        if (
+          !firstStep ||
+          String(firstStep.TenantID) !== String(user.TenantID)
+        ) {
+          throw ErrorHandler.create(
+            Constants.ERROR.INVALID_WORKFLOW,
+            'گردش‌کار انتخاب‌شده مرحله اول معتبر ندارد.'
+          );
+        }
+
+        updateData.WorkflowID = workflow.ID;
+        updateData.WorkflowVersion = workflow.Version || 1;
+        updateData.CurrentStepID = firstStep.ID;
+      }
+    }
+
     if (
       data.ProjectCode !== undefined
     ) {
