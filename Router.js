@@ -6,6 +6,27 @@
 
 const Router = {
 
+  requireAny: function(params, permissionCodes) {
+    const user = AccessControlService.getCurrentUser(params || {});
+
+    if (AccessControlService.isAdmin(user)) {
+      return user;
+    }
+
+    const allowed = (permissionCodes || []).some(function(code) {
+      return PermissionService.hasPermission(user.ID, code);
+    });
+
+    if (!allowed) {
+      throw ErrorHandler.create(
+        Constants.ERROR.PERMISSION_DENIED,
+        'شما دسترسی لازم برای این عملیات را ندارید.'
+      );
+    }
+
+    return user;
+  },
+
   get: function(path, params) {
     path = String(path || '').trim();
 
@@ -105,12 +126,12 @@ const Router = {
     }
 
     if (path === '/event-types') {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
       return EventTypeService.list(params);
     }
 
     if (path.indexOf('/event-types/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
       const parts = path.split('/');
       const eventTypeId = parts[2];
 
