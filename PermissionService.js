@@ -47,10 +47,13 @@ const PermissionService = {
   /**
    * دریافت تمام مجوزهای کاربر با خواندن گروهی اطلاعات
    */
-  getUserPermissions: function(userId) {
+  getUserPermissions: function(userId, userRecord) {
     Validator.required(userId, 'UserID');
 
-    const user = UserRepository.findById(userId);
+    const suppliedUser = userRecord && String(userRecord.ID) === String(userId)
+      ? userRecord
+      : null;
+    const user = suppliedUser || UserRepository.findById(userId);
 
     if (!user) {
       throw ErrorHandler.create(
@@ -123,11 +126,11 @@ const PermissionService = {
   /**
    * بررسی یک مجوز مشخص
    */
-  hasPermission: function(userId, permissionCode) {
+  hasPermission: function(userId, permissionCode, userRecord) {
     Validator.required(userId, 'UserID');
     Validator.required(permissionCode, 'کد دسترسی');
 
-    const grantedCodes = this.getUserPermissions(userId);
+    const grantedCodes = this.getUserPermissions(userId, userRecord);
     return grantedCodes.indexOf(String(permissionCode)) !== -1;
   },
 
