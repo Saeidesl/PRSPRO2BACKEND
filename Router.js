@@ -93,6 +93,11 @@ const Router = {
         return EventService.listByProject(projectId, params);
       }
 
+      if (parts[3] === 'details') {
+        AccessControlService.require(params, 'EVENT_VIEW');
+        return EventService.getProjectDetails(projectId, params);
+      }
+
       if (parts[3] === 'attachments') {
         AccessControlService.require(params, 'ATTACHMENT_VIEW');
         return AttachmentService.listByEntity('PROJECT', projectId, params);
