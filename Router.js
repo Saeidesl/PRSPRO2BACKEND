@@ -13,7 +13,7 @@ const Router = {
       return user;
     }
 
-    const grantedCodes = AccessControlService.getUserPermissions(user.ID);
+    const grantedCodes = AccessControlService.getUserPermissions(user.ID, user);
     const allowed = (permissionCodes || []).some(function(code) {
       return grantedCodes.indexOf(String(code)) !== -1;
     });
@@ -44,7 +44,7 @@ const Router = {
           return item.Code;
         });
       } else {
-        permissions = AccessControlService.getUserPermissions(user.ID);
+        permissions = AccessControlService.getUserPermissions(user.ID, user);
       }
 
       return Response.success({
