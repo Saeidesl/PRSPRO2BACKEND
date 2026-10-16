@@ -93,15 +93,16 @@ const ProjectValidator = {
 
     }
 
-    if (data.WorkflowID !== undefined &&
-        data.WorkflowID !== null &&
-        data.WorkflowID !== '') {
+    if (data.WorkflowID !== undefined) {
+      Validator.required(
+        data.WorkflowID,
+        'WorkflowID'
+      );
 
       Validator.id(
         data.WorkflowID,
         'WorkflowID'
       );
-
     }
 
     if (data.Status !== undefined) {
