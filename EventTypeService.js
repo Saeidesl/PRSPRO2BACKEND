@@ -230,19 +230,22 @@ const EventTypeService = {
   list: function(params) {
     const user = AccessControlService.getCurrentUser(params || {});
     const isAdmin = AccessControlService.isAdmin(user);
+    const canManageTypes = !isAdmin &&
+      PermissionService.hasPermission(user.ID, 'EVENT_TYPE_MANAGE');
     const departmentId = String(user.DepartmentID || '');
 
     const eventTypes = EventTypeRepository.getAll();
 
     const filtered = eventTypes.filter(function(eventType) {
-      if (
-        String(eventType.TenantID) !== String(user.TenantID) ||
-        String(eventType.Status || '').toUpperCase() !== 'ACTIVE'
-      ) {
+      if (String(eventType.TenantID) !== String(user.TenantID)) {
         return false;
       }
 
-      if (isAdmin) return true;
+      if (isAdmin || canManageTypes) return true;
+
+      if (String(eventType.Status || '').toUpperCase() !== 'ACTIVE') {
+        return false;
+      }
 
       const allowedDepartments =
         EventTypeService._parseArray_(
@@ -254,15 +257,16 @@ const EventTypeService = {
           eventType.AllowedUserIDs
         );
 
-      return (
-        String(eventType.DepartmentID || '') === departmentId ||
-        allowedDepartments.some(function(id) {
+      if (allowedDepartments.length || allowedUsers.length) {
+        return allowedDepartments.some(function(id) {
           return String(id) === departmentId;
-        }) ||
-        allowedUsers.some(function(id) {
+        }) || allowedUsers.some(function(id) {
           return String(id) === String(user.ID);
-        })
-      );
+        });
+      }
+
+      return !eventType.DepartmentID ||
+        String(eventType.DepartmentID) === departmentId;
     }).map(function(eventType) {
       return EventTypeService._normalize_(eventType);
     });
@@ -289,23 +293,43 @@ const EventTypeService = {
       );
     }
 
-    if (!AccessControlService.isAdmin(user)) {
+    const isAdmin = AccessControlService.isAdmin(user);
+    const canManageTypes = !isAdmin &&
+      PermissionService.hasPermission(user.ID, 'EVENT_TYPE_MANAGE');
+
+    if (
+      !isAdmin &&
+      !canManageTypes &&
+      String(eventType.Status || '').toUpperCase() !== 'ACTIVE'
+    ) {
+      throw ErrorHandler.create(
+        Constants.ERROR.NOT_FOUND,
+        'نوع رویداد مورد نظر پیدا نشد.'
+      );
+    }
+
+    if (!isAdmin && !canManageTypes) {
       const allowedDepartments =
         this._parseArray_(eventType.AllowedDepartmentIDs);
 
       const allowedUsers =
         this._parseArray_(eventType.AllowedUserIDs);
 
+      const departmentId = String(user.DepartmentID || '');
       const permitted =
-        String(eventType.DepartmentID || '') ===
-          String(user.DepartmentID || '') ||
-        allowedDepartments.some(function(departmentId) {
-          return String(departmentId) ===
-            String(user.DepartmentID || '');
-        }) ||
-        allowedUsers.some(function(userId) {
-          return String(userId) === String(user.ID);
-        });
+        allowedDepartments.length || allowedUsers.length
+          ? (
+              allowedDepartments.some(function(departmentIdAllowed) {
+                return String(departmentIdAllowed) === departmentId;
+              }) ||
+              allowedUsers.some(function(userId) {
+                return String(userId) === String(user.ID);
+              })
+            )
+          : (
+              !eventType.DepartmentID ||
+              String(eventType.DepartmentID) === departmentId
+            );
 
       if (!permitted) {
         throw ErrorHandler.create(
@@ -319,16 +343,12 @@ const EventTypeService = {
   },
 
   create: function(data, params) {
+    const user = AccessControlService.require(
+      params || {},
+      'EVENT_TYPE_MANAGE'
+    );
+
     EventTypeValidator.validateCreate(data);
-
-    const user = AccessControlService.getCurrentUser(params || {});
-
-    if (!AccessControlService.isAdmin(user)) {
-      throw ErrorHandler.create(
-        Constants.ERROR.PERMISSION_DENIED,
-        'فقط مدیر سیستم می‌تواند نوع رویداد ایجاد کند.'
-      );
-    }
 
     if (!user.TenantID) {
       throw ErrorHandler.create(
@@ -410,16 +430,13 @@ const EventTypeService = {
 
   update: function(id, data, params) {
     Validator.id(id, 'EventTypeID');
+
+    const user = AccessControlService.require(
+      params || {},
+      'EVENT_TYPE_MANAGE'
+    );
+
     EventTypeValidator.validateUpdate(data);
-
-    const user = AccessControlService.getCurrentUser(params || {});
-
-    if (!AccessControlService.isAdmin(user)) {
-      throw ErrorHandler.create(
-        Constants.ERROR.PERMISSION_DENIED,
-        'فقط مدیر سیستم می‌تواند نوع رویداد را ویرایش کند.'
-      );
-    }
 
     const existing = EventTypeRepository.findById(id);
 
