@@ -4,19 +4,21 @@ const GoogleSheetsRepository = {
   _sheetCache: {},
   _headerCache: {},
   _requestRecordCache: {},
+  _requestListCache: {},
+  _requestFindCache: {},
 
   resetRequestCache: function() {
     this._requestRecordCache = {};
+    this._requestListCache = {};
+    this._requestFindCache = {};
   },
 
   _invalidateSheetRecordCache: function(sheetName) {
     var prefix = String(sheetName) + '|';
-    var cache = this._requestRecordCache;
-
-    Object.keys(cache).forEach(function(key) {
-      if (key.indexOf(prefix) === 0) {
-        delete cache[key];
-      }
+    [this._requestRecordCache, this._requestListCache, this._requestFindCache].forEach(function(cache) {
+      Object.keys(cache).forEach(function(key) {
+        if (key.indexOf(prefix) === 0) delete cache[key];
+      });
     });
   },
 
@@ -49,7 +51,19 @@ const GoogleSheetsRepository = {
       );
     }
 
-    console.log(JSON.stringify(log));
+    var consoleLoggingEnabled = false;
+    try {
+      consoleLoggingEnabled = !!(
+        AppConfig && (
+          AppConfig.PERFORMANCE_LOG_TO_CONSOLE === true ||
+          (AppConfig.PERFORMANCE && AppConfig.PERFORMANCE.LOG_TO_CONSOLE === true)
+        )
+      );
+    } catch (configError) {}
+
+    if (consoleLoggingEnabled && typeof console !== 'undefined' && console.log) {
+      console.log(JSON.stringify(log));
+    }
   },
 
   _rowToObject: function(headers, row) {
@@ -60,12 +74,24 @@ const GoogleSheetsRepository = {
     return item;
   },
 
-  _findRowNumber: function(sheet, headers, fieldName, value) {
+  _findRowNumber: function(sheet, headers, fieldName, value, sheetName) {
+    const normalizedSheetName = String(sheetName || '');
+    const cacheKey = normalizedSheetName + '|' + String(fieldName) + '|' + String(value);
+    if (normalizedSheetName && Object.prototype.hasOwnProperty.call(this._requestFindCache, cacheKey)) {
+      return this._requestFindCache[cacheKey];
+    }
+
     const lastRow = sheet.getLastRow();
-    if (lastRow < 2 || headers.length === 0) return -1;
+    if (lastRow < 2 || headers.length === 0) {
+      if (normalizedSheetName) this._requestFindCache[cacheKey] = -1;
+      return -1;
+    }
 
     const columnIndex = headers.indexOf(fieldName);
-    if (columnIndex === -1) return -1;
+    if (columnIndex === -1) {
+      if (normalizedSheetName) this._requestFindCache[cacheKey] = -1;
+      return -1;
+    }
 
     const values = sheet.getRange(
       2, columnIndex + 1, lastRow - 1, 1
@@ -74,9 +100,14 @@ const GoogleSheetsRepository = {
     const target = String(value);
 
     for (let i = 0; i < values.length; i++) {
-      if (String(values[i][0]) === target) return i + 2;
+      if (String(values[i][0]) === target) {
+        const rowNumber = i + 2;
+        if (normalizedSheetName) this._requestFindCache[cacheKey] = rowNumber;
+        return rowNumber;
+      }
     }
 
+    if (normalizedSheetName) this._requestFindCache[cacheKey] = -1;
     return -1;
   },
 
@@ -170,12 +201,23 @@ const GoogleSheetsRepository = {
     const startTime = Date.now();
 
     try {
+      const listKey = String(sheetName);
+      if (Object.prototype.hasOwnProperty.call(this._requestListCache, listKey)) {
+        return this._requestListCache[listKey].map(function(item) { return Object.assign({}, item); });
+      }
+
       const sheet = this.getSheet(sheetName);
       const lastRow = sheet.getLastRow();
-      if (lastRow < 2) return [];
+      if (lastRow < 2) {
+        this._requestListCache[listKey] = [];
+        return [];
+      }
 
       const headers = this.getHeaders(sheetName);
-      if (headers.length === 0) return [];
+      if (headers.length === 0) {
+        this._requestListCache[String(sheetName)] = [];
+        return [];
+      }
 
       const values = sheet.getRange(
         2, 1, lastRow - 1, headers.length
@@ -199,6 +241,9 @@ const GoogleSheetsRepository = {
         }
       }
 
+      this._requestListCache[String(sheetName)] = result.map(function(item) {
+        return Object.assign({}, item);
+      });
       return result;
     } finally {
       this._logTiming('getAll', sheetName, startTime);
@@ -213,7 +258,8 @@ const GoogleSheetsRepository = {
         this.getSheet(sheetName),
         this.getHeaders(sheetName),
         fieldName,
-        value
+        value,
+        sheetName
       );
     } finally {
       this._logTiming(
@@ -248,7 +294,8 @@ const GoogleSheetsRepository = {
         sheet,
         headers,
         'ID',
-        id
+        id,
+        sheetName
       );
 
       if (rowNumber === -1) {
