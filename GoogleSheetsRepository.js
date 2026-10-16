@@ -15,6 +15,8 @@ const GoogleSheetsRepository = {
 
   _invalidateSheetRecordCache: function(sheetName) {
     var prefix = String(sheetName) + '|';
+    delete this._requestListCache[String(sheetName)];
+
     [this._requestRecordCache, this._requestListCache, this._requestFindCache].forEach(function(cache) {
       Object.keys(cache).forEach(function(key) {
         if (key.indexOf(prefix) === 0) delete cache[key];
@@ -327,7 +329,8 @@ const GoogleSheetsRepository = {
         sheet,
         headers,
         fieldName,
-        value
+        value,
+        sheetName
       );
 
       if (rowNumber === -1) return null;
@@ -454,7 +457,8 @@ const GoogleSheetsRepository = {
           sheet,
           headers,
           'ID',
-          id
+          id,
+          sheetName
         );
 
         if (targetRow === -1) {
