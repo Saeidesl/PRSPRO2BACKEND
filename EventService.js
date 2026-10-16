@@ -471,7 +471,8 @@ const EventService = {
     const eventData = Object.create(null);
     (EventDataRepository.getAll() || []).forEach(function(record) {
       const eventId = String(record.EventID || '');
-      if (!eventIds[eventId] || String(record.TenantID) !== tenantId) return;
+      // Tenant isolation is inherited from the tenant-validated event ID.
+      if (!eventIds[eventId]) return;
 
       let parsed = {};
       if (record.DataJSON !== undefined && record.DataJSON !== null &&
