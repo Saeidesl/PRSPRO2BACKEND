@@ -448,7 +448,14 @@ const EventService = {
     const user = AccessControlService.getCurrentUser(params || {});
     const project = ProjectRepository.findById(projectId);
 
-    if (!project || String(project.TenantID) !== String(user.TenantID)) {
+    if (!project) {
+      throw ErrorHandler.create(
+        Constants.ERROR.PROJECT_NOT_FOUND,
+        'پروژه مورد نظر پیدا نشد.'
+      );
+    }
+
+    if (String(project.TenantID) !== String(user.TenantID)) {
       throw ErrorHandler.create(
         Constants.ERROR.NOT_FOUND,
         'پروژه مورد نظر پیدا نشد.'
