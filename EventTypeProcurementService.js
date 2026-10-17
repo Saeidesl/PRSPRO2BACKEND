@@ -76,15 +76,9 @@ const EventTypeProcurementService = {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نگاشت هر فیلد باید کد فیلد پویا باشد.');
       }
       fieldMap[key] = fieldMap[key].trim();
-      if (key !== 'ProjectID' && key !== 'Notes' && key !== 'ItemCode' &&
-          key !== 'NeededBy' && key !== 'ReceivedAt' &&
-          !activeCodes[fieldMap[key]]) {
+      if (!activeCodes[fieldMap[key]]) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
           'کد فیلد پویا برای نگاشت تأمین معتبر یا فعال نیست: ' + fieldMap[key]);
-      }
-      if (activeCodes[fieldMap[key]] === false) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
-          'فیلد انتخاب‌شده غیرفعال است: ' + fieldMap[key]);
       }
     });
     if (action === 'CREATE_NEED' &&
