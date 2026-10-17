@@ -524,7 +524,7 @@ const EventService = {
     options = options || {};
 
     const offset = Math.max(0, Number(options.offset || 0) || 0);
-    const limit = Math.min(150, Math.max(20, Number(options.limit || 100) || 100));
+    const limit = Math.min(5000, Math.max(20, Number(options.limit || 5000) || 5000));
 
     const projects = (ProjectRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId;
