@@ -63,11 +63,29 @@ const EventTypeProcurementService = {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات اتصال تأمین معتبر نیست.');
     }
     var fieldMap = this._parseMap_(body.FieldMap || {});
+    var fields = EventFieldRepository.findByEventTypeId(eventTypeId) || [];
+    var activeCodes = Object.create(null);
+    fields.forEach(function(field) {
+      if (String(field.TenantID) === String(user.TenantID) &&
+          String(field.Status || '').toUpperCase() === 'ACTIVE') {
+        activeCodes[String(field.Code)] = true;
+      }
+    });
     Object.keys(fieldMap).forEach(function(key) {
-      if (typeof fieldMap[key] !== 'string') {
+      if (typeof fieldMap[key] !== 'string' || !fieldMap[key].trim()) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نگاشت هر فیلد باید کد فیلد پویا باشد.');
       }
       fieldMap[key] = fieldMap[key].trim();
+      if (key !== 'ProjectID' && key !== 'Notes' && key !== 'ItemCode' &&
+          key !== 'NeededBy' && key !== 'ReceivedAt' &&
+          !activeCodes[fieldMap[key]]) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
+          'کد فیلد پویا برای نگاشت تأمین معتبر یا فعال نیست: ' + fieldMap[key]);
+      }
+      if (activeCodes[fieldMap[key]] === false) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
+          'فیلد انتخاب‌شده غیرفعال است: ' + fieldMap[key]);
+      }
     });
     if (action === 'CREATE_NEED' &&
         (!fieldMap.ItemName || !fieldMap.Unit || !fieldMap.RequestedQuantity)) {
