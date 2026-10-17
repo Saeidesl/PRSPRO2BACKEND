@@ -26,6 +26,19 @@ const WorkflowService = {
   },
 
 
+  // Narrow lookup for project creation; does not grant workflow-management access.
+  listAvailableForProject: function(params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const workflows = WorkflowRepository.getAll() || [];
+    const active = workflows.filter(function(workflow) {
+      return String(workflow.TenantID) === String(user.TenantID) &&
+        String(workflow.Status || Constants.STATUS.ACTIVE).toUpperCase() ===
+          String(Constants.STATUS.ACTIVE).toUpperCase();
+    });
+
+    return Response.success({ items: active, total: active.length });
+  },
+
   get: function(id, params) {
 
     Validator.id(
