@@ -137,6 +137,15 @@ const PermissionService = {
       }
     });
 
+    // SYSTEM_MANAGE is the explicit super-administrator grant. Expand it
+    // dynamically to all registered permissions so adding a new permission does
+    // not require maintaining a second hardcoded list.
+    if (result.indexOf('SYSTEM_MANAGE') !== -1) {
+      return permissions.map(function(permission) {
+        return String(permission.Code || '');
+      }).filter(Boolean);
+    }
+
     // Expand inherited permissions once so frontend and backend use the same
     // effective permission set rather than each implementing its own rules.
     const effective = Object.create(null);
