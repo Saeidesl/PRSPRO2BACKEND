@@ -40,6 +40,10 @@ const EventTypeValidator = {
   },
 
   validateFields_: function(data) {
+    if (data.ConnectionType !== undefined && data.ConnectionType !== null && data.ConnectionType !== '') {
+      Validator.enum(data.ConnectionType, ['PROJECT', 'INDEPENDENT'], 'ConnectionType');
+    }
+
     if (data.Version !== undefined &&
         data.Version !== null &&
         data.Version !== '') {
