@@ -783,11 +783,11 @@ const EventService = {
         event: created,
         project: updatedProject,
         workflowMoved: workflowMoved,
-        currentStepID: updatedProject.CurrentStepID,
-        projectStatus: updatedProject.Status,
-        availableDepartmentIDs: this._parseArray_(
-          updatedProject.AvailableDepartmentIDs
-        )
+        currentStepID: updatedProject ? updatedProject.CurrentStepID : '',
+        projectStatus: updatedProject ? updatedProject.Status : '',
+        availableDepartmentIDs: updatedProject
+          ? this._parseArray_(updatedProject.AvailableDepartmentIDs)
+          : []
       },
       {
         message: workflowMoved
