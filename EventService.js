@@ -94,7 +94,7 @@ const EventService = {
         String(item.TenantID) === String(tenantId) &&
         String(item.WorkflowID) === String(project.WorkflowID) &&
         String(item.DepartmentID) === String(departmentId) &&
-        String(item.Status).toUpperCase() === 'ACTIVE'
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'
       );
     });
 
