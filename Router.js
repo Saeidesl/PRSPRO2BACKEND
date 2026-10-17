@@ -110,6 +110,11 @@ const Router = {
       return ProjectService.get(projectId, params);
     }
 
+    if (path === '/workflows/available-for-project') {
+      AccessControlService.require(params, 'PROJECT_CREATE');
+      return WorkflowService.listAvailableForProject(params);
+    }
+
     if (path === '/workflows') {
       this.requireAny(params, ['WORKFLOW_VIEW', 'WORKFLOW_MANAGE']);
       return WorkflowService.list(params);
