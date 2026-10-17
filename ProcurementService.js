@@ -1,7 +1,6 @@
 /**
  * PROCUREMENT SERVICE
- * Read-only first slice: dashboard and tenant-scoped lists.
- * Mutations are intentionally added in a separate implementation step.
+ * Tenant-scoped procurement needs, purchase orders and material receipts.
  */
 const ProcurementService = {
   _user_: function(params) {
@@ -132,9 +131,9 @@ const ProcurementService = {
             throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با تخصیص معتبر نیست.');
           }
         }
-        if (allocationNeed && allocationProject &&
-            allocationNeed.ProjectID &&
-            String(allocationNeed.ProjectID) !== String(allocationProject.ID)) {
+        if (allocationNeed && allocationNeed.ProjectID &&
+            (!allocationProject ||
+             String(allocationNeed.ProjectID) !== String(allocationProject.ID))) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه تخصیص با پروژه نیاز ملزومات مطابقت ندارد.');
         }
         return {
