@@ -13,6 +13,227 @@ const ProcurementService = {
     return value !== 'CANCELLED' && value !== 'VOID' && value !== 'DELETED';
   },
 
+  _id_: function(prefix) {
+    return prefix + '_' + Utilities.getUuid().replace(/-/g, '').substring(0, 12).toLowerCase();
+  },
+
+  _now_: function() {
+    return new Date().toISOString();
+  },
+
+  _number_: function(value, fieldName, allowZero) {
+    var number = Number(value);
+    if (!isFinite(number) || number < 0 || (!allowZero && number <= 0)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
+        'مقدار عددی معتبر نیست: ' + fieldName);
+    }
+    return number;
+  },
+
+  _validateProject_: function(projectId, tenantId) {
+    if (!projectId) return null;
+    var project = ProjectRepository.findById(projectId);
+    if (!project || String(project.TenantID) !== String(tenantId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه معتبر نیست.');
+    }
+    return project;
+  },
+
+  _validateEvent_: function(eventId, tenantId) {
+    if (!eventId) return null;
+    var event = EventRepository.findById(eventId);
+    if (!event || String(event.TenantID) !== String(tenantId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد منبع معتبر نیست.');
+    }
+    return event;
+  },
+
+  createNeed: function(body, params) {
+    body = body || {};
+    var user = this._user_(params);
+    Validator.required(body.ItemName, 'نام ملزوم');
+    Validator.required(body.Unit, 'واحد اندازه‌گیری');
+    var quantity = this._number_(body.RequestedQuantity, 'مقدار موردنیاز', false);
+    this._validateProject_(body.ProjectID, user.TenantID);
+    this._validateEvent_(body.SourceEventID, user.TenantID);
+
+    var now = this._now_();
+    var record = {
+      ID: this._id_('NEED'),
+      TenantID: user.TenantID,
+      ProjectID: body.ProjectID || '',
+      SourceEventID: body.SourceEventID || '',
+      ItemName: String(body.ItemName).trim(),
+      ItemCode: String(body.ItemCode || '').trim(),
+      Unit: String(body.Unit).trim(),
+      RequestedQuantity: quantity,
+      NeededBy: body.NeededBy || '',
+      Status: 'ACTIVE',
+      Notes: String(body.Notes || ''),
+      CreatedBy: user.ID,
+      CreatedAt: now,
+      UpdatedAt: now
+    };
+    GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.NEEDS, record);
+    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'MATERIAL_NEED',EntityID:record.ID,NewData:record});
+    return Response.success(record);
+  },
+
+  createOrder: function(body, params) {
+    body = body || {};
+    var user = this._user_(params);
+    if (!Array.isArray(body.Items) || !body.Items.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سفارش باید دست‌کم یک قلم داشته باشد.');
+    }
+
+    var self = this;
+    var normalized = body.Items.map(function(item) {
+      if (!item || !String(item.ItemName || '').trim() || !String(item.Unit || '').trim()) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام و واحد هر قلم سفارش الزامی است.');
+      }
+      var quantity = self._number_(item.OrderedQuantity, 'مقدار سفارش', false);
+      if (item.MaterialNeedID) {
+        var need = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.NEEDS, item.MaterialNeedID);
+        if (!need || String(need.TenantID) !== String(user.TenantID)) {
+          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با قلم سفارش معتبر نیست.');
+        }
+      }
+      return {
+        source: item,
+        quantity: quantity,
+        price: item.UnitPrice === '' || item.UnitPrice === undefined || item.UnitPrice === null
+          ? '' : self._number_(item.UnitPrice, 'قیمت واحد', true)
+      };
+    });
+
+    var now = this._now_();
+    var order = {
+      ID: this._id_('PO'),
+      TenantID: user.TenantID,
+      OrderNumber: String(body.OrderNumber || '').trim() || this._id_('PO-NO').toUpperCase(),
+      SupplierName: String(body.SupplierName || '').trim(),
+      OrderDate: body.OrderDate || now,
+      ExpectedDeliveryDate: body.ExpectedDeliveryDate || '',
+      Status: 'ACTIVE',
+      Notes: String(body.Notes || ''),
+      CreatedBy: user.ID,
+      CreatedAt: now,
+      UpdatedAt: now
+    };
+
+    // Google Sheets has no multi-sheet transaction. Validate the full payload before writing.
+    GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ORDERS, order);
+    var createdItems = [];
+    try {
+      normalized.forEach(function(entry) {
+        var item = entry.source;
+        var project = self._validateProject_(item.ProjectID, user.TenantID);
+        var row = {
+          ID: self._id_('POI'),
+          TenantID: user.TenantID,
+          PurchaseOrderID: order.ID,
+          MaterialNeedID: item.MaterialNeedID || '',
+          ItemName: String(item.ItemName).trim(),
+          ItemCode: String(item.ItemCode || '').trim(),
+          Unit: String(item.Unit).trim(),
+          OrderedQuantity: entry.quantity,
+          UnitPrice: entry.price,
+          Notes: String(item.Notes || ''),
+          CreatedAt: now,
+          UpdatedAt: now
+        };
+        GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ITEMS, row);
+        createdItems.push(row);
+
+        var allocations = Array.isArray(item.Allocations) ? item.Allocations : [];
+        allocations.forEach(function(allocation) {
+          var allocationProject = self._validateProject_(allocation.ProjectID, user.TenantID);
+          var amount = self._number_(allocation.AllocatedQuantity, 'مقدار تخصیص', false);
+          if (amount > entry.quantity) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تخصیص از مقدار قلم سفارش بیشتر است.');
+          }
+          var needId = allocation.MaterialNeedID || item.MaterialNeedID || '';
+          if (needId) {
+            var need = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.NEEDS, needId);
+            if (!need || String(need.TenantID) !== String(user.TenantID)) {
+              throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با تخصیص معتبر نیست.');
+            }
+          }
+          GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ALLOCATIONS, {
+            ID: self._id_('ALLOC'),
+            TenantID: user.TenantID,
+            PurchaseOrderItemID: row.ID,
+            ProjectID: allocationProject ? allocationProject.ID : '',
+            MaterialNeedID: needId,
+            AllocatedQuantity: amount,
+            CreatedAt: now
+          });
+        });
+      });
+    } catch (error) {
+      // Keep the order visible for recovery instead of deleting partial audit history.
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, {
+        Status: 'NEEDS_REVIEW',
+        Notes: (order.Notes ? order.Notes + '\n' : '') + 'ثبت اقلام ناقص ماند؛ نیازمند بررسی: ' + String(error.message || error)
+      });
+      throw error;
+    }
+
+    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'PURCHASE_ORDER',EntityID:order.ID,NewData:{order:order,items:createdItems}});
+    return Response.success({Order:order,Items:createdItems});
+  },
+
+  createReceipt: function(body, params) {
+    body = body || {};
+    var user = this._user_(params);
+    Validator.required(body.PurchaseOrderItemID, 'قلم سفارش');
+    var quantity = this._number_(body.QuantityReceived, 'مقدار تحویل', false);
+    var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, body.PurchaseOrderItemID);
+    if (!item || String(item.TenantID) !== String(user.TenantID)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
+    }
+    var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
+    if (!order || String(order.TenantID) !== String(user.TenantID) || String(order.Status).toUpperCase() === 'CANCELLED') {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
+    }
+    var projectId = body.ProjectID || '';
+    this._validateProject_(projectId, user.TenantID);
+
+    var prior = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) {
+      return String(receipt.PurchaseOrderItemID) === String(item.ID);
+    }).reduce(function(sum, receipt) {
+      return sum + (Number(receipt.QuantityReceived) || 0);
+    }, 0);
+    var ordered = Number(item.OrderedQuantity) || 0;
+    if (prior + quantity > ordered) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تحویل جدید از مقدار باقیمانده سفارش بیشتر است.');
+    }
+
+    var now = this._now_();
+    var receipt = {
+      ID: this._id_('REC'),
+      TenantID: user.TenantID,
+      PurchaseOrderItemID: item.ID,
+      ProjectID: projectId,
+      QuantityReceived: quantity,
+      ReceivedAt: body.ReceivedAt || now,
+      WarehouseDepartmentID: body.WarehouseDepartmentID || '',
+      SourceEventID: body.SourceEventID || '',
+      Notes: String(body.Notes || ''),
+      ReceivedBy: user.ID,
+      CreatedAt: now
+    };
+    this._validateEvent_(receipt.SourceEventID, user.TenantID);
+    GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.RECEIPTS, receipt);
+
+    var updated = Object.assign({}, order);
+    updated.Status = prior + quantity >= ordered ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
+    updated.UpdatedAt = now;
+    GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'MATERIAL_RECEIPT',EntityID:receipt.ID,NewData:receipt});
+    return Response.success(receipt);
+  },
+
   listNeeds: function(params) {
     var user = this._user_(params);
     return Response.success(ProcurementRepository.getNeeds(user.TenantID));
