@@ -321,6 +321,10 @@ const UserRoleService = {
     }
 
 
+    PermissionService.assertRetainsSystemManage(currentUser.ID, currentUser, {
+      excludeUserRoleId: item.ID
+    });
+
     UserRoleRepository.delete(
       item.ID
     );
