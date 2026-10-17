@@ -20,7 +20,6 @@ const PermissionService = {
     EVENT_TYPE_MANAGE: ['EVENT_TYPE_VIEW'],
     WORKFLOW_MANAGE: ['WORKFLOW_VIEW'],
     PROJECT_STATUS_MANAGE: ['PROJECT_STATUS_VIEW'],
-    SETTINGS_MANAGE: ['SYSTEM_SETTINGS'],
     ATTACHMENT_MANAGE: ['ATTACHMENT_VIEW', 'ATTACHMENT_UPLOAD', 'ATTACHMENT_DELETE']
   },
 
@@ -81,7 +80,10 @@ const PermissionService = {
 
     const tenantId = String(user.TenantID);
 
-    const permissions = PermissionRepository.getAll();
+    const activeStatus = String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase();
+    const permissions = (PermissionRepository.getAll() || []).filter(function(permission) {
+      return String(permission.Status || '').trim().toUpperCase() === activeStatus;
+    });
     const userRoles = UserRoleRepository.getAll().filter(function(item) {
       return String(item.UserID) === String(userId) &&
         String(item.TenantID) === tenantId;
@@ -91,8 +93,10 @@ const PermissionService = {
       return [];
     }
 
-    const roles = RoleRepository.getAll().filter(function(role) {
-      return String(role.TenantID) === tenantId;
+    const activeStatus = String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase();
+    const roles = (RoleRepository.getAll() || []).filter(function(role) {
+      return String(role.TenantID) === tenantId &&
+        String(role.Status || '').trim().toUpperCase() === activeStatus;
     });
 
     const validRoleIds = {};
