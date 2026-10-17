@@ -131,7 +131,6 @@ const Router = {
     }
 
     if (path.indexOf('/workflows/') === 0) {
-      AccessControlService.require(params, 'WORKFLOW_MANAGE');
       const parts = path.split('/');
       const workflowId = parts[2];
 
@@ -140,8 +139,11 @@ const Router = {
       }
 
       if (parts[3] === 'steps') {
+        this.requireAny(params, ['WORKFLOW_MANAGE', 'PROJECT_VIEW']);
         return WorkflowService.getSteps(workflowId, params);
       }
+
+      AccessControlService.require(params, 'WORKFLOW_MANAGE');
 
       if (parts[3] === 'department-steps') {
         return WorkflowStepDepartmentService.listByWorkflow(workflowId, params);
