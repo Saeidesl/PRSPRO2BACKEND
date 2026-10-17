@@ -45,7 +45,23 @@ const AccessControlService = {
   },
 
   isAdmin: function(user) {
-    return this.getDepartmentCode(user) === 'ADMIN';
+    if (!user) return false;
+
+    // Compatibility for existing deployments: explicit system-admin identity
+    // takes precedence; the legacy ADMIN department remains temporarily valid
+    // until existing accounts are migrated.
+    if (
+      user.IsAdmin === true ||
+      String(user.IsAdmin).toLowerCase() === 'true' ||
+      this.getDepartmentCode(user) === 'ADMIN'
+    ) {
+      return true;
+    }
+
+    return !!(
+      user.ID &&
+      PermissionService.hasPermission(user.ID, 'SYSTEM_MANAGE', user)
+    );
   },
 
   enforceRouteAccess: function(method, path, params) {
