@@ -571,8 +571,7 @@ const EventService = {
     });
     const fields = (EventFieldRepository.getAll() || []).filter(function(field) {
       return String(field.TenantID) === tenantId &&
-        eventTypeIds[String(field.EventTypeID)] &&
-        String(field.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        eventTypeIds[String(field.EventTypeID)];
     });
     const dataRows = (EventDataRepository.getAll() || []).filter(function(row) {
       return eventIds[String(row.EventID || '')];
@@ -651,6 +650,17 @@ const EventService = {
         )) {
           const unit = field.Unit || field.UnitName || '';
           quantityText = String(value) + (unit ? ' ' + unit : '');
+        }
+      });
+
+      Object.keys(eventData).forEach(function(code) {
+        const known = eventFields.some(function(field) {
+          return String(field.Code || '') === String(code);
+        });
+        if (known) return;
+        const value = eventData[code];
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          searchParts.push(code, String(value));
         }
       });
 
