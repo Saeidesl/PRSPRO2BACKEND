@@ -109,7 +109,7 @@ const EventTypeProcurementService = {
     });
   },
 
-  applyToEvent: function(eventType, createdEvent, dynamicData, user) {
+  applyToEvent: function(eventType, createdEvent, dynamicData, user, requestParams) {
     var setting = this._find_(eventType.ID, user.TenantID);
     var action = setting ? String(setting.Action || 'NONE').toUpperCase() : 'NONE';
     if (!setting || action === 'NONE') return { status: 'NOT_CONFIGURED' };
@@ -133,7 +133,7 @@ const EventTypeProcurementService = {
         ProjectID: createdEvent.ProjectID || valueFor('ProjectID') || '',
         SourceEventID: createdEvent.ID
       };
-      var response = ProcurementService.createNeed(need, { userId: user.ID });
+      var response = ProcurementService.createNeed(need, requestParams || {});
       return { status: 'COMPLETED', action: action, result: response };
     }
     if (action === 'RECORD_RECEIPT') {
@@ -146,7 +146,7 @@ const EventTypeProcurementService = {
         SourceEventID: createdEvent.ID,
         Notes: valueFor('Notes')
       };
-      var result = ProcurementService.createReceipt(receipt, { userId: user.ID });
+      var result = ProcurementService.createReceipt(receipt, requestParams || {});
       return { status: 'COMPLETED', action: action, result: result };
     }
     throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات اتصال تأمین پشتیبانی نمی‌شود.');
