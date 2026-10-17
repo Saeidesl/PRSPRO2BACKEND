@@ -13,8 +13,11 @@ const Router = {
       return user;
     }
 
+    const effectivePermissions =
+      AccessControlService.getUserPermissions(user.ID, user);
+
     const allowed = (permissionCodes || []).some(function(code) {
-      return PermissionService.hasPermission(user.ID, code, user);
+      return effectivePermissions.indexOf(String(code)) !== -1;
     });
 
     if (!allowed) {
