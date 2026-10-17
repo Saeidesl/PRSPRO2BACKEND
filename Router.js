@@ -465,7 +465,21 @@ const Router = {
     }
 
     if (path.indexOf('/projects/') === 0) {
-      AccessControlService.require(params, 'PROJECT_EDIT');
+      const fields = Object.keys(body).filter(function(key) {
+        return key !== 'Reason';
+      });
+      const hasStatusChange = fields.indexOf('Status') !== -1;
+      const hasOtherChanges = fields.some(function(key) {
+        return key !== 'Status';
+      });
+
+      if (hasOtherChanges || fields.length === 0) {
+        AccessControlService.require(params, 'PROJECT_EDIT');
+      }
+      if (hasStatusChange) {
+        AccessControlService.require(params, 'PROJECT_STATUS_CHANGE');
+      }
+
       return ProjectService.update(path.split('/')[2], body, params);
     }
 
