@@ -295,7 +295,72 @@ const ProcurementService = {
 
   listNeeds: function(params) {
     var user = this._user_(params);
-    return Response.success(ProcurementRepository.getNeeds(user.TenantID));
+    var needs = ProcurementRepository.getNeeds(user.TenantID);
+    var items = ProcurementRepository.getItems(user.TenantID);
+    var allocations = ProcurementRepository.getAllocations(user.TenantID);
+    var receipts = ProcurementRepository.getReceipts(user.TenantID);
+    var itemById = {};
+    var orderedByNeed = {};
+    var receivedByNeed = {};
+
+    items.forEach(function(item) {
+      itemById[String(item.ID)] = item;
+      var needId = String(item.MaterialNeedID || '');
+      if (needId) {
+        orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
+          (Number(item.OrderedQuantity) || 0);
+      }
+    });
+
+    allocations.forEach(function(allocation) {
+      var needId = String(allocation.MaterialNeedID || '');
+      if (!needId) return;
+      // Allocation quantity is a project allocation, not an additional order.
+      // Count the linked order item once below, avoiding double-counting split allocations.
+      var item = itemById[String(allocation.PurchaseOrderItemID || '')];
+      if (!item) return;
+      if (!orderedByNeed[needId]) orderedByNeed[needId] = 0;
+      if (!orderedByNeed.__seen) orderedByNeed.__seen = {};
+      var key = String(item.ID) + '::' + needId;
+      if (orderedByNeed.__seen[key]) return;
+      orderedByNeed.__seen[key] = true;
+      orderedByNeed[needId] += (Number(item.OrderedQuantity) || 0);
+    });
+
+    receipts.forEach(function(receipt) {
+      var item = itemById[String(receipt.PurchaseOrderItemID || '')];
+      if (!item) return;
+      var needId = String(item.MaterialNeedID || '');
+      if (needId) receivedByNeed[needId] = (receivedByNeed[needId] || 0) +
+        (Number(receipt.QuantityReceived) || 0);
+      allocations.forEach(function(allocation) {
+        if (String(allocation.PurchaseOrderItemID) === String(item.ID) &&
+            allocation.MaterialNeedID) {
+          var allocationNeed = String(allocation.MaterialNeedID);
+          if (allocationNeed !== needId) {
+            receivedByNeed[allocationNeed] = (receivedByNeed[allocationNeed] || 0) +
+              (Number(receipt.QuantityReceived) || 0) *
+              ((Number(allocation.AllocatedQuantity) || 0) /
+               Math.max(1, Number(item.OrderedQuantity) || 0));
+          }
+        }
+      });
+    });
+
+    return Response.success(needs.map(function(need) {
+      var copy = Object.assign({}, need);
+      var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
+      var ordered = Math.min(requested, Math.max(0, orderedByNeed[String(need.ID)] || 0));
+      var received = Math.min(ordered, Math.max(0, receivedByNeed[String(need.ID)] || 0));
+      copy.OrderedQuantity = ordered;
+      copy.ReceivedQuantity = received;
+      copy.RemainingToOrderQuantity = Math.max(0, requested - ordered);
+      copy.RemainingDeliveryQuantity = Math.max(0, ordered - received);
+      copy.ProcurementStatus = received >= requested ? 'RECEIVED'
+        : (ordered >= requested ? (received > 0 ? 'PARTIALLY_RECEIVED' : 'ORDERED')
+        : (ordered > 0 ? 'PARTIALLY_ORDERED' : 'NEEDS_PURCHASE'));
+      return copy;
+    }));
   },
 
   listOrders: function(params) {
