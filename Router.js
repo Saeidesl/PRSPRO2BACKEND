@@ -58,12 +58,28 @@ const Router = {
     }
 
     if (path === '/departments') {
-      AccessControlService.require(params, 'DEPARTMENT_MANAGE');
+      this.requireAny(params, [
+        'DEPARTMENT_MANAGE',
+        'USER_VIEW',
+        'USER_CREATE',
+        'USER_EDIT',
+        'WORKFLOW_MANAGE',
+        'EVENT_TYPE_MANAGE',
+        'EVENT_CREATE'
+      ]);
       return DepartmentService.list(params);
     }
 
     if (path.indexOf('/departments/') === 0) {
-      AccessControlService.require(params, 'DEPARTMENT_MANAGE');
+      this.requireAny(params, [
+        'DEPARTMENT_MANAGE',
+        'USER_VIEW',
+        'USER_CREATE',
+        'USER_EDIT',
+        'WORKFLOW_MANAGE',
+        'EVENT_TYPE_MANAGE',
+        'EVENT_CREATE'
+      ]);
       const departmentId = path.split('/')[2];
 
       if (!departmentId) {
@@ -106,7 +122,8 @@ const Router = {
     }
 
     if (path === '/workflows') {
-      AccessControlService.require(params, 'WORKFLOW_MANAGE');
+      // Project creators need read-only workflow choices during project creation.
+      this.requireAny(params, ['WORKFLOW_MANAGE', 'PROJECT_CREATE']);
       return WorkflowService.list(params);
     }
 
