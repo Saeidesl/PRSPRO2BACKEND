@@ -93,6 +93,42 @@ const ProcurementEventIntegrationService = {
     return Response.success(output);
   },
 
+  validate: function(eventType, dynamicData, projectId, params) {
+    var user = AccessControlService.getCurrentUser(params || {});
+    var row = this._find_(eventType.ID, user.TenantID);
+    if (!row || String(row.Action || 'NONE').toUpperCase() === 'NONE') return true;
+    var map = this._map_(row.FieldMapJSON);
+    dynamicData = dynamicData || {};
+    function read(key) {
+      var code = map[key];
+      return code && dynamicData[code] !== undefined && dynamicData[code] !== null
+        ? dynamicData[code] : '';
+    }
+    var action = String(row.Action).toUpperCase();
+    var required = action === 'CREATE_NEED'
+      ? ['ItemName', 'Unit', 'RequestedQuantity']
+      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] : []);
+    required.forEach(function(key) {
+      var value = read(key);
+      if (String(value === undefined || value === null ? '' : value).trim() === '') {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
+          'برای اجرای عملیات تأمین، مقدار فیلد مربوط به ' + key + ' الزامی است.');
+      }
+    });
+    var quantityKey = action === 'CREATE_NEED' ? 'RequestedQuantity' : 'QuantityReceived';
+    var quantity = Number(read(quantityKey));
+    if (!isFinite(quantity) || quantity <= 0) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تأمین باید عددی بزرگ‌تر از صفر باشد.');
+    }
+    if (action === 'CREATE_NEED' && !projectId && read('ProjectID')) {
+      var project = ProjectRepository.findById(read('ProjectID'));
+      if (!project || String(project.TenantID) !== String(user.TenantID)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه نگاشت‌شده برای نیاز ملزومات معتبر نیست.');
+      }
+    }
+    return true;
+  },
+
   apply: function(eventType, event, dynamicData, params) {
     var user = AccessControlService.getCurrentUser(params || {});
     var row = this._find_(eventType.ID, user.TenantID);
