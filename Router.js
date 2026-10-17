@@ -110,6 +110,9 @@ const Router = {
 
       if (parts[3] === 'details') {
         AccessControlService.require(params, 'EVENT_VIEW');
+        if (parts[4] === 'page') {
+          return EventService.getProjectDetailsPage(projectId, parts[5] || 'newest', parts[6] || '1', params);
+        }
         return EventService.getProjectDetails(projectId, params);
       }
 
