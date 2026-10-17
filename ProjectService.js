@@ -56,7 +56,16 @@ const ProjectService = {
         });
     });
 
-    return Response.success({ items: filtered, total: filtered.length });
+    const lookupItems = filtered.map(function(project) {
+      return {
+        ID: project.ID,
+        ProjectCode: project.ProjectCode || '',
+        Title: project.Title || project.Name || '',
+        Status: project.Status || ''
+      };
+    });
+
+    return Response.success({ items: lookupItems, total: lookupItems.length });
   },
 
   get: function(id, params) {
