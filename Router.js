@@ -268,6 +268,11 @@ const Router = {
       return AuditService.listByUser(parts[3], params);
     }
 
+    if (path === '/project-dashboard') {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectService.dashboard(params);
+    }
+
     if (path === '/dashboard') {
       AccessControlService.require(params, 'REPORT_VIEW');
       return ReportService.dashboard(params);
@@ -328,6 +333,11 @@ const Router = {
         permissionIds,
         params
       );
+    }
+
+    if (path === '/project-dashboard/search-index') {
+      AccessControlService.require(params, 'EVENT_VIEW');
+      return EventService.dashboardSearchIndex(params, body);
     }
 
     if (path === '/projects') {
