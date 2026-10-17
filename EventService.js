@@ -135,6 +135,8 @@ const EventService = {
   },
 
   _hasLaterEventInAnotherDepartment_: function(event, tenantId) {
+    if (!event || !event.ProjectID) return false;
+
     const projectEvents = EventRepository.findByProjectId(
       event.ProjectID
     ) || [];
@@ -876,11 +878,13 @@ const EventService = {
       );
     }
 
-    const project = ProjectRepository.findById(event.ProjectID);
+    const project = event.ProjectID
+      ? ProjectRepository.findById(event.ProjectID)
+      : null;
 
     if (
-      !project ||
-      String(project.TenantID) !== String(user.TenantID)
+      event.ProjectID &&
+      (!project || String(project.TenantID) !== String(user.TenantID))
     ) {
       throw ErrorHandler.create(
         Constants.ERROR.PROJECT_NOT_FOUND,
@@ -890,12 +894,9 @@ const EventService = {
 
     const now = new Date().toISOString();
 
-    const expectedChanges = this._getConfiguredChanges_(
-      project,
-      event,
-      eventType,
-      user.TenantID
-    );
+    const expectedChanges = project
+      ? this._getConfiguredChanges_(project, event, eventType, user.TenantID)
+      : {};
 
     let hasExpectedChanges = false;
     let currentStateMatches = true;
@@ -928,10 +929,10 @@ const EventService = {
       );
     }
 
-    const projectBeforeVoid = Object.assign({}, project);
+    const projectBeforeVoid = project ? Object.assign({}, project) : null;
     let restoredProject = project;
 
-    if (hasExpectedChanges && hasPreviousSnapshot) {
+    if (project && hasExpectedChanges && hasPreviousSnapshot) {
       const restoreData = {
         CurrentStepID: event.PreviousStepID,
         Status: event.PreviousProjectStatus,
@@ -954,7 +955,7 @@ const EventService = {
       }
     );
 
-    if (hasExpectedChanges && hasPreviousSnapshot) {
+    if (project && hasExpectedChanges && hasPreviousSnapshot) {
       AuditService.log({
         TenantID: user.TenantID,
         UserID: user.ID,
