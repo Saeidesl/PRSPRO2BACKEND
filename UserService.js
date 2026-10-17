@@ -32,6 +32,18 @@ const UserService = {
   },
 
 
+  // Minimal user lookup used only when configuring event-type availability.
+  listForEventTypeConfiguration: function(params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const users = UserRepository.getAll() || [];
+    const tenantUsers = users.filter(function(item) {
+      return String(item.TenantID) === String(user.TenantID);
+    });
+
+    return Response.success(this.sanitizeList_(tenantUsers));
+  },
+
+
   get: function(id, params) {
 
     Validator.required(
