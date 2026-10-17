@@ -93,7 +93,6 @@ const PermissionService = {
       return [];
     }
 
-    const activeStatus = String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase();
     const roles = (RoleRepository.getAll() || []).filter(function(role) {
       return String(role.TenantID) === tenantId &&
         String(role.Status || '').trim().toUpperCase() === activeStatus;
@@ -173,8 +172,8 @@ const PermissionService = {
     return this.getUserPermissions(userId, userRecord).indexOf(String(permissionCode)) !== -1;
   },
 
-  requirePermission: function(userId, permissionCode) {
-    const allowed = this.hasPermission(userId, permissionCode);
+  requirePermission: function(userId, permissionCode, userRecord) {
+    const allowed = this.hasPermission(userId, permissionCode, userRecord);
 
     if (!allowed) {
       throw ErrorHandler.create(
