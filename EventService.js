@@ -829,6 +829,33 @@ const EventService = {
       });
     }
 
+    let procurementIntegration = { status: 'NOT_CONFIGURED' };
+    try {
+      procurementIntegration = EventTypeProcurementService.applyToEvent(
+        eventType,
+        created,
+        hasDynamicData ? validatedDynamicData : {},
+        user,
+        requestParams
+      );
+    } catch (integrationError) {
+      // The production event is already persisted. Record the integration failure
+      // explicitly so it is not mistaken for a successful procurement update.
+      procurementIntegration = {
+        status: 'FAILED',
+        message: String(integrationError && integrationError.message || integrationError)
+      };
+      AuditService.log({
+        TenantID: user.TenantID,
+        UserID: user.ID,
+        Action: 'PROCUREMENT_INTEGRATION_FAILED',
+        EntityType: 'EVENT',
+        EntityID: created.ID,
+        NewData: procurementIntegration,
+        Reason: 'رویداد ثبت شد اما اتصال تأمین نیازمند بررسی است.'
+      });
+    }
+
     const projectUpdate = {
       UpdatedAt: now
     };
@@ -881,7 +908,8 @@ const EventService = {
         projectStatus: updatedProject ? updatedProject.Status : '',
         availableDepartmentIDs: updatedProject
           ? this._parseArray_(updatedProject.AvailableDepartmentIDs)
-          : []
+          : [],
+        procurementIntegration: procurementIntegration
       },
       {
         message: workflowMoved
