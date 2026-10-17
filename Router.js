@@ -103,6 +103,10 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مسیر مورد نظر پیدا نشد.');
       }
 
+      if (parts[3] === 'management-history') {
+        return ProjectService.managementHistory(projectId, params);
+      }
+
       if (parts[3] === 'events') {
         AccessControlService.require(params, 'EVENT_VIEW');
         return EventService.listByProject(projectId, params);
