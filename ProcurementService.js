@@ -146,6 +146,19 @@ const ProcurementService = {
         createdItems.push(row);
 
         var allocations = Array.isArray(item.Allocations) ? item.Allocations : [];
+        if (!allocations.length && item.ProjectID) {
+          allocations = [{
+            ProjectID: item.ProjectID,
+            MaterialNeedID: item.MaterialNeedID || '',
+            AllocatedQuantity: entry.quantity
+          }];
+        }
+        var totalAllocated = allocations.reduce(function(sum, allocation) {
+          return sum + (Number(allocation.AllocatedQuantity) || 0);
+        }, 0);
+        if (totalAllocated > entry.quantity) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع تخصیص‌ها از مقدار قلم سفارش بیشتر است.');
+        }
         allocations.forEach(function(allocation) {
           var allocationProject = self._validateProject_(allocation.ProjectID, user.TenantID);
           var amount = self._number_(allocation.AllocatedQuantity, 'مقدار تخصیص', false);
@@ -226,8 +239,23 @@ const ProcurementService = {
     this._validateEvent_(receipt.SourceEventID, user.TenantID);
     GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.RECEIPTS, receipt);
 
+    var allItems = ProcurementRepository.getItems(user.TenantID).filter(function(candidate) {
+      return String(candidate.PurchaseOrderID) === String(order.ID);
+    });
+    var allReceipts = ProcurementRepository.getReceipts(user.TenantID);
+    var allReceived = 0;
+    var allOrdered = 0;
+    allItems.forEach(function(candidate) {
+      allOrdered += Math.max(0, Number(candidate.OrderedQuantity) || 0);
+      allReceived += allReceipts.filter(function(existingReceipt) {
+        return String(existingReceipt.PurchaseOrderItemID) === String(candidate.ID);
+      }).reduce(function(sum, existingReceipt) {
+        return sum + (Number(existingReceipt.QuantityReceived) || 0);
+      }, 0);
+    });
     var updated = Object.assign({}, order);
-    updated.Status = prior + quantity >= ordered ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
+    updated.Status = allReceived >= allOrdered ? 'RECEIVED' :
+      (allReceived > 0 ? 'PARTIALLY_RECEIVED' : 'ACTIVE');
     updated.UpdatedAt = now;
     GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'MATERIAL_RECEIPT',EntityID:receipt.ID,NewData:receipt});
