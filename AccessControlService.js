@@ -47,21 +47,12 @@ const AccessControlService = {
   isAdmin: function(user) {
     if (!user) return false;
 
-    // Compatibility for existing deployments: explicit system-admin identity
-    // takes precedence; the legacy ADMIN department remains temporarily valid
-    // until existing accounts are migrated.
-    if (
-      user.IsAdmin === true ||
+    // Keep the legacy department-based identity during migration. New system
+    // administrators use SYSTEM_MANAGE, expanded by PermissionService without
+    // making every authorization check perform an extra admin lookup.
+    return user.IsAdmin === true ||
       String(user.IsAdmin).toLowerCase() === 'true' ||
-      this.getDepartmentCode(user) === 'ADMIN'
-    ) {
-      return true;
-    }
-
-    return !!(
-      user.ID &&
-      PermissionService.hasPermission(user.ID, 'SYSTEM_MANAGE', user)
-    );
+      this.getDepartmentCode(user) === 'ADMIN';
   },
 
   enforceRouteAccess: function(method, path, params) {
