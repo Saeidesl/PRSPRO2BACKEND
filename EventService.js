@@ -540,20 +540,6 @@ const EventService = {
 
     EventValidator.validateCreate(validationEvent);
 
-    const project = ProjectRepository.findById(event.ProjectID);
-
-    if (
-      !project ||
-      String(project.TenantID) !== String(user.TenantID)
-    ) {
-      throw ErrorHandler.create(
-        Constants.ERROR.PROJECT_NOT_FOUND,
-        'پروژه مورد نظر پیدا نشد.'
-      );
-    }
-
-    this._checkProjectAvailability_(project, user);
-
     const eventType = EventTypeRepository.findById(
       event.EventTypeID
     );
@@ -576,6 +562,28 @@ const EventService = {
         Constants.ERROR.INVALID_EVENT_TYPE,
         'نوع رویداد فعال نیست.'
       );
+    }
+
+    const connectionType = String(eventType.ConnectionType || 'PROJECT').toUpperCase();
+    const isProjectEvent = connectionType !== 'INDEPENDENT';
+    let project = null;
+
+    if (isProjectEvent) {
+      if (!event.ProjectID) {
+        throw ErrorHandler.create(
+          Constants.ERROR.VALIDATION_ERROR,
+          'برای این نوع رویداد انتخاب پروژه الزامی است.'
+        );
+      }
+
+      project = ProjectRepository.findById(event.ProjectID);
+      if (!project || String(project.TenantID) !== String(user.TenantID)) {
+        throw ErrorHandler.create(
+          Constants.ERROR.PROJECT_NOT_FOUND,
+          'پروژه مورد نظر پیدا نشد.'
+        );
+      }
+      this._checkProjectAvailability_(project, user);
     }
 
     if (!isAdmin) {
@@ -657,14 +665,14 @@ const EventService = {
       );
     }
 
-    const projectChanges = this._getConfiguredChanges_(
-      project,
-      {
-        DepartmentID: department ? department.ID : ''
-      },
-      eventType,
-      user.TenantID
-    );
+    const projectChanges = project
+      ? this._getConfiguredChanges_(
+          project,
+          { DepartmentID: department ? department.ID : '' },
+          eventType,
+          user.TenantID
+        )
+      : {};
 
     const now = new Date().toISOString();
 
@@ -686,7 +694,7 @@ const EventService = {
     const newEvent = {
       ID: 'EVT_' + Utilities.getUuid().replace(/-/g, ''),
       TenantID: user.TenantID,
-      ProjectID: project.ID,
+      ProjectID: project ? project.ID : '',
       EventTypeID: eventType.ID,
       EventTypeVersion: eventType.Version || 1,
       PerformedBy: performedBy,
@@ -698,10 +706,9 @@ const EventService = {
       Status: Constants.STATUS.ACTIVE,
 
       // سابقه وضعیت پروژه پیش از اعمال رویداد
-      PreviousStepID: project.CurrentStepID || '',
-      PreviousProjectStatus: project.Status || '',
-      PreviousAvailableDepartmentIDs:
-        project.AvailableDepartmentIDs || ''
+      PreviousStepID: project ? (project.CurrentStepID || '') : '',
+      PreviousProjectStatus: project ? (project.Status || '') : '',
+      PreviousAvailableDepartmentIDs: project ? (project.AvailableDepartmentIDs || '') : ''
     };
 
     const created = EventRepository.insert(newEvent);
@@ -783,7 +790,7 @@ const EventService = {
       {
         message: workflowMoved
           ? 'رویداد ثبت شد و مرحله پروژه به‌روزرسانی شد.'
-          : 'رویداد با موفقیت ثبت شد.'
+          : (isProjectEvent ? 'رویداد با موفقیت ثبت شد.' : 'رویداد مستقل با موفقیت ثبت شد.')
       }
     );
   },
