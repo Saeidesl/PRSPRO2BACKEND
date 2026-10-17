@@ -157,11 +157,6 @@ const Router = {
       return EventTypeService.list(params);
     }
 
-    if (path.indexOf('/event-types/') === 0 &&
-        path.split('/')[3] === 'procurement-settings') {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      return ProcurementEventIntegrationService.get(path.split('/')[2], params);
-    }
 
     if (path.indexOf('/event-types/') === 0) {
       this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
@@ -542,13 +537,6 @@ const Router = {
       AccessControlService.require(params, 'WORKFLOW_MANAGE');
       return WorkflowService.update(path.split('/')[2], body, params);
     }
-
-    if (path.indexOf('/event-types/') === 0 &&
-        path.split('/')[3] === 'procurement-settings') {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      return ProcurementEventIntegrationService.save(path.split('/')[2], body, params);
-    }
-
     if (path.indexOf('/event-types/') === 0) {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.update(path.split('/')[2], body, params);
