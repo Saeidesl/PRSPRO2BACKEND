@@ -14,7 +14,7 @@ const Router = {
     }
 
     const allowed = (permissionCodes || []).some(function(code) {
-      return PermissionService.hasPermission(user.ID, code);
+      return PermissionService.hasPermission(user.ID, code, user);
     });
 
     if (!allowed) {
@@ -43,7 +43,7 @@ const Router = {
           return item.Code;
         });
       } else {
-        permissions = AccessControlService.getUserPermissions(user.ID);
+        permissions = AccessControlService.getUserPermissions(user.ID, user);
       }
 
       return Response.success({
@@ -90,6 +90,11 @@ const Router = {
       if (parts[3] === 'events') {
         AccessControlService.require(params, 'EVENT_VIEW');
         return EventService.listByProject(projectId, params);
+      }
+
+      if (parts[3] === 'details') {
+        AccessControlService.require(params, 'EVENT_VIEW');
+        return EventService.getProjectDetails(projectId, params);
       }
 
       if (parts[3] === 'attachments') {

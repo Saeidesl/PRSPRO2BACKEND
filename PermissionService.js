@@ -47,10 +47,13 @@ const PermissionService = {
   /**
    * دریافت تمام مجوزهای کاربر با خواندن گروهی اطلاعات
    */
-  getUserPermissions: function(userId) {
+  getUserPermissions: function(userId, userRecord) {
     Validator.required(userId, 'UserID');
 
-    const user = UserRepository.findById(userId);
+    const suppliedUser = userRecord && String(userRecord.ID) === String(userId)
+      ? userRecord
+      : null;
+    const user = suppliedUser || UserRepository.findById(userId);
 
     if (!user) {
       throw ErrorHandler.create(
@@ -123,59 +126,46 @@ const PermissionService = {
   /**
    * بررسی یک مجوز مشخص
    */
-  hasPermission: function(userId, permissionCode) {
+  hasPermission: function(userId, permissionCode, userRecord) {
     Validator.required(userId, 'UserID');
     Validator.required(permissionCode, 'کد دسترسی');
 
-    const user = UserRepository.findById(userId);
+    const suppliedUser = userRecord && String(userRecord.ID) === String(userId)
+      ? userRecord
+      : null;
+    const user = suppliedUser || UserRepository.findById(userId);
 
-    if (!user) {
-      return false;
-    }
+    if (!user) return false;
 
     const permission = PermissionRepository.findByCode(permissionCode);
-
-    if (!permission) {
-      return false;
-    }
+    if (!permission) return false;
 
     const tenantId = String(user.TenantID);
-
     const userRoles = UserRoleRepository.getAll().filter(function(item) {
       return String(item.UserID) === String(userId) &&
         String(item.TenantID) === tenantId;
     });
 
-    if (userRoles.length === 0) {
-      return false;
-    }
+    if (userRoles.length === 0) return false;
 
     const roles = RoleRepository.getAll().filter(function(role) {
       return String(role.TenantID) === tenantId;
     });
 
     const validRoleIds = {};
-
     roles.forEach(function(role) {
       validRoleIds[String(role.ID)] = true;
     });
 
     const roleIds = {};
-
     userRoles.forEach(function(userRole) {
       const roleId = String(userRole.RoleID);
-
-      if (validRoleIds[roleId]) {
-        roleIds[roleId] = true;
-      }
+      if (validRoleIds[roleId]) roleIds[roleId] = true;
     });
 
-    const rolePermissions = GoogleSheetsRepository
-      .getAll('07_RolePermissions');
-
+    const rolePermissions = GoogleSheetsRepository.getAll('07_RolePermissions');
     for (let i = 0; i < rolePermissions.length; i++) {
       const item = rolePermissions[i];
-
       if (
         String(item.TenantID) === tenantId &&
         roleIds[String(item.RoleID)] &&

@@ -70,10 +70,10 @@ const AccessControlService = {
     return true;
   },
 
-  getUserPermissions: function(userId) {
+  getUserPermissions: function(userId, userRecord) {
     Validator.required(userId, 'UserID');
 
-    return PermissionService.getUserPermissions(userId);
+    return PermissionService.getUserPermissions(userId, userRecord);
   },
 
   require: function(params, permissionCode) {
@@ -85,7 +85,8 @@ const AccessControlService = {
 
     PermissionService.requirePermission(
       user.ID,
-      permissionCode
+      permissionCode,
+      user
     );
 
     return user;
