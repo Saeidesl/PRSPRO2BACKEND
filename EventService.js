@@ -865,16 +865,6 @@ const EventService = {
       });
     }
 
-    // Run procurement actions only when explicitly configured for this event type.
-    if (typeof ProcurementEventIntegrationService !== 'undefined') {
-      ProcurementEventIntegrationService.apply(
-        eventType,
-        created,
-        validatedDynamicData || {},
-        requestParams
-      );
-    }
-
     const projectUpdate = {
       UpdatedAt: now
     };
