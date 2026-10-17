@@ -278,6 +278,21 @@ const Router = {
       return ProjectService.dashboardLookups(params);
     }
 
+    if (path === '/procurement/dashboard') {
+      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.dashboard(params);
+    }
+
+    if (path === '/procurement/needs') {
+      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.listNeeds(params);
+    }
+
+    if (path === '/procurement/orders') {
+      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.listOrders(params);
+    }
+
     if (path === '/dashboard') {
       AccessControlService.require(params, 'REPORT_VIEW');
       return ReportService.dashboard(params);
