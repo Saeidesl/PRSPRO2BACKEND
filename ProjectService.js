@@ -22,17 +22,9 @@ const ProjectService = {
     const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId;
     });
-    const eventTypes = (EventTypeRepository.getAll() || []).filter(function(item) {
-      return String(item.TenantID) === tenantId;
-    });
-    const users = (UserRepository.getAll() || []).filter(function(item) {
-      return String(item.TenantID) === tenantId;
-    });
 
     const stepById = Object.create(null);
     const departmentById = Object.create(null);
-    const eventTypeById = Object.create(null);
-    const userById = Object.create(null);
     const assignmentByStepId = Object.create(null);
     const latestByProjectId = Object.create(null);
 
@@ -41,12 +33,6 @@ const ProjectService = {
     });
     departments.forEach(function(item) {
       departmentById[String(item.ID)] = item;
-    });
-    eventTypes.forEach(function(item) {
-      eventTypeById[String(item.ID)] = item;
-    });
-    users.forEach(function(item) {
-      userById[String(item.ID)] = item;
     });
     assignments.forEach(function(item) {
       const key = String(item.WorkflowStepID || '');
@@ -87,23 +73,9 @@ const ProjectService = {
         ? latest.date
         : (project.UpdatedAt || project.CreatedAt || '');
       result.LastActivityEventID = latest ? latest.eventId : '';
-      result.CreatedByName = userById[String(project.CreatedBy || '')]
-        ? (userById[String(project.CreatedBy || '')].Name ||
-          userById[String(project.CreatedBy || '')].FullName ||
-          userById[String(project.CreatedBy || '')].Username || '')
-        : '';
       return result;
     });
 
-    const displayUsers = users.map(function(item) {
-      return {
-        ID: item.ID,
-        Name: item.Name || item.FullName || item.Username || item.Email || String(item.ID)
-      };
-    });
-    const displayEventTypes = eventTypes.map(function(item) {
-      return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
-    });
     const displayDepartments = departments.map(function(item) {
       return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
     });
@@ -115,8 +87,8 @@ const ProjectService = {
       projects: items,
       totalProjects: items.length,
       filterOptions: {
-        users: displayUsers,
-        eventTypes: displayEventTypes,
+        users: [],
+        eventTypes: [],
         departments: displayDepartments,
         stages: displaySteps
       }
