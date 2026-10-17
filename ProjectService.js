@@ -168,8 +168,12 @@ const ProjectService = {
       if (String(item.TenantID) !== tenantId) return false;
       const entityType = String(item.EntityType || '').toUpperCase();
       const entityId = String(item.EntityID || '');
-      return (entityType === 'PROJECT' && entityId === String(projectId)) ||
-        (entityType === 'EVENT' && !!eventIds[entityId]);
+      if (entityType === 'PROJECT' && entityId === String(projectId)) return true;
+      if (entityType === 'EVENT' && !!eventIds[entityId]) {
+        // ثبت عادی رویداد در خط زمانی تولید می‌ماند؛ این بخش فقط تغییرات مدیریتی را نشان می‌دهد.
+        return String(item.Action || '').toUpperCase() !== 'CREATE';
+      }
+      return false;
     }).map(function(item) {
       const result = Object.assign({}, item);
       const actor = userById[String(item.UserID || '')];
