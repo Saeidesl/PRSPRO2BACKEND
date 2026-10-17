@@ -7,15 +7,9 @@ const EventValidator = {
       'event'
     );
 
-    Validator.required(
-      event.ProjectID,
-      'ProjectID'
-    );
-
-    Validator.string(
-      event.ProjectID,
-      'ProjectID'
-    );
+    if (event.ProjectID !== undefined && event.ProjectID !== null && String(event.ProjectID).trim() !== '') {
+      Validator.string(event.ProjectID, 'ProjectID');
+    }
 
     Validator.required(
       event.EventTypeID,
