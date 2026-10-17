@@ -40,7 +40,17 @@ const UserService = {
       return String(item.TenantID) === String(user.TenantID);
     });
 
-    return Response.success(this.sanitizeList_(tenantUsers));
+    const lookupUsers = tenantUsers.map(function(item) {
+      return {
+        ID: item.ID,
+        Name: item.Name || '',
+        Username: item.Username || '',
+        DepartmentID: item.DepartmentID || '',
+        Status: item.Status || ''
+      };
+    });
+
+    return Response.success(lookupUsers);
   },
 
 
