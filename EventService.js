@@ -444,6 +444,97 @@ const EventService = {
   },
 
   // دریافت رویدادهای پروژه و اطلاعات تکمیلی آن‌ها در یک پاسخ
+  getProjectDetailsPage: function(projectId, order, page, params) {
+    Validator.required(projectId, 'ProjectID');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const project = ProjectRepository.findById(projectId);
+
+    if (!project || String(project.TenantID) !== String(user.TenantID)) {
+      throw ErrorHandler.create(
+        Constants.ERROR.NOT_FOUND,
+        'پروژه مورد نظر پیدا نشد.'
+      );
+    }
+
+    const tenantId = String(user.TenantID);
+    const direction = String(order || 'newest').toLowerCase() === 'oldest' ? 'oldest' : 'newest';
+    const pageNumber = Math.max(1, Math.floor(Number(page) || 1));
+    const pageSize = 30;
+
+    const events = (EventRepository.findByProjectId(projectId) || []).filter(function(event) {
+      const status = String(event.Status || '').toUpperCase();
+      return String(event.TenantID) === tenantId && status !== 'VOID' && status !== 'CANCELLED';
+    });
+
+    function eventTime(event) {
+      const value = event.OccurredAt || event.CreatedAt || '';
+      const parsed = value ? new Date(value).getTime() : 0;
+      return isFinite(parsed) ? parsed : 0;
+    }
+
+    events.sort(function(a, b) {
+      return direction === 'oldest'
+        ? eventTime(a) - eventTime(b)
+        : eventTime(b) - eventTime(a);
+    });
+
+    const total = events.length;
+    const start = (pageNumber - 1) * pageSize;
+    const pageEvents = events.slice(start, start + pageSize);
+    const enrichedEvents = this._enrichEventsBatch_(pageEvents, tenantId);
+    const eventIds = Object.create(null);
+    const eventTypeIds = Object.create(null);
+
+    pageEvents.forEach(function(event) {
+      eventIds[String(event.ID)] = true;
+      eventTypeIds[String(event.EventTypeID)] = true;
+    });
+
+    const eventData = Object.create(null);
+    (EventDataRepository.getAll() || []).forEach(function(record) {
+      const eventId = String(record.EventID || '');
+      if (!eventIds[eventId] || Object.prototype.hasOwnProperty.call(eventData, eventId)) return;
+      let parsed = {};
+      if (record.DataJSON !== undefined && record.DataJSON !== null &&
+          String(record.DataJSON).trim() !== '') {
+        try {
+          parsed = JSON.parse(record.DataJSON);
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) parsed = {};
+        } catch (error) {
+          parsed = {};
+        }
+      }
+      eventData[eventId] = parsed;
+    });
+
+    const eventFields = Object.create(null);
+    (EventFieldRepository.getAll() || []).forEach(function(field) {
+      const typeId = String(field.EventTypeID || '');
+      if (String(field.TenantID) !== tenantId || !eventTypeIds[typeId]) return;
+      if (!eventFields[typeId]) eventFields[typeId] = [];
+      eventFields[typeId].push(field);
+    });
+
+    Object.keys(eventFields).forEach(function(typeId) {
+      eventFields[typeId].sort(function(a, b) {
+        return Number(a.FieldOrder || 0) - Number(b.FieldOrder || 0);
+      });
+    });
+
+    return Response.success({
+      events: enrichedEvents,
+      eventData: eventData,
+      eventFields: eventFields,
+      pagination: {
+        page: pageNumber,
+        pageSize: pageSize,
+        total: total,
+        hasMore: start + pageEvents.length < total,
+        order: direction
+      }
+    });
+  },
+
   getProjectDetails: function(projectId, params) {
     Validator.required(projectId, 'ProjectID');
 
