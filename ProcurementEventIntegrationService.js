@@ -120,10 +120,47 @@ const ProcurementEventIntegrationService = {
     if (!isFinite(quantity) || quantity <= 0) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تأمین باید عددی بزرگ‌تر از صفر باشد.');
     }
-    if (action === 'CREATE_NEED' && !projectId && read('ProjectID')) {
-      var project = ProjectRepository.findById(read('ProjectID'));
-      if (!project || String(project.TenantID) !== String(user.TenantID)) {
-        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه نگاشت‌شده برای نیاز ملزومات معتبر نیست.');
+    if (action === 'CREATE_NEED') {
+      var mappedProjectId = projectId || read('ProjectID');
+      if (mappedProjectId) {
+        var project = ProjectRepository.findById(mappedProjectId);
+        if (!project || String(project.TenantID) !== String(user.TenantID)) {
+          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه نگاشت‌شده برای نیاز ملزومات معتبر نیست.');
+        }
+      }
+    }
+
+    // Validate receipt references and remaining quantity before the production
+    // event is persisted. This prevents predictable integration failures from
+    // leaving an event that looks successful without a matching receipt.
+    if (action === 'RECORD_RECEIPT') {
+      var itemId = read('PurchaseOrderItemID');
+      var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, itemId);
+      if (!item || String(item.TenantID) !== String(user.TenantID)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش برای ثبت دریافت معتبر نیست.');
+      }
+      var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
+      if (!order || String(order.TenantID) !== String(user.TenantID) ||
+          String(order.Status || '').toUpperCase() === 'CANCELLED') {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید برای ثبت دریافت معتبر یا فعال نیست.');
+      }
+      var priorReceived = ProcurementRepository.getReceipts(user.TenantID)
+        .filter(function(receipt) {
+          return String(receipt.PurchaseOrderItemID) === String(item.ID);
+        })
+        .reduce(function(sum, receipt) {
+          return sum + (Number(receipt.QuantityReceived) || 0);
+        }, 0);
+      if (priorReceived + quantity > (Number(item.OrderedQuantity) || 0)) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
+          'مقدار دریافت از باقیمانده قلم سفارش بیشتر است.');
+      }
+      var mappedProjectIdForReceipt = projectId || read('ProjectID');
+      if (mappedProjectIdForReceipt) {
+        var receiptProject = ProjectRepository.findById(mappedProjectIdForReceipt);
+        if (!receiptProject || String(receiptProject.TenantID) !== String(user.TenantID)) {
+          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه ثبت دریافت معتبر نیست.');
+        }
       }
     }
     return true;
