@@ -355,6 +355,21 @@ const Router = {
       );
     }
 
+    if (path === '/procurement/needs') {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.createNeed(body, params);
+    }
+
+    if (path === '/procurement/orders') {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.createOrder(body, params);
+    }
+
+    if (path === '/procurement/receipts') {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.createReceipt(body, params);
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_CREATE');
       return ProjectService.create(body, params);
