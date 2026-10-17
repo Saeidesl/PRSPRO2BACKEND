@@ -1,5 +1,129 @@
 const ProjectService = {
 
+  dashboard: function(params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID || '');
+
+    const projects = (ProjectRepository.getAll() || []).filter(function(project) {
+      return String(project.TenantID) === tenantId;
+    });
+    const events = (EventRepository.getAll() || []).filter(function(event) {
+      return String(event.TenantID) === tenantId && !!event.ProjectID;
+    });
+    const steps = (WorkflowStepRepository.getAll() || []).filter(function(step) {
+      return String(step.TenantID) === tenantId;
+    });
+    const assignments = (WorkflowStepDepartmentRepository.getAll
+      ? WorkflowStepDepartmentRepository.getAll()
+      : []).filter(function(item) {
+        return String(item.TenantID) === tenantId &&
+          String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      });
+    const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const eventTypes = (EventTypeRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const users = (UserRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+
+    const stepById = Object.create(null);
+    const departmentById = Object.create(null);
+    const eventTypeById = Object.create(null);
+    const userById = Object.create(null);
+    const assignmentByStepId = Object.create(null);
+    const latestByProjectId = Object.create(null);
+
+    steps.forEach(function(step) {
+      stepById[String(step.ID)] = step;
+    });
+    departments.forEach(function(item) {
+      departmentById[String(item.ID)] = item;
+    });
+    eventTypes.forEach(function(item) {
+      eventTypeById[String(item.ID)] = item;
+    });
+    users.forEach(function(item) {
+      userById[String(item.ID)] = item;
+    });
+    assignments.forEach(function(item) {
+      const key = String(item.WorkflowStepID || '');
+      if (key && !assignmentByStepId[key]) assignmentByStepId[key] = item;
+    });
+
+    events.forEach(function(event) {
+      const projectId = String(event.ProjectID || '');
+      const rawTime = event.OccurredAt || event.CreatedAt || '';
+      const time = rawTime ? new Date(rawTime).getTime() : 0;
+      const current = latestByProjectId[projectId];
+      if (!current || (isFinite(time) && time > current.time)) {
+        latestByProjectId[projectId] = {
+          time: isFinite(time) ? time : 0,
+          date: rawTime || '',
+          eventId: event.ID || ''
+        };
+      }
+    });
+
+    const items = projects.map(function(project) {
+      const result = Object.assign({}, project);
+      const step = stepById[String(project.CurrentStepID || '')];
+      const assignment = assignmentByStepId[String(project.CurrentStepID || '')];
+      const department = assignment
+        ? departmentById[String(assignment.DepartmentID || '')]
+        : null;
+      const latest = latestByProjectId[String(project.ID || '')];
+
+      result.CurrentStepName = step
+        ? (step.Name || step.Title || step.Code || '')
+        : '';
+      result.CurrentDepartmentID = department ? department.ID : '';
+      result.CurrentDepartmentName = department
+        ? (department.Name || department.Title || department.Code || '')
+        : '';
+      result.LastActivityAt = latest && latest.date
+        ? latest.date
+        : (project.UpdatedAt || project.CreatedAt || '');
+      result.LastActivityEventID = latest ? latest.eventId : '';
+      result.CreatedByName = userById[String(project.CreatedBy || '')]
+        ? (userById[String(project.CreatedBy || '')].Name ||
+          userById[String(project.CreatedBy || '')].FullName ||
+          userById[String(project.CreatedBy || '')].Username || '')
+        : '';
+      return result;
+    });
+
+    const displayUsers = users.map(function(item) {
+      return {
+        ID: item.ID,
+        Name: item.Name || item.FullName || item.Username || item.Email || String(item.ID)
+      };
+    });
+    const displayEventTypes = eventTypes.map(function(item) {
+      return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
+    });
+    const displayDepartments = departments.map(function(item) {
+      return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
+    });
+    const displaySteps = steps.map(function(item) {
+      return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
+    });
+
+    return Response.success({
+      projects: items,
+      totalProjects: items.length,
+      filterOptions: {
+        users: displayUsers,
+        eventTypes: displayEventTypes,
+        departments: displayDepartments,
+        stages: displaySteps
+      }
+    });
+  },
+
+
   list: function(params) {
 
     const user =
