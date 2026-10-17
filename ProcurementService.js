@@ -87,22 +87,81 @@ const ProcurementService = {
     }
 
     var self = this;
+    // Validate and normalize the entire order graph before the first write.
+    // Google Sheets cannot atomically commit across multiple sheets.
     var normalized = body.Items.map(function(item) {
       if (!item || !String(item.ItemName || '').trim() || !String(item.Unit || '').trim()) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام و واحد هر قلم سفارش الزامی است.');
       }
+
       var quantity = self._number_(item.OrderedQuantity, 'مقدار سفارش', false);
-      if (item.MaterialNeedID) {
-        var need = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.NEEDS, item.MaterialNeedID);
+      var price = item.UnitPrice === '' || item.UnitPrice === undefined || item.UnitPrice === null
+        ? '' : self._number_(item.UnitPrice, 'قیمت واحد', true);
+      var project = self._validateProject_(item.ProjectID, user.TenantID);
+      var needId = item.MaterialNeedID || '';
+      var need = null;
+
+      if (needId) {
+        need = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.NEEDS, needId);
         if (!need || String(need.TenantID) !== String(user.TenantID)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با قلم سفارش معتبر نیست.');
         }
       }
+
+      var allocations = Array.isArray(item.Allocations) ? item.Allocations : [];
+      if (!allocations.length && item.ProjectID) {
+        allocations = [{
+          ProjectID: item.ProjectID,
+          MaterialNeedID: needId,
+          AllocatedQuantity: quantity
+        }];
+      }
+
+      var normalizedAllocations = allocations.map(function(allocation) {
+        if (!allocation || typeof allocation !== 'object') {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تخصیص قلم سفارش معتبر نیست.');
+        }
+        var allocationProject = self._validateProject_(allocation.ProjectID, user.TenantID);
+        var allocationQuantity = self._number_(allocation.AllocatedQuantity, 'مقدار تخصیص', false);
+        var allocationNeedId = allocation.MaterialNeedID || needId || '';
+        var allocationNeed = null;
+
+        if (allocationNeedId) {
+          allocationNeed = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.NEEDS, allocationNeedId);
+          if (!allocationNeed || String(allocationNeed.TenantID) !== String(user.TenantID)) {
+            throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با تخصیص معتبر نیست.');
+          }
+        }
+        if (allocationNeed && allocationProject &&
+            allocationNeed.ProjectID &&
+            String(allocationNeed.ProjectID) !== String(allocationProject.ID)) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه تخصیص با پروژه نیاز ملزومات مطابقت ندارد.');
+        }
+        return {
+          ProjectID: allocationProject ? allocationProject.ID : '',
+          MaterialNeedID: allocationNeedId,
+          AllocatedQuantity: allocationQuantity
+        };
+      });
+
+      var totalAllocated = normalizedAllocations.reduce(function(sum, allocation) {
+        return sum + allocation.AllocatedQuantity;
+      }, 0);
+      if (totalAllocated > quantity) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع تخصیص‌ها از مقدار قلم سفارش بیشتر است.');
+      }
+
+      if (need && project && need.ProjectID &&
+          String(need.ProjectID) !== String(project.ID)) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه قلم سفارش با پروژه نیاز ملزومات مطابقت ندارد.');
+      }
+
       return {
         source: item,
         quantity: quantity,
-        price: item.UnitPrice === '' || item.UnitPrice === undefined || item.UnitPrice === null
-          ? '' : self._number_(item.UnitPrice, 'قیمت واحد', true)
+        price: price,
+        project: project,
+        allocations: normalizedAllocations
       };
     });
 
@@ -127,7 +186,6 @@ const ProcurementService = {
     try {
       normalized.forEach(function(entry) {
         var item = entry.source;
-        var project = self._validateProject_(item.ProjectID, user.TenantID);
         var row = {
           ID: self._id_('POI'),
           TenantID: user.TenantID,
@@ -145,40 +203,14 @@ const ProcurementService = {
         GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ITEMS, row);
         createdItems.push(row);
 
-        var allocations = Array.isArray(item.Allocations) ? item.Allocations : [];
-        if (!allocations.length && item.ProjectID) {
-          allocations = [{
-            ProjectID: item.ProjectID,
-            MaterialNeedID: item.MaterialNeedID || '',
-            AllocatedQuantity: entry.quantity
-          }];
-        }
-        var totalAllocated = allocations.reduce(function(sum, allocation) {
-          return sum + (Number(allocation.AllocatedQuantity) || 0);
-        }, 0);
-        if (totalAllocated > entry.quantity) {
-          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع تخصیص‌ها از مقدار قلم سفارش بیشتر است.');
-        }
-        allocations.forEach(function(allocation) {
-          var allocationProject = self._validateProject_(allocation.ProjectID, user.TenantID);
-          var amount = self._number_(allocation.AllocatedQuantity, 'مقدار تخصیص', false);
-          if (amount > entry.quantity) {
-            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تخصیص از مقدار قلم سفارش بیشتر است.');
-          }
-          var needId = allocation.MaterialNeedID || item.MaterialNeedID || '';
-          if (needId) {
-            var need = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.NEEDS, needId);
-            if (!need || String(need.TenantID) !== String(user.TenantID)) {
-              throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با تخصیص معتبر نیست.');
-            }
-          }
+        entry.allocations.forEach(function(allocation) {
           GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ALLOCATIONS, {
             ID: self._id_('ALLOC'),
             TenantID: user.TenantID,
             PurchaseOrderItemID: row.ID,
-            ProjectID: allocationProject ? allocationProject.ID : '',
-            MaterialNeedID: needId,
-            AllocatedQuantity: amount,
+            ProjectID: allocation.ProjectID,
+            MaterialNeedID: allocation.MaterialNeedID,
+            AllocatedQuantity: allocation.AllocatedQuantity,
             CreatedAt: now
           });
         });
