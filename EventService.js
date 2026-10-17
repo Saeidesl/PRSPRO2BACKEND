@@ -182,11 +182,14 @@ const EventService = {
       const destinationDepartmentId =
         targetDepartmentId || event.DepartmentID || '';
 
+      // If the event type says it moves the project to the event's unit,
+      // a missing unit-to-step mapping must fail visibly instead of silently
+      // leaving the project at its previous stage.
       const targetStep = this._findTargetStep_(
         project,
         destinationDepartmentId,
         tenantId,
-        !!targetDepartmentId
+        !!targetDepartmentId || this._toBoolean_(eventType.MovesProjectToStep)
       );
 
       if (targetStep) {

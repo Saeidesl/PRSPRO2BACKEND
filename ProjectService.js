@@ -43,11 +43,25 @@ const ProjectService = {
       };
     });
 
+    // Read-only status labels for dashboard/project viewers. Do not require
+    // PROJECT_STATUS_MANAGE merely to translate a status ID into its name.
+    const projectStatuses = ProjectStatusService._getRows_().filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    }).map(function(item) {
+      return {
+        ID: item.ID,
+        Code: item.Code || '',
+        Name: item.Name || item.Code || String(item.ID)
+      };
+    });
+
     return Response.success({
       users: users,
       departments: departments,
       eventTypes: eventTypes,
-      workflowSteps: workflowSteps
+      workflowSteps: workflowSteps,
+      projectStatuses: projectStatuses
     });
   },
 
