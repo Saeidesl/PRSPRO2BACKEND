@@ -831,13 +831,12 @@ const EventService = {
 
     let procurementIntegration = { status: 'NOT_CONFIGURED' };
     try {
-      procurementIntegration = EventTypeProcurementService.applyToEvent(
+      procurementIntegration = ProcurementEventIntegrationService.apply(
         eventType,
         created,
         hasDynamicData ? validatedDynamicData : {},
-        user,
         requestParams
-      );
+      ) || { status: 'NOT_CONFIGURED' };
     } catch (integrationError) {
       // The production event is already persisted. Record the integration failure
       // explicitly so it is not mistaken for a successful procurement update.
