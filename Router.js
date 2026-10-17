@@ -268,6 +268,11 @@ const Router = {
       return AuditService.listByUser(parts[3], params);
     }
 
+    if (path === '/project-dashboard/lookups') {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectService.dashboardLookups(params);
+    }
+
     if (path === '/dashboard') {
       AccessControlService.require(params, 'REPORT_VIEW');
       return ReportService.dashboard(params);
