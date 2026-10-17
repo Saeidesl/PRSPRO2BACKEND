@@ -7,18 +7,19 @@
 
 const PermissionService = {
 
-  // Permission inheritance is explicit and centralized. A manage/edit
-  // permission includes the corresponding read permission, while independent
-  // actions (such as voiding an event or changing project status) stay separate.
+  // Effective permissions and the lookup rights required by supported workflows
+  // are defined centrally. Independent actions such as event voiding and project
+  // status changes remain separate from ordinary edit permission.
   IMPLIED_PERMISSIONS: {
     PROJECT_EDIT: ['PROJECT_VIEW'],
     EVENT_EDIT: ['EVENT_VIEW'],
-    USER_EDIT: ['USER_VIEW'],
+    USER_CREATE: ['DEPARTMENT_VIEW', 'ROLE_VIEW'],
+    USER_EDIT: ['USER_VIEW', 'DEPARTMENT_VIEW', 'ROLE_VIEW'],
     ROLE_MANAGE: ['ROLE_VIEW'],
     PERMISSION_MANAGE: ['PERMISSION_VIEW'],
     DEPARTMENT_MANAGE: ['DEPARTMENT_VIEW'],
-    EVENT_TYPE_MANAGE: ['EVENT_TYPE_VIEW'],
-    WORKFLOW_MANAGE: ['WORKFLOW_VIEW'],
+    EVENT_TYPE_MANAGE: ['EVENT_TYPE_VIEW', 'DEPARTMENT_VIEW', 'USER_VIEW', 'PROJECT_STATUS_VIEW'],
+    WORKFLOW_MANAGE: ['WORKFLOW_VIEW', 'DEPARTMENT_VIEW'],
     PROJECT_STATUS_MANAGE: ['PROJECT_STATUS_VIEW'],
     ATTACHMENT_MANAGE: ['ATTACHMENT_VIEW', 'ATTACHMENT_UPLOAD', 'ATTACHMENT_DELETE']
   },
