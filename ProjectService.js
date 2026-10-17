@@ -155,6 +155,11 @@ const ProjectService = {
     });
     const eventTypeById = Object.create(null);
     eventTypes.forEach(function(item) { eventTypeById[String(item.ID)] = item; });
+    const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const departmentById = Object.create(null);
+    departments.forEach(function(item) { departmentById[String(item.ID)] = item; });
 
     const eventById = Object.create(null);
     projectEvents.forEach(function(event) { eventById[String(event.ID)] = event; });
@@ -179,9 +184,13 @@ const ProjectService = {
         : null;
       if (relatedEvent) {
         const type = eventTypeById[String(relatedEvent.EventTypeID || '')];
+        const department = departmentById[String(relatedEvent.DepartmentID || '')];
+        const departmentName = department
+          ? (department.Name || department.Title || department.Code || '')
+          : '';
         result.RelatedEventTitle = (type
           ? (type.Name || type.Title || type.Code || 'رویداد')
-          : 'رویداد') + (relatedEvent.DepartmentID ? ' — ' + relatedEvent.DepartmentID : '');
+          : 'رویداد') + (departmentName ? ' — ' + departmentName : '');
       } else {
         result.RelatedEventTitle = '';
       }
