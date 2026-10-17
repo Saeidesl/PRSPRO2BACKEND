@@ -7,6 +7,22 @@
 
 const PermissionService = {
 
+  // Permission inheritance is explicit and centralized. A manage/edit
+  // permission includes the corresponding read permission, while independent
+  // actions (such as voiding an event or changing project status) stay separate.
+  IMPLIED_PERMISSIONS: {
+    PROJECT_EDIT: ['PROJECT_VIEW'],
+    EVENT_EDIT: ['EVENT_VIEW'],
+    USER_EDIT: ['USER_VIEW'],
+    ROLE_MANAGE: ['ROLE_VIEW'],
+    PERMISSION_MANAGE: ['PERMISSION_VIEW'],
+    DEPARTMENT_MANAGE: ['DEPARTMENT_VIEW'],
+    EVENT_TYPE_MANAGE: ['EVENT_TYPE_VIEW'],
+    WORKFLOW_MANAGE: ['WORKFLOW_VIEW'],
+    PROJECT_STATUS_MANAGE: ['PROJECT_STATUS_VIEW'],
+    ATTACHMENT_MANAGE: ['ATTACHMENT_VIEW', 'ATTACHMENT_UPLOAD', 'ATTACHMENT_DELETE']
+  },
+
   list: function(params) {
     AccessControlService.getCurrentUser(params || {});
     return Response.success(PermissionRepository.getAll());
@@ -120,62 +136,27 @@ const PermissionService = {
       }
     });
 
-    return result;
+    // Expand inherited permissions once so frontend and backend use the same
+    // effective permission set rather than each implementing its own rules.
+    const effective = Object.create(null);
+    const self = this;
+    result.forEach(function(code) {
+      effective[code] = true;
+      (self.IMPLIED_PERMISSIONS[code] || []).forEach(function(impliedCode) {
+        effective[impliedCode] = true;
+      });
+    });
+
+    return Object.keys(effective);
   },
 
   /**
-   * بررسی یک مجوز مشخص
+   * Check the effective permission set, including explicitly defined inheritance.
    */
   hasPermission: function(userId, permissionCode, userRecord) {
     Validator.required(userId, 'UserID');
     Validator.required(permissionCode, 'کد دسترسی');
-
-    const suppliedUser = userRecord && String(userRecord.ID) === String(userId)
-      ? userRecord
-      : null;
-    const user = suppliedUser || UserRepository.findById(userId);
-
-    if (!user) return false;
-
-    const permission = PermissionRepository.findByCode(permissionCode);
-    if (!permission) return false;
-
-    const tenantId = String(user.TenantID);
-    const userRoles = UserRoleRepository.getAll().filter(function(item) {
-      return String(item.UserID) === String(userId) &&
-        String(item.TenantID) === tenantId;
-    });
-
-    if (userRoles.length === 0) return false;
-
-    const roles = RoleRepository.getAll().filter(function(role) {
-      return String(role.TenantID) === tenantId;
-    });
-
-    const validRoleIds = {};
-    roles.forEach(function(role) {
-      validRoleIds[String(role.ID)] = true;
-    });
-
-    const roleIds = {};
-    userRoles.forEach(function(userRole) {
-      const roleId = String(userRole.RoleID);
-      if (validRoleIds[roleId]) roleIds[roleId] = true;
-    });
-
-    const rolePermissions = GoogleSheetsRepository.getAll('07_RolePermissions');
-    for (let i = 0; i < rolePermissions.length; i++) {
-      const item = rolePermissions[i];
-      if (
-        String(item.TenantID) === tenantId &&
-        roleIds[String(item.RoleID)] &&
-        String(item.PermissionID) === String(permission.ID)
-      ) {
-        return true;
-      }
-    }
-
-    return false;
+    return this.getUserPermissions(userId, userRecord).indexOf(String(permissionCode)) !== -1;
   },
 
   requirePermission: function(userId, permissionCode) {
