@@ -42,9 +42,15 @@ const Router = {
       let permissions;
 
       if (AccessControlService.isAdmin(user)) {
-        permissions = PermissionRepository.getAll().map(function(item) {
-          return item.Code;
-        });
+        const activeStatus = String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase();
+        permissions = (PermissionRepository.getAll() || [])
+          .filter(function(item) {
+            return String(item.Status || '').trim().toUpperCase() === activeStatus;
+          })
+          .map(function(item) {
+            return String(item.Code || '');
+          })
+          .filter(Boolean);
       } else {
         permissions = AccessControlService.getUserPermissions(user.ID, user);
       }
