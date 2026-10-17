@@ -807,6 +807,16 @@ const EventService = {
       PreviousAvailableDepartmentIDs: project ? (project.AvailableDepartmentIDs || '') : ''
     };
 
+    // Reject missing/invalid mapped procurement inputs before writing the event.
+    if (typeof ProcurementEventIntegrationService !== 'undefined') {
+      ProcurementEventIntegrationService.validate(
+        eventType,
+        validatedDynamicData || {},
+        project ? project.ID : '',
+        requestParams
+      );
+    }
+
     const created = EventRepository.insert(newEvent);
 
     if (hasDynamicData) {
