@@ -73,6 +73,11 @@ const Router = {
       return DepartmentService.get(departmentId, params);
     }
 
+    if (path === '/projects/available-for-event') {
+      AccessControlService.require(params, 'EVENT_CREATE');
+      return ProjectService.listAvailableForEvent(params);
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_VIEW');
       return ProjectService.list(params);
