@@ -27,6 +27,7 @@ const EventTypeService = {
     if (!eventType) return eventType;
 
     const result = Object.assign({}, eventType);
+    result.ConnectionType = String(result.ConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT' ? 'INDEPENDENT' : 'PROJECT';
     const self = this;
 
     this.ARRAY_FIELDS.forEach(function(field) {
@@ -381,6 +382,7 @@ const EventTypeService = {
       TenantID: user.TenantID,
       Name: data.Name,
       Code: data.Code,
+      ConnectionType: String(data.ConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT' ? 'INDEPENDENT' : 'PROJECT',
       Version: data.Version || 1,
       Description: data.Description || '',
       DepartmentID: data.DepartmentID || '',
@@ -471,6 +473,10 @@ const EventTypeService = {
     }
 
     this._validateReferences_(data, user.TenantID);
+
+    if (data.ConnectionType !== undefined) {
+      data.ConnectionType = String(data.ConnectionType || 'PROJECT').toUpperCase();
+    }
 
     const updateData = {};
 
