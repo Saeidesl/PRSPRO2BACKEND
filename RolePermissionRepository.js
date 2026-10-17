@@ -240,6 +240,11 @@ const RolePermissionService = {
       );
     }
 
+    PermissionService.assertRetainsSystemManage(user.ID, user, {
+      excludePermissionRoleId: roleId,
+      excludePermissionIds: [permissionId]
+    });
+
     RolePermissionRepository.delete(item.ID);
 
     AuditService.log({
@@ -302,6 +307,13 @@ const RolePermissionService = {
           reason: 'این دسترسی برای نقش ثبت نشده است.'
         });
       }
+    });
+
+    PermissionService.assertRetainsSystemManage(user.ID, user, {
+      excludePermissionRoleId: roleId,
+      excludePermissionIds: toDelete.map(function(item) {
+        return String(item.PermissionID);
+      })
     });
 
     const result = RolePermissionRepository.deleteMany(
