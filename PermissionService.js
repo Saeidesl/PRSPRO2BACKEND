@@ -189,6 +189,9 @@ const PermissionService = {
     const excludedUserRoleId = exclusions.excludeUserRoleId == null
       ? ''
       : String(exclusions.excludeUserRoleId);
+    const excludedPermissionRoleId = exclusions.excludePermissionRoleId == null
+      ? ''
+      : String(exclusions.excludePermissionRoleId);
     const excludedPermissionIds = {};
     (exclusions.excludePermissionIds || []).forEach(function(id) {
       excludedPermissionIds[String(id)] = true;
@@ -232,7 +235,7 @@ const PermissionService = {
       ) return false;
 
       if (
-        String(link.RoleID) === excludedRoleId &&
+        String(link.RoleID) === excludedPermissionRoleId &&
         excludedPermissionIds[String(link.PermissionID)]
       ) return false;
 
