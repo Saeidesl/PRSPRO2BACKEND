@@ -56,12 +56,12 @@ const Router = {
     }
 
     if (path === '/project-statuses') {
-      this.requireAny(params, ['PROJECT_STATUS_VIEW', 'PROJECT_STATUS_MANAGE']);
+      this.requireAny(params, ['PROJECT_STATUS_VIEW', 'PROJECT_STATUS_MANAGE', 'EVENT_TYPE_MANAGE']);
       return ProjectStatusService.list(params);
     }
 
     if (path === '/departments') {
-      this.requireAny(params, ['DEPARTMENT_VIEW', 'DEPARTMENT_MANAGE']);
+      this.requireAny(params, ['DEPARTMENT_VIEW', 'DEPARTMENT_MANAGE', 'USER_CREATE', 'USER_EDIT', 'EVENT_TYPE_MANAGE', 'WORKFLOW_MANAGE']);
       return DepartmentService.list(params);
     }
 
@@ -211,6 +211,11 @@ const Router = {
       return AttachmentService.get(attachmentId, params);
     }
 
+    if (path === '/lookup/users-for-event-types') {
+      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+      return UserService.listForEventTypeConfiguration(params);
+    }
+
     if (path === '/users') {
       AccessControlService.require(params, 'USER_VIEW');
       return UserService.list(params);
@@ -229,7 +234,7 @@ const Router = {
     }
 
     if (path === '/roles') {
-      this.requireAny(params, ['ROLE_VIEW', 'ROLE_MANAGE']);
+      this.requireAny(params, ['ROLE_VIEW', 'ROLE_MANAGE', 'USER_CREATE', 'USER_EDIT']);
       return RoleService.list(params);
     }
 
