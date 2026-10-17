@@ -517,6 +517,181 @@ const EventService = {
     });
   },
 
+  // شاخص جست‌وجوی داشبورد پروژه؛ اطلاعات به‌صورت صفحه‌ای برگردانده می‌شود.
+  dashboardSearchIndex: function(params, options) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID || '');
+    options = options || {};
+
+    const offset = Math.max(0, Number(options.offset || 0) || 0);
+    const limit = Math.min(150, Math.max(20, Number(options.limit || 100) || 100));
+
+    const projects = (ProjectRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const projectById = Object.create(null);
+    projects.forEach(function(project) {
+      projectById[String(project.ID)] = project;
+    });
+
+    const allEvents = (EventRepository.getAll() || []).filter(function(event) {
+      return String(event.TenantID) === tenantId &&
+        !!event.ProjectID &&
+        !!projectById[String(event.ProjectID)];
+    });
+
+    function eventTime(event) {
+      const value = event.OccurredAt || event.CreatedAt || '';
+      const parsed = value ? new Date(value).getTime() : 0;
+      return isFinite(parsed) ? parsed : 0;
+    }
+
+    allEvents.sort(function(a, b) {
+      return eventTime(b) - eventTime(a);
+    });
+
+    const page = allEvents.slice(offset, offset + limit);
+    const eventIds = Object.create(null);
+    const eventTypeIds = Object.create(null);
+    const projectIds = Object.create(null);
+    page.forEach(function(event) {
+      eventIds[String(event.ID)] = true;
+      eventTypeIds[String(event.EventTypeID)] = true;
+      projectIds[String(event.ProjectID)] = true;
+    });
+
+    const eventTypes = (EventTypeRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId && eventTypeIds[String(item.ID)];
+    });
+    const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const users = (UserRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const fields = (EventFieldRepository.getAll() || []).filter(function(field) {
+      return String(field.TenantID) === tenantId &&
+        eventTypeIds[String(field.EventTypeID)] &&
+        String(field.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    });
+    const dataRows = (EventDataRepository.getAll() || []).filter(function(row) {
+      return eventIds[String(row.EventID || '')];
+    });
+    const attachments = (AttachmentRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.EntityType || '').toUpperCase() === 'EVENT' &&
+        eventIds[String(item.EntityID || '')] &&
+        String(item.Status || '').toUpperCase() !== String(Constants.STATUS.DELETED).toUpperCase();
+    });
+
+    const typeById = Object.create(null);
+    const departmentById = Object.create(null);
+    const userById = Object.create(null);
+    const fieldsByType = Object.create(null);
+    const dataByEvent = Object.create(null);
+    const attachmentsByEvent = Object.create(null);
+
+    eventTypes.forEach(function(item) { typeById[String(item.ID)] = item; });
+    departments.forEach(function(item) { departmentById[String(item.ID)] = item; });
+    users.forEach(function(item) { userById[String(item.ID)] = item; });
+    fields.forEach(function(field) {
+      const key = String(field.EventTypeID);
+      if (!fieldsByType[key]) fieldsByType[key] = [];
+      fieldsByType[key].push(field);
+    });
+    Object.keys(fieldsByType).forEach(function(key) {
+      fieldsByType[key].sort(function(a, b) {
+        return Number(a.FieldOrder || 0) - Number(b.FieldOrder || 0);
+      });
+    });
+
+    dataRows.forEach(function(row) {
+      let value = {};
+      try {
+        value = row.DataJSON ? JSON.parse(String(row.DataJSON)) : {};
+        if (!value || typeof value !== 'object' || Array.isArray(value)) value = {};
+      } catch (error) {
+        value = {};
+      }
+      const key = String(row.EventID);
+      if (!dataByEvent[key]) dataByEvent[key] = value;
+    });
+    attachments.forEach(function(item) {
+      const key = String(item.EntityID);
+      if (!attachmentsByEvent[key]) attachmentsByEvent[key] = [];
+      attachmentsByEvent[key].push(item.FileName || item.OriginalName || item.Name || '');
+    });
+
+    const items = page.map(function(event) {
+      const project = projectById[String(event.ProjectID)] || {};
+      const type = typeById[String(event.EventTypeID)] || {};
+      const department = departmentById[String(event.DepartmentID)] || {};
+      const creator = userById[String(event.CreatedBy)] || {};
+      const performer = userById[String(event.PerformedBy)] || {};
+      const typeName = type.Name || type.Title || type.Code || event.EventTypeName || 'رویداد';
+      const departmentName = department.Name || department.Title || department.Code || event.DepartmentName || '';
+      const eventData = dataByEvent[String(event.ID)] || {};
+      const eventFields = fieldsByType[String(event.EventTypeID)] || [];
+      const searchParts = [
+        typeName, type.Code, departmentName, department.Code,
+        event.Description, event.Notes, event.Reason, event.Status,
+        event.OccurredAt, event.CreatedAt,
+        EventService.getUserDisplayName(creator),
+        EventService.getUserDisplayName(performer)
+      ];
+      let quantityText = '';
+
+      eventFields.forEach(function(field) {
+        const code = String(field.Code || '');
+        const value = eventData[code];
+        if (value === undefined || value === null || String(value).trim() === '') return;
+        searchParts.push(field.Name || '', field.Code || '', String(value));
+        if (!quantityText && /(تعداد|مقدار|تیراژ|quantity|qty|pieces|units)/i.test(
+          String(field.Name || '') + ' ' + String(field.Code || '')
+        )) {
+          const unit = field.Unit || field.UnitName || '';
+          quantityText = String(value) + (unit ? ' ' + unit : '');
+        }
+      });
+
+      (attachmentsByEvent[String(event.ID)] || []).forEach(function(name) {
+        if (name) searchParts.push(name);
+      });
+
+      return {
+        ID: event.ID,
+        ProjectID: event.ProjectID,
+        EventTypeID: event.EventTypeID,
+        EventTypeName: typeName,
+        DepartmentID: event.DepartmentID || '',
+        DepartmentName: departmentName,
+        ProjectCode: project.ProjectCode || '',
+        ProjectTitle: project.Title || project.Name || '',
+        CreatedBy: event.CreatedBy || '',
+        CreatorName: EventService.getUserDisplayName(creator),
+        PerformedBy: event.PerformedBy || '',
+        PerformedByName: EventService.getUserDisplayName(performer),
+        OccurredAt: event.OccurredAt || event.CreatedAt || '',
+        CreatedAt: event.CreatedAt || '',
+        Status: event.Status || '',
+        QuantityText: quantityText,
+        EventTitle: typeName + (departmentName ? ' — ' + departmentName : ''),
+        SearchText: searchParts.filter(function(value) {
+          return value !== undefined && value !== null && String(value).trim() !== '';
+        }).join(' ').toLocaleLowerCase()
+      };
+    });
+
+    return Response.success({
+      items: items,
+      offset: offset,
+      limit: limit,
+      total: allEvents.length,
+      hasMore: offset + page.length < allEvents.length,
+      nextOffset: offset + page.length
+    });
+  },
+
   // ثبت رویداد
   create: function(event, params) {
     Validator.object(event, 'event');
