@@ -443,6 +443,46 @@ const EventService = {
     );
   },
 
+  getProjectDetailsPage: function(projectId, order, page, params) {
+    const response = this.getProjectDetails(projectId, params);
+    const data = response && response.data ? response.data : {};
+    const direction = String(order || 'newest').toLowerCase() === 'oldest' ? 'oldest' : 'newest';
+    const pageNumber = Math.max(1, Math.floor(Number(page) || 1));
+    const pageSize = 30;
+    const events = (data.events || []).filter(function(item) {
+      const status = String(item.Status || '').toUpperCase();
+      return status !== 'VOID' && status !== 'CANCELLED';
+    });
+    events.sort(function(a, b) {
+      const first = new Date(a.OccurredAt || a.CreatedAt || 0).getTime();
+      const second = new Date(b.OccurredAt || b.CreatedAt || 0).getTime();
+      return direction === 'oldest' ? first - second : second - first;
+    });
+    const total = events.length;
+    const start = (pageNumber - 1) * pageSize;
+    const pageEvents = events.slice(start, start + pageSize);
+    const ids = Object.create(null);
+    const types = Object.create(null);
+    pageEvents.forEach(function(item) {
+      ids[String(item.ID)] = true;
+      types[String(item.EventTypeID)] = true;
+    });
+    const eventData = {};
+    Object.keys(data.eventData || {}).forEach(function(id) {
+      if (ids[id]) eventData[id] = data.eventData[id];
+    });
+    const eventFields = {};
+    Object.keys(data.eventFields || {}).forEach(function(id) {
+      if (types[id]) eventFields[id] = data.eventFields[id];
+    });
+    return Response.success({
+      events: pageEvents,
+      eventData: eventData,
+      eventFields: eventFields,
+      pagination: { page: pageNumber, pageSize: pageSize, total: total, hasMore: start + pageEvents.length < total, order: direction }
+    });
+  },
+
   // دریافت رویدادهای پروژه و اطلاعات تکمیلی آن‌ها در یک پاسخ
   getProjectDetails: function(projectId, params) {
     Validator.required(projectId, 'ProjectID');
