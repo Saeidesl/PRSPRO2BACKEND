@@ -170,6 +170,11 @@ const Router = {
         return EventFieldService.listByEventType(eventTypeId, params);
       }
 
+      if (parts[3] === 'procurement') {
+        AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+        return EventTypeProcurementService.get(eventTypeId, params);
+      }
+
       return EventTypeService.get(eventTypeId, params);
     }
 
@@ -402,6 +407,12 @@ const Router = {
     if (path === '/event-types') {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.create(body, params);
+    }
+
+    const eventTypeProcurementMatch = path.match(/^\\/event-types\\/([^/]+)\\/procurement$/);
+    if (eventTypeProcurementMatch) {
+      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+      return EventTypeProcurementService.save(eventTypeProcurementMatch[1], body, params);
     }
 
     if (path.indexOf('/event-types/') === 0) {
