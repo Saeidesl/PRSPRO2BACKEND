@@ -164,6 +164,92 @@ const PermissionService = {
   },
 
   /**
+   * Prevent an administrator from removing their own final SYSTEM_MANAGE grant.
+   * exclusions may omit one role, one user-role link, or selected permissions
+   * from a role while simulating the proposed change.
+   */
+  assertRetainsSystemManage: function(userId, userRecord, exclusions) {
+    Validator.required(userId, 'UserID');
+    exclusions = exclusions || {};
+
+    const user = userRecord && String(userRecord.ID) === String(userId)
+      ? userRecord
+      : UserRepository.findById(userId);
+
+    if (!user || AccessControlService.isAdmin(user)) return true;
+
+    const currentPermissions = this.getUserPermissions(userId, user);
+    if (currentPermissions.indexOf('SYSTEM_MANAGE') === -1) return true;
+
+    const tenantId = String(user.TenantID);
+    const activeStatus = String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase();
+    const excludedRoleId = exclusions.excludeRoleId == null
+      ? ''
+      : String(exclusions.excludeRoleId);
+    const excludedUserRoleId = exclusions.excludeUserRoleId == null
+      ? ''
+      : String(exclusions.excludeUserRoleId);
+    const excludedPermissionIds = {};
+    (exclusions.excludePermissionIds || []).forEach(function(id) {
+      excludedPermissionIds[String(id)] = true;
+    });
+
+    const assignedRoles = (UserRoleRepository.getAll() || []).filter(function(link) {
+      return String(link.UserID) === String(userId) &&
+        String(link.TenantID) === tenantId &&
+        String(link.ID) !== excludedUserRoleId &&
+        String(link.RoleID) !== excludedRoleId;
+    });
+    const assignedRoleIds = {};
+    assignedRoles.forEach(function(link) {
+      assignedRoleIds[String(link.RoleID)] = true;
+    });
+
+    const activeRoles = (RoleRepository.getAll() || []).filter(function(role) {
+      return String(role.TenantID) === tenantId &&
+        String(role.Status || '').trim().toUpperCase() === activeStatus &&
+        !!assignedRoleIds[String(role.ID)];
+    });
+    const activeRoleIds = {};
+    activeRoles.forEach(function(role) {
+      activeRoleIds[String(role.ID)] = true;
+    });
+
+    const activePermissions = (PermissionRepository.getAll() || []).filter(function(permission) {
+      return String(permission.Status || '').trim().toUpperCase() === activeStatus &&
+        String(permission.Code || '') === 'SYSTEM_MANAGE';
+    });
+    const systemManagePermissionIds = {};
+    activePermissions.forEach(function(permission) {
+      systemManagePermissionIds[String(permission.ID)] = true;
+    });
+
+    const remainingGrant = (GoogleSheetsRepository.getAll('07_RolePermissions') || []).some(function(link) {
+      if (
+        String(link.TenantID) !== tenantId ||
+        !activeRoleIds[String(link.RoleID)] ||
+        !systemManagePermissionIds[String(link.PermissionID)]
+      ) return false;
+
+      if (
+        String(link.RoleID) === excludedRoleId &&
+        excludedPermissionIds[String(link.PermissionID)]
+      ) return false;
+
+      return true;
+    });
+
+    if (!remainingGrant) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'برای جلوگیری از قفل شدن دسترسی مدیر سامانه، ابتدا دسترسی مدیریتی دیگری به خود اختصاص دهید.'
+      );
+    }
+
+    return true;
+  },
+
+  /**
    * Check the effective permission set, including explicitly defined inheritance.
    */
   hasPermission: function(userId, permissionCode, userRecord) {
