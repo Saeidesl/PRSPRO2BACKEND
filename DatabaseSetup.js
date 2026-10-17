@@ -70,7 +70,7 @@ const APP_CONFIG = {
 
     EVENT_TYPES: {
       name: '11_EventTypes',
-      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType']
     },
 
     EVENT_FIELDS: {
@@ -572,7 +572,8 @@ function upgradeEventTypeSettings() {
       'AllowedDepartmentIDs',
       'AllowedUserIDs',
       'AvailableDepartmentIDs',
-      'AllowVoid'
+      'AllowVoid',
+      'ConnectionType'
     ];
 
     const missingHeaders = newHeaders.filter(function(header) {
@@ -609,9 +610,19 @@ function upgradeEventTypeSettings() {
 
     sheet.setFrozenRows(1);
 
+    if (missingHeaders.indexOf('ConnectionType') >= 0) {
+      const connectionTypeColumn = sheet.getLastColumn();
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        const defaults = [];
+        for (let row = 2; row <= lastRow; row++) defaults.push(['PROJECT']);
+        sheet.getRange(2, connectionTypeColumn, lastRow - 1, 1).setValues(defaults);
+      }
+    }
+
     PropertiesService.getScriptProperties().setProperty(
       'EVENT_TYPE_SETTINGS_VERSION',
-      '1.2.0'
+      '1.3.0'
     );
 
     Logger.log(
