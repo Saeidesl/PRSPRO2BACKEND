@@ -1,5 +1,57 @@
 const ProjectService = {
 
+  dashboardLookups: function(params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID || '');
+
+    const users = (UserRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
+    }).map(function(item) {
+      const fullName = [item.FirstName || '', item.LastName || ''].join(' ').trim();
+      return {
+        ID: item.ID,
+        Name: item.Name || item.FullName || item.DisplayName || fullName ||
+          item.Username || item.Email || String(item.ID)
+      };
+    });
+
+    const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
+    }).map(function(item) {
+      return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
+    });
+
+    const eventTypes = (EventTypeRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
+    }).map(function(item) {
+      return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
+    });
+
+    const workflowSteps = (WorkflowStepRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
+    }).map(function(item) {
+      return {
+        ID: item.ID,
+        WorkflowID: item.WorkflowID || '',
+        Name: item.Name || item.Title || item.Code || String(item.ID),
+        Code: item.Code || '',
+        StepOrder: item.StepOrder || item.Order || 0
+      };
+    });
+
+    return Response.success({
+      users: users,
+      departments: departments,
+      eventTypes: eventTypes,
+      workflowSteps: workflowSteps
+    });
+  },
+
+
   list: function(params) {
 
     const user =
