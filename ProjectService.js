@@ -124,6 +124,77 @@ const ProjectService = {
   },
 
 
+  managementHistory: function(projectId, params) {
+    Validator.required(projectId, 'شناسه پروژه');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID || '');
+    const project = ProjectRepository.findById(projectId);
+
+    if (!project || String(project.TenantID) !== tenantId) {
+      throw ErrorHandler.create(
+        Constants.ERROR.NOT_FOUND,
+        'پروژه مورد نظر پیدا نشد.'
+      );
+    }
+
+    const projectEvents = (EventRepository.getAll() || []).filter(function(event) {
+      return String(event.TenantID) === tenantId &&
+        String(event.ProjectID || '') === String(projectId);
+    });
+    const eventIds = Object.create(null);
+    projectEvents.forEach(function(event) { eventIds[String(event.ID)] = true; });
+
+    const users = (UserRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const userById = Object.create(null);
+    users.forEach(function(item) { userById[String(item.ID)] = item; });
+
+    const eventTypes = (EventTypeRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const eventTypeById = Object.create(null);
+    eventTypes.forEach(function(item) { eventTypeById[String(item.ID)] = item; });
+
+    const eventById = Object.create(null);
+    projectEvents.forEach(function(event) { eventById[String(event.ID)] = event; });
+
+    const history = (AuditRepository.getAll() || []).filter(function(item) {
+      if (String(item.TenantID) !== tenantId) return false;
+      const entityType = String(item.EntityType || '').toUpperCase();
+      const entityId = String(item.EntityID || '');
+      return (entityType === 'PROJECT' && entityId === String(projectId)) ||
+        (entityType === 'EVENT' && !!eventIds[entityId]);
+    }).map(function(item) {
+      const result = Object.assign({}, item);
+      const actor = userById[String(item.UserID || '')];
+      result.UserName = actor
+        ? (actor.FullName || actor.DisplayName ||
+          [actor.FirstName || '', actor.LastName || ''].join(' ').trim() ||
+          actor.Name || actor.Username || actor.ID)
+        : (item.UserID || 'نامشخص');
+
+      const relatedEvent = String(item.EntityType || '').toUpperCase() === 'EVENT'
+        ? eventById[String(item.EntityID || '')]
+        : null;
+      if (relatedEvent) {
+        const type = eventTypeById[String(relatedEvent.EventTypeID || '')];
+        result.RelatedEventTitle = (type
+          ? (type.Name || type.Title || type.Code || 'رویداد')
+          : 'رویداد') + (relatedEvent.DepartmentID ? ' — ' + relatedEvent.DepartmentID : '');
+      } else {
+        result.RelatedEventTitle = '';
+      }
+      return result;
+    }).sort(function(a, b) {
+      const first = new Date(a.CreatedAt || 0).getTime() || 0;
+      const second = new Date(b.CreatedAt || 0).getTime() || 0;
+      return second - first;
+    });
+
+    return Response.success(history);
+  },
+
   list: function(params) {
 
     const user =
