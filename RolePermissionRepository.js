@@ -69,6 +69,13 @@ const RolePermissionService = {
       );
     }
 
+    if (String(permission.Status || '').trim().toUpperCase() !== String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase()) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'نمی‌توان دسترسی غیرفعال را به نقش اختصاص داد.'
+      );
+    }
+
     const existing = RolePermissionRepository.find(
       roleId,
       permissionId
@@ -169,6 +176,14 @@ const RolePermissionService = {
         return;
       }
 
+      if (String(permission.Status || '').trim().toUpperCase() !== String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase()) {
+        invalid.push({
+          permissionId: id,
+          reason: 'دسترسی غیرفعال است و قابل اختصاص نیست.'
+        });
+        return;
+      }
+
       if (existingByPermission[id]) {
         skipped.push({
           permissionId: id,
@@ -240,6 +255,11 @@ const RolePermissionService = {
       );
     }
 
+    PermissionService.assertRetainsSystemManage(user.ID, user, {
+      excludePermissionRoleId: roleId,
+      excludePermissionIds: [permissionId]
+    });
+
     RolePermissionRepository.delete(item.ID);
 
     AuditService.log({
@@ -302,6 +322,13 @@ const RolePermissionService = {
           reason: 'این دسترسی برای نقش ثبت نشده است.'
         });
       }
+    });
+
+    PermissionService.assertRetainsSystemManage(user.ID, user, {
+      excludePermissionRoleId: roleId,
+      excludePermissionIds: toDelete.map(function(item) {
+        return String(item.PermissionID);
+      })
     });
 
     const result = RolePermissionRepository.deleteMany(

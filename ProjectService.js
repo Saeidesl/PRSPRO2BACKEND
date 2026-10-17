@@ -25,6 +25,49 @@ const ProjectService = {
   },
 
 
+  // محدودسازی فهرست پروژه‌ها برای فرم ثبت رویداد؛
+  // این مسیر جایگزین مجوز مشاهده عمومی پروژه‌ها نیست.
+  listAvailableForEvent: function(params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const isAdmin = AccessControlService.isAdmin(user);
+    const departmentId = String(user.DepartmentID || '');
+
+    const projects = ProjectRepository.getAll() || [];
+    const filtered = projects.filter(function(project) {
+      if (String(project.TenantID) !== String(user.TenantID)) {
+        return false;
+      }
+
+      if (isAdmin) return true;
+
+      let availableDepartments = project.AvailableDepartmentIDs || [];
+      if (!Array.isArray(availableDepartments)) {
+        try {
+          availableDepartments = JSON.parse(String(availableDepartments || '[]'));
+        } catch (error) {
+          availableDepartments = [];
+        }
+      }
+      if (!Array.isArray(availableDepartments)) availableDepartments = [];
+
+      return availableDepartments.length === 0 ||
+        availableDepartments.some(function(id) {
+          return String(id) === departmentId;
+        });
+    });
+
+    const lookupItems = filtered.map(function(project) {
+      return {
+        ID: project.ID,
+        ProjectCode: project.ProjectCode || '',
+        Title: project.Title || project.Name || '',
+        Status: project.Status || ''
+      };
+    });
+
+    return Response.success({ items: lookupItems, total: lookupItems.length });
+  },
+
   get: function(id, params) {
 
     Validator.required(

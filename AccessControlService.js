@@ -45,7 +45,14 @@ const AccessControlService = {
   },
 
   isAdmin: function(user) {
-    return this.getDepartmentCode(user) === 'ADMIN';
+    if (!user) return false;
+
+    // Keep the legacy department-based identity during migration. New system
+    // administrators use SYSTEM_MANAGE, expanded by PermissionService without
+    // making every authorization check perform an extra admin lookup.
+    return user.IsAdmin === true ||
+      String(user.IsAdmin).toLowerCase() === 'true' ||
+      this.getDepartmentCode(user) === 'ADMIN';
   },
 
   enforceRouteAccess: function(method, path, params) {

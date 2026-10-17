@@ -13,8 +13,11 @@ const Router = {
       return user;
     }
 
+    const effectivePermissions =
+      AccessControlService.getUserPermissions(user.ID, user);
+
     const allowed = (permissionCodes || []).some(function(code) {
-      return PermissionService.hasPermission(user.ID, code, user);
+      return effectivePermissions.indexOf(String(code)) !== -1;
     });
 
     if (!allowed) {
@@ -39,9 +42,15 @@ const Router = {
       let permissions;
 
       if (AccessControlService.isAdmin(user)) {
-        permissions = PermissionRepository.getAll().map(function(item) {
-          return item.Code;
-        });
+        const activeStatus = String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase();
+        permissions = (PermissionRepository.getAll() || [])
+          .filter(function(item) {
+            return String(item.Status || '').trim().toUpperCase() === activeStatus;
+          })
+          .map(function(item) {
+            return String(item.Code || '');
+          })
+          .filter(Boolean);
       } else {
         permissions = AccessControlService.getUserPermissions(user.ID, user);
       }
@@ -53,17 +62,17 @@ const Router = {
     }
 
     if (path === '/project-statuses') {
-      AccessControlService.require(params, 'PROJECT_STATUS_MANAGE');
+      this.requireAny(params, ['PROJECT_STATUS_VIEW', 'PROJECT_STATUS_MANAGE', 'EVENT_TYPE_MANAGE']);
       return ProjectStatusService.list(params);
     }
 
     if (path === '/departments') {
-      AccessControlService.require(params, 'DEPARTMENT_MANAGE');
+      this.requireAny(params, ['DEPARTMENT_VIEW', 'DEPARTMENT_MANAGE', 'USER_CREATE', 'USER_EDIT', 'EVENT_TYPE_MANAGE', 'WORKFLOW_MANAGE']);
       return DepartmentService.list(params);
     }
 
     if (path.indexOf('/departments/') === 0) {
-      AccessControlService.require(params, 'DEPARTMENT_MANAGE');
+      this.requireAny(params, ['DEPARTMENT_VIEW', 'DEPARTMENT_MANAGE']);
       const departmentId = path.split('/')[2];
 
       if (!departmentId) {
@@ -71,6 +80,11 @@ const Router = {
       }
 
       return DepartmentService.get(departmentId, params);
+    }
+
+    if (path === '/projects/available-for-event') {
+      AccessControlService.require(params, 'EVENT_CREATE');
+      return ProjectService.listAvailableForEvent(params);
     }
 
     if (path === '/projects') {
@@ -105,13 +119,18 @@ const Router = {
       return ProjectService.get(projectId, params);
     }
 
+    if (path === '/workflows/available-for-project') {
+      AccessControlService.require(params, 'PROJECT_CREATE');
+      return WorkflowService.listAvailableForProject(params);
+    }
+
     if (path === '/workflows') {
-      AccessControlService.require(params, 'WORKFLOW_MANAGE');
+      this.requireAny(params, ['WORKFLOW_VIEW', 'WORKFLOW_MANAGE']);
       return WorkflowService.list(params);
     }
 
     if (path.indexOf('/workflows/') === 0) {
-      AccessControlService.require(params, 'WORKFLOW_MANAGE');
+      this.requireAny(params, ['WORKFLOW_VIEW', 'WORKFLOW_MANAGE']);
       const parts = path.split('/');
       const workflowId = parts[2];
 
@@ -131,12 +150,12 @@ const Router = {
     }
 
     if (path === '/event-types') {
-      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
+      this.requireAny(params, ['EVENT_TYPE_VIEW', 'EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
       return EventTypeService.list(params);
     }
 
     if (path.indexOf('/event-types/') === 0) {
-      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
+      this.requireAny(params, ['EVENT_TYPE_VIEW', 'EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
       const parts = path.split('/');
       const eventTypeId = parts[2];
 
@@ -198,6 +217,11 @@ const Router = {
       return AttachmentService.get(attachmentId, params);
     }
 
+    if (path === '/lookup/users-for-event-types') {
+      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+      return UserService.listForEventTypeConfiguration(params);
+    }
+
     if (path === '/users') {
       AccessControlService.require(params, 'USER_VIEW');
       return UserService.list(params);
@@ -216,7 +240,7 @@ const Router = {
     }
 
     if (path === '/roles') {
-      AccessControlService.require(params, 'ROLE_MANAGE');
+      this.requireAny(params, ['ROLE_VIEW', 'ROLE_MANAGE', 'USER_CREATE', 'USER_EDIT']);
       return RoleService.list(params);
     }
 
@@ -224,29 +248,29 @@ const Router = {
       const parts = path.split('/');
 
       if (parts[3] === 'permissions' && parts.length === 4) {
-        AccessControlService.require(params, 'ROLE_MANAGE');
+        this.requireAny(params, ['ROLE_VIEW', 'ROLE_MANAGE']);
         return RolePermissionService.listByRole(parts[2], params);
       }
     }
 
     if (path === '/permissions') {
-      AccessControlService.require(params, 'PERMISSION_MANAGE');
+      this.requireAny(params, ['PERMISSION_VIEW', 'PERMISSION_MANAGE']);
       return PermissionService.list(params);
     }
 
     if (path === '/audit') {
-      AccessControlService.require(params, 'REPORT_VIEW');
+      this.requireAny(params, ['AUDIT_VIEW']);
       return AuditService.list(params);
     }
 
     if (path.indexOf('/audit/entity/') === 0) {
-      AccessControlService.require(params, 'REPORT_VIEW');
+      this.requireAny(params, ['AUDIT_VIEW']);
       const parts = path.split('/');
       return AuditService.listByEntity(parts[3], parts[4], params);
     }
 
     if (path.indexOf('/audit/user/') === 0) {
-      AccessControlService.require(params, 'REPORT_VIEW');
+      this.requireAny(params, ['AUDIT_VIEW']);
       const parts = path.split('/');
       return AuditService.listByUser(parts[3], params);
     }
@@ -460,7 +484,21 @@ const Router = {
     }
 
     if (path.indexOf('/projects/') === 0) {
-      AccessControlService.require(params, 'PROJECT_EDIT');
+      const fields = Object.keys(body).filter(function(key) {
+        return key !== 'Reason';
+      });
+      const hasStatusChange = fields.indexOf('Status') !== -1;
+      const hasOtherChanges = fields.some(function(key) {
+        return key !== 'Status';
+      });
+
+      if (hasOtherChanges || fields.length === 0) {
+        AccessControlService.require(params, 'PROJECT_EDIT');
+      }
+      if (hasStatusChange) {
+        AccessControlService.require(params, 'PROJECT_STATUS_CHANGE');
+      }
+
       return ProjectService.update(path.split('/')[2], body, params);
     }
 
@@ -478,7 +516,7 @@ const Router = {
       const parts = path.split('/');
 
       if (parts[3] === 'void') {
-        AccessControlService.require(params, 'EVENT_EDIT');
+        AccessControlService.require(params, 'EVENT_VOID');
         return EventService.void(parts[2], body.reason, params);
       }
     }

@@ -16,31 +16,10 @@ const EventFieldService = {
         params || {}
       );
 
-    const eventType =
-      EventTypeRepository.findById(
-        eventTypeId
-      );
+    // Reuse the canonical event-type visibility checks so a user with
+    // EVENT_CREATE cannot enumerate fields for an event type they cannot use.
+    EventTypeService.get(eventTypeId, params);
 
-    if (!eventType) {
-
-      throw ErrorHandler.create(
-        Constants.ERROR.INVALID_EVENT_TYPE,
-        'نوع رویداد مورد نظر پیدا نشد.'
-      );
-
-    }
-
-    if (
-      String(eventType.TenantID) !==
-      String(user.TenantID)
-    ) {
-
-      throw ErrorHandler.create(
-        Constants.ERROR.NOT_FOUND,
-        'نوع رویداد مورد نظر پیدا نشد.'
-      );
-
-    }
 
     const fields =
       EventFieldRepository.findByEventTypeId(
