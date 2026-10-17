@@ -279,6 +279,15 @@ const RoleService = {
     }
 
 
+    if (
+      data.Status !== undefined &&
+      String(data.Status).trim().toUpperCase() !== String(Constants.STATUS.ACTIVE).toUpperCase()
+    ) {
+      PermissionService.assertRetainsSystemManage(user.ID, user, {
+        excludeRoleId: id
+      });
+    }
+
     const updateData = {};
 
 
