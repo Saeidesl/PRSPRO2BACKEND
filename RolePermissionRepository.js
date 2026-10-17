@@ -69,6 +69,13 @@ const RolePermissionService = {
       );
     }
 
+    if (String(permission.Status || '').trim().toUpperCase() !== String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase()) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'نمی‌توان دسترسی غیرفعال را به نقش اختصاص داد.'
+      );
+    }
+
     const existing = RolePermissionRepository.find(
       roleId,
       permissionId
@@ -165,6 +172,14 @@ const RolePermissionService = {
         invalid.push({
           permissionId: id,
           reason: 'دسترسی پیدا نشد.'
+        });
+        return;
+      }
+
+      if (String(permission.Status || '').trim().toUpperCase() !== String(Constants.STATUS.ACTIVE || 'ACTIVE').toUpperCase()) {
+        invalid.push({
+          permissionId: id,
+          reason: 'دسترسی غیرفعال است و قابل اختصاص نیست.'
         });
         return;
       }
