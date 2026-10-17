@@ -383,6 +383,7 @@ function seedPermissions_(ss) {
     ['PROJECT_CREATE','ایجاد پروژه','PROJECT','ایجاد پروژه جدید'],
     ['PROJECT_EDIT','ویرایش پروژه','PROJECT','ویرایش اطلاعات پروژه'],
     ['PROJECT_STATUS_CHANGE','تغییر وضعیت پروژه','PROJECT','تغییر وضعیت پروژه'],
+    ['PROJECT_STATUS_VIEW','مشاهده وضعیت‌های پروژه','PROJECT','مشاهده فهرست وضعیت‌های پروژه'],
     ['PROJECT_STATUS_MANAGE', 'مدیریت وضعیت‌های پروژه', 'PROJECT', 'ایجاد و ویرایش وضعیت‌های پروژه'],
     ['EVENT_VIEW','مشاهده رویدادها','EVENT','مشاهده Eventها'],
     ['EVENT_CREATE','ثبت رویداد','EVENT','ثبت Event جدید'],
@@ -407,7 +408,8 @@ function seedPermissions_(ss) {
     ['WORKFLOW_MANAGE','مدیریت گردش‌کارها','WORKFLOW','مدیریت Workflowها'],
     ['REPORT_VIEW','مشاهده گزارش‌ها','REPORT','مشاهده گزارش‌ها'],
     ['AUDIT_VIEW','مشاهده تاریخچه تغییرات','AUDIT','مشاهده Audit Log'],
-    ['SYSTEM_SETTINGS','تنظیمات سیستم','SYSTEM','مدیریت تنظیمات سیستم']
+    ['SYSTEM_SETTINGS','تنظیمات سیستم','SYSTEM','مدیریت تنظیمات سیستم'],
+    ['SYSTEM_MANAGE','مدیریت سامانه','SYSTEM','دسترسی به ابزارهای مدیریتی سامانه']
   ];
 
   const data = sheet.getDataRange().getValues();
