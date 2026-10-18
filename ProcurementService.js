@@ -100,7 +100,8 @@ const ProcurementService = {
       var quantity = self._number_(item.OrderedQuantity, 'مقدار سفارش', false);
       var price = item.UnitPrice === '' || item.UnitPrice === undefined || item.UnitPrice === null
         ? '' : self._number_(item.UnitPrice, 'قیمت واحد', true);
-      var project = self._validateProject_(item.ProjectID, user.TenantID);
+      // A project-level order header is the default for each line unless a line explicitly overrides it.
+      var project = self._validateProject_(item.ProjectID || body.ProjectID, user.TenantID);
       var needId = item.MaterialNeedID || '';
       var need = null;
 
