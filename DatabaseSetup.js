@@ -186,6 +186,7 @@ function setupDatabase() {
     }
 
     createAllSheets_(ss);
+    backfillPurchaseOrderSurplus_(ss);
     applyAllFormatting_(ss);
     applyAllValidations_(ss);
     seedInitialData_(ss);
@@ -285,6 +286,100 @@ function ensureHeaders_(sheet, headers) {
   }
 }
 
+
+
+/**
+ * Backfill surplus fields for historical purchase-order items.
+ * Existing nonblank values are preserved. Only missing surplus values are filled.
+ */
+function backfillPurchaseOrderSurplus_(ss) {
+  const needsSheet = ss.getSheetByName('18_MaterialNeeds');
+  const itemsSheet = ss.getSheetByName('20_PurchaseOrderItems');
+  const allocationsSheet = ss.getSheetByName('21_PurchaseAllocations');
+  if (!needsSheet || !itemsSheet || !allocationsSheet) return;
+
+  const needHeaders = needsSheet.getRange(1, 1, 1, needsSheet.getLastColumn()).getValues()[0];
+  const itemHeaders = itemsSheet.getRange(1, 1, 1, itemsSheet.getLastColumn()).getValues()[0];
+  const allocationHeaders = allocationsSheet.getRange(1, 1, 1, allocationsSheet.getLastColumn()).getValues()[0];
+  const surplusIndex = itemHeaders.indexOf('SurplusQuantity');
+  const surplusCostIndex = itemHeaders.indexOf('SurplusCost');
+  if (surplusIndex < 0 || surplusCostIndex < 0 || itemsSheet.getLastRow() < 2) return;
+
+  function indexOf(headers, name) { return headers.indexOf(name); }
+  function cell(row, headers, name) {
+    const index = indexOf(headers, name);
+    return index < 0 ? '' : row[index];
+  }
+
+  const needRows = needsSheet.getLastRow() > 1
+    ? needsSheet.getRange(2, 1, needsSheet.getLastRow() - 1, needHeaders.length).getValues() : [];
+  const needById = {};
+  needRows.forEach(function(row) {
+    const id = String(cell(row, needHeaders, 'ID') || '');
+    if (id) needById[id] = {
+      requested: Math.max(0, Number(cell(row, needHeaders, 'RequestedQuantity')) || 0)
+    };
+  });
+
+  const allocationRows = allocationsSheet.getLastRow() > 1
+    ? allocationsSheet.getRange(2, 1, allocationsSheet.getLastRow() - 1, allocationHeaders.length).getValues() : [];
+  const allocationsByItem = {};
+  allocationRows.forEach(function(row) {
+    const itemId = String(cell(row, allocationHeaders, 'PurchaseOrderItemID') || '');
+    if (!itemId) return;
+    if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
+    allocationsByItem[itemId].push({
+      needId: String(cell(row, allocationHeaders, 'MaterialNeedID') || ''),
+      quantity: Math.max(0, Number(cell(row, allocationHeaders, 'AllocatedQuantity')) || 0)
+    });
+  });
+
+  const lastRow = itemsSheet.getLastRow();
+  const itemRows = itemsSheet.getRange(2, 1, lastRow - 1, itemHeaders.length).getValues();
+  const indexedRows = itemRows.map(function(row, offset) {
+    return { row: row, sheetRow: offset + 2 };
+  }).sort(function(a, b) {
+    return String(cell(a.row, itemHeaders, 'CreatedAt') || '').localeCompare(
+      String(cell(b.row, itemHeaders, 'CreatedAt') || '')
+    ) || a.sheetRow - b.sheetRow;
+  });
+  const fulfilledByNeed = {};
+
+  indexedRows.forEach(function(entry) {
+    const row = entry.row;
+    const itemId = String(cell(row, itemHeaders, 'ID') || '');
+    const quantity = Math.max(0, Number(cell(row, itemHeaders, 'OrderedQuantity')) || 0);
+    const needId = String(cell(row, itemHeaders, 'MaterialNeedID') || '');
+    const allocations = allocationsByItem[itemId] || [];
+    let allocatedToNeeds = 0;
+
+    if (allocations.length) {
+      allocations.forEach(function(allocation) {
+        if (!allocation.needId || !needById[allocation.needId]) return;
+        const need = needById[allocation.needId];
+        const alreadyFulfilled = Math.max(0, fulfilledByNeed[allocation.needId] || 0);
+        const fulfilled = Math.min(allocation.quantity, Math.max(0, need.requested - alreadyFulfilled));
+        fulfilledByNeed[allocation.needId] = alreadyFulfilled + fulfilled;
+        allocatedToNeeds += fulfilled;
+      });
+    } else if (needId && needById[needId]) {
+      const need = needById[needId];
+      const alreadyFulfilled = Math.max(0, fulfilledByNeed[needId] || 0);
+      allocatedToNeeds = Math.min(quantity, Math.max(0, need.requested - alreadyFulfilled));
+      fulfilledByNeed[needId] = alreadyFulfilled + allocatedToNeeds;
+    }
+
+    // New rows already have explicit values (including zero); preserve them.
+    if (row[surplusIndex] !== '' && row[surplusIndex] !== null && row[surplusIndex] !== undefined) return;
+
+    const surplus = Math.max(0, quantity - allocatedToNeeds);
+    const unitPrice = cell(row, itemHeaders, 'UnitPrice');
+    const surplusCost = unitPrice === '' || unitPrice === null || unitPrice === undefined
+      ? '' : surplus * (Number(unitPrice) || 0);
+    itemsSheet.getRange(entry.sheetRow, surplusIndex + 1).setValue(surplus);
+    itemsSheet.getRange(entry.sheetRow, surplusCostIndex + 1).setValue(surplusCost);
+  });
+}
 
 /**
  * قالب‌بندی شیت‌ها
