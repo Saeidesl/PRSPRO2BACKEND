@@ -372,7 +372,9 @@ function backfillPurchaseOrderSurplus_(ss) {
     // New rows already have explicit values (including zero); preserve them.
     if (row[surplusIndex] !== '' && row[surplusIndex] !== null && row[surplusIndex] !== undefined) return;
 
-    const surplus = Math.max(0, quantity - allocatedToNeeds);
+    const surplus = (allocations.length || needId)
+      ? Math.max(0, quantity - allocatedToNeeds)
+      : 0;
     const unitPrice = cell(row, itemHeaders, 'UnitPrice');
     const surplusCost = unitPrice === '' || unitPrice === null || unitPrice === undefined
       ? '' : surplus * (Number(unitPrice) || 0);
