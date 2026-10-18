@@ -259,6 +259,9 @@ const ProjectService = {
       Title:
         project.Title,
 
+      Quantity:
+        Number(project.Quantity),
+
       Description:
         project.Description ||
         '',
@@ -473,6 +476,10 @@ const ProjectService = {
       updateData.Title =
         data.Title;
 
+    }
+
+    if (data.Quantity !== undefined) {
+      updateData.Quantity = Number(data.Quantity);
     }
 
     if (
