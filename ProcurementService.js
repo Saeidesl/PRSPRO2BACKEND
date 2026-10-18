@@ -436,8 +436,22 @@ const ProcurementService = {
     var orders = ProcurementRepository.getOrders(user.TenantID);
     var items = ProcurementRepository.getItems(user.TenantID);
     var receipts = ProcurementRepository.getReceipts(user.TenantID);
+    var allocations = ProcurementRepository.getAllocations(user.TenantID);
+    var needs = ProcurementRepository.getNeeds(user.TenantID);
+    var allocationsByItem = {};
+    var needsById = {};
     var itemsByOrder = {};
     var receiptsByItem = {};
+
+    allocations.forEach(function(allocation) {
+      var itemId = String(allocation.PurchaseOrderItemID || '');
+      if (!itemId) return;
+      if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
+      allocationsByItem[itemId].push(allocation);
+    });
+    needs.forEach(function(need) {
+      if (need && need.ID) needsById[String(need.ID)] = need;
+    });
 
     items.forEach(function(item) {
       var key = String(item.PurchaseOrderID || '');
@@ -455,12 +469,31 @@ const ProcurementService = {
       var copy = Object.assign({}, order);
       copy.Items = (itemsByOrder[String(order.ID)] || []).map(function(item) {
         var itemCopy = Object.assign({}, item);
+        var linkedAllocations = allocationsByItem[String(item.ID)] || [];
+        var need = needsById[String(item.MaterialNeedID || '')];
+        var projectIds = [];
+        linkedAllocations.forEach(function(allocation) {
+          var projectId = String(allocation.ProjectID || '');
+          if (projectId && projectIds.indexOf(projectId) === -1) projectIds.push(projectId);
+        });
+        if (!projectIds.length && need && need.ProjectID) projectIds.push(String(need.ProjectID));
+        if (!projectIds.length && order.ProjectID) projectIds.push(String(order.ProjectID));
+        itemCopy.ProjectID = projectIds.length === 1 ? projectIds[0] : '';
+        itemCopy.ProjectIDs = projectIds;
         itemCopy.ReceivedQuantity = receiptsByItem[String(item.ID)] || 0;
         itemCopy.RemainingQuantity = Math.max(
           0, (Number(item.OrderedQuantity) || 0) - itemCopy.ReceivedQuantity
         );
         return itemCopy;
       });
+      var orderProjectIds = [];
+      copy.Items.forEach(function(item) {
+        (item.ProjectIDs || []).forEach(function(projectId) {
+          if (projectId && orderProjectIds.indexOf(String(projectId)) === -1) orderProjectIds.push(String(projectId));
+        });
+      });
+      copy.ProjectID = orderProjectIds.length === 1 ? orderProjectIds[0] : (order.ProjectID || '');
+      copy.ProjectIDs = orderProjectIds;
       return copy;
     }));
   },
