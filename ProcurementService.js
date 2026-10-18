@@ -111,8 +111,6 @@ const ProcurementService = {
       if (needId) orderedByNeedBeforeOrder[needId] =
         (orderedByNeedBeforeOrder[needId] || 0) + (Number(item.OrderedQuantity) || 0);
     });
-    var needsById = {};
-    existingNeeds.forEach(function(need) { needsById[String(need.ID)] = need; });
     // Validate and normalize the entire order graph before the first write.
     // Google Sheets cannot atomically commit across multiple sheets.
     var normalized = body.Items.map(function(item) {
@@ -376,8 +374,12 @@ const ProcurementService = {
       var itemId = String(item.ID);
       if ((allocationsByItem[itemId] || []).length) return;
       var needId = String(item.MaterialNeedID || '');
-      if (needId) orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
-        (Number(item.OrderedQuantity) || 0);
+      if (needId) {
+        var legacyOrNewSurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
+          ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
+        orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
+          Math.max(0, (Number(item.OrderedQuantity) || 0) - legacyOrNewSurplus);
+      }
     });
     receipts.forEach(function(receipt) {
       var itemId = String(receipt.PurchaseOrderItemID || '');
@@ -403,7 +405,13 @@ const ProcurementService = {
         });
       } else {
         var needId = String(item.MaterialNeedID || '');
-        if (needId) receivedByNeed[needId] = (receivedByNeed[needId] || 0) + itemReceived;
+        if (needId) {
+          var surplusForUnallocatedItem = item.SurplusQuantity === undefined || item.SurplusQuantity === null
+            ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
+          var quantityForNeed = Math.max(0, (Number(item.OrderedQuantity) || 0) - surplusForUnallocatedItem);
+          receivedByNeed[needId] = (receivedByNeed[needId] || 0) +
+            Math.min(itemReceived, quantityForNeed);
+        }
       }
     });
 
