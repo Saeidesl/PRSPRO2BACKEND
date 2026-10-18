@@ -16,6 +16,10 @@ const ProcurementService = {
     return prefix + '_' + Utilities.getUuid().replace(/-/g, '').substring(0, 12).toLowerCase();
   },
 
+  _itemCode_: function() {
+    return 'MAT-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
+  },
+
   _now_: function() {
     return new Date().toISOString();
   },
@@ -63,7 +67,7 @@ const ProcurementService = {
       ProjectID: body.ProjectID || '',
       SourceEventID: body.SourceEventID || '',
       ItemName: String(body.ItemName).trim(),
-      ItemCode: String(body.ItemCode || '').trim(),
+      ItemCode: this._itemCode_(),
       Unit: String(body.Unit).trim(),
       RequestedQuantity: quantity,
       NeededBy: body.NeededBy || '',
@@ -157,6 +161,7 @@ const ProcurementService = {
 
       return {
         source: item,
+        need: need,
         quantity: quantity,
         price: price,
         project: project,
@@ -191,7 +196,8 @@ const ProcurementService = {
           PurchaseOrderID: order.ID,
           MaterialNeedID: item.MaterialNeedID || '',
           ItemName: String(item.ItemName).trim(),
-          ItemCode: String(item.ItemCode || '').trim(),
+          ItemCode: entry.need && String(entry.need.ItemCode || '').trim()
+            ? String(entry.need.ItemCode).trim() : self._itemCode_(),
           Unit: String(item.Unit).trim(),
           OrderedQuantity: entry.quantity,
           UnitPrice: entry.price,
