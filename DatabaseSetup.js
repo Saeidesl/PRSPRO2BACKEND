@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity']
     },
 
     WORKFLOWS: {
@@ -251,6 +251,24 @@ function ensureHeaders_(sheet, headers) {
 
   if (!hasHeaders) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+
+  const firstBlank = current.findIndex(function(value) {
+    return String(value).trim() === '';
+  });
+  const appendOnly = firstBlank > 0 &&
+    current.slice(firstBlank).every(function(value) {
+      return String(value).trim() === '';
+    }) &&
+    headers.slice(0, firstBlank).every(function(header, index) {
+      return String(current[index]).trim() === header;
+    });
+
+  // Safe schema extension: add only new trailing columns. Never reorder or overwrite existing data.
+  if (appendOnly) {
+    sheet.getRange(1, firstBlank + 1, 1, headers.length - firstBlank)
+      .setValues([headers.slice(firstBlank)]);
     return;
   }
 
