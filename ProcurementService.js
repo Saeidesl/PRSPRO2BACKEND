@@ -90,6 +90,29 @@ const ProcurementService = {
     }
 
     var self = this;
+    var existingNeeds = ProcurementRepository.getNeeds(user.TenantID);
+    var existingItems = ProcurementRepository.getItems(user.TenantID);
+    var existingAllocations = ProcurementRepository.getAllocations(user.TenantID);
+    var orderedByNeedBeforeOrder = {};
+    existingAllocations.forEach(function(allocation) {
+      var needId = String(allocation.MaterialNeedID || '');
+      if (needId) orderedByNeedBeforeOrder[needId] =
+        (orderedByNeedBeforeOrder[needId] || 0) + (Number(allocation.AllocatedQuantity) || 0);
+    });
+    var allocationsByExistingItem = {};
+    existingAllocations.forEach(function(allocation) {
+      var itemId = String(allocation.PurchaseOrderItemID || '');
+      allocationsByExistingItem[itemId] = true;
+    });
+    existingItems.forEach(function(item) {
+      var itemId = String(item.ID || '');
+      if (allocationsByExistingItem[itemId]) return;
+      var needId = String(item.MaterialNeedID || '');
+      if (needId) orderedByNeedBeforeOrder[needId] =
+        (orderedByNeedBeforeOrder[needId] || 0) + (Number(item.OrderedQuantity) || 0);
+    });
+    var needsById = {};
+    existingNeeds.forEach(function(need) { needsById[String(need.ID)] = need; });
     // Validate and normalize the entire order graph before the first write.
     // Google Sheets cannot atomically commit across multiple sheets.
     var normalized = body.Items.map(function(item) {
@@ -113,12 +136,34 @@ const ProcurementService = {
       }
 
       var allocations = Array.isArray(item.Allocations) ? item.Allocations : [];
-      if (!allocations.length && item.ProjectID) {
-        allocations = [{
-          ProjectID: item.ProjectID,
-          MaterialNeedID: needId,
-          AllocatedQuantity: quantity
-        }];
+      var requestedNeedAllocation = 0;
+      var surplusQuantity = 0;
+      if (!allocations.length && project) {
+        if (need) {
+          var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
+          var alreadyAllocated = Math.max(0, orderedByNeedBeforeOrder[String(need.ID)] || 0);
+          var remainingNeed = Math.max(0, requested - alreadyAllocated);
+          requestedNeedAllocation = Math.min(quantity, remainingNeed);
+          surplusQuantity = Math.max(0, quantity - requestedNeedAllocation);
+          if (requestedNeedAllocation > 0) {
+            allocations = [{
+              ProjectID: project.ID,
+              MaterialNeedID: needId,
+              AllocatedQuantity: requestedNeedAllocation
+            }];
+            orderedByNeedBeforeOrder[String(need.ID)] =
+              alreadyAllocated + requestedNeedAllocation;
+          }
+        } else {
+          // A new line on a project order is an unplanned/surplus purchase,
+          // not a modification of the project's saved material needs.
+          surplusQuantity = quantity;
+          allocations = [{
+            ProjectID: project.ID,
+            MaterialNeedID: '',
+            AllocatedQuantity: quantity
+          }];
+        }
       }
 
       var normalizedAllocations = allocations.map(function(allocation) {
@@ -166,7 +211,9 @@ const ProcurementService = {
         quantity: quantity,
         price: price,
         project: project,
-        allocations: normalizedAllocations
+        allocations: normalizedAllocations,
+        surplusQuantity: surplusQuantity,
+        surplusCost: price === '' ? '' : surplusQuantity * price
       };
     });
 
@@ -202,6 +249,8 @@ const ProcurementService = {
           Unit: String(item.Unit).trim(),
           OrderedQuantity: entry.quantity,
           UnitPrice: entry.price,
+          SurplusQuantity: entry.surplusQuantity,
+          SurplusCost: entry.surplusCost,
           Notes: String(item.Notes || ''),
           CreatedAt: now,
           UpdatedAt: now
@@ -343,11 +392,12 @@ const ProcurementService = {
         var allocatedTotal = linkedAllocations.reduce(function(sum, allocation) {
           return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
         }, 0);
+        var receivedForNeeds = Math.min(itemReceived, allocatedTotal);
         linkedAllocations.forEach(function(allocation) {
           var needId = String(allocation.MaterialNeedID || '');
           if (!needId) return;
           var share = allocatedTotal > 0
-            ? itemReceived * (Number(allocation.AllocatedQuantity) || 0) / allocatedTotal
+            ? receivedForNeeds * (Number(allocation.AllocatedQuantity) || 0) / allocatedTotal
             : 0;
           receivedByNeed[needId] = (receivedByNeed[needId] || 0) + share;
         });
@@ -425,12 +475,24 @@ const ProcurementService = {
     var orderedQuantity = 0;
     var receivedQuantity = 0;
     var pendingQuantity = 0;
+    var surplusLineCount = 0;
+    var surplusCost = 0;
+    var surplusQuantityByUnit = {};
     items.forEach(function(item) {
       var ordered = Math.max(0, Number(item.OrderedQuantity) || 0);
       var received = Math.max(0, receivedByItem[String(item.ID)] || 0);
       orderedQuantity += ordered;
       receivedQuantity += Math.min(received, ordered);
       pendingQuantity += Math.max(0, ordered - received);
+      var surplus = Math.max(0, Number(item.SurplusQuantity) || 0);
+      if (surplus > 0) {
+        surplusLineCount++;
+        if (item.UnitPrice !== '' && item.UnitPrice !== undefined && item.UnitPrice !== null) {
+          surplusCost += surplus * (Number(item.UnitPrice) || 0);
+        }
+        var unit = String(item.Unit || 'بدون واحد');
+        surplusQuantityByUnit[unit] = (surplusQuantityByUnit[unit] || 0) + surplus;
+      }
     });
 
     return Response.success({
@@ -444,7 +506,10 @@ const ProcurementService = {
         orderedQuantity: orderedQuantity,
         receivedQuantity: receivedQuantity,
         pendingDeliveryQuantity: pendingQuantity,
-        receiptRecords: receipts.length
+        receiptRecords: receipts.length,
+        surplusLineCount: surplusLineCount,
+        surplusCost: surplusCost,
+        surplusQuantityByUnit: surplusQuantityByUnit
       },
       recentNeeds: needs.slice(-10).reverse(),
       recentOrders: orders.slice(-10).reverse()
