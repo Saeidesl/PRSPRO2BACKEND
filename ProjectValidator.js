@@ -29,6 +29,15 @@ const ProjectValidator = {
       'Title'
     );
 
+    Validator.required(data.Quantity, 'تعداد پروژه');
+    var quantity = Number(data.Quantity);
+    if (!isFinite(quantity) || quantity < 1 || Math.floor(quantity) !== quantity) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'تعداد پروژه باید عدد صحیح بزرگ‌تر از صفر باشد.'
+      );
+    }
+
     if (data.Description !== undefined && data.Description !== null) {
       Validator.string(
         data.Description,
@@ -82,6 +91,16 @@ const ProjectValidator = {
         'Title'
       );
 
+    }
+
+    if (data.Quantity !== undefined && data.Quantity !== null) {
+      var quantity = Number(data.Quantity);
+      if (!isFinite(quantity) || quantity < 1 || Math.floor(quantity) !== quantity) {
+        throw ErrorHandler.create(
+          Constants.ERROR.VALIDATION_ERROR,
+          'تعداد پروژه باید عدد صحیح بزرگ‌تر از صفر باشد.'
+        );
+      }
     }
 
     if (data.Description !== undefined && data.Description !== null) {
