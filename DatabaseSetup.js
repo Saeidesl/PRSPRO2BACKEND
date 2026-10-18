@@ -2,7 +2,7 @@
 /**
  * Production Management System
  * Database Setup - Version 1.1.0
- * ایجاد 17 شیت بدون حذف اطلاعات موجود
+ * ایجاد شیت‌های دیتابیس بدون حذف اطلاعات موجود
  */
 
 const APP_CONFIG = {
@@ -110,6 +110,36 @@ const APP_CONFIG = {
         'CreatedAt',
         'UpdatedAt'
       ]
+    },
+
+    EVENT_TYPE_PROCUREMENT_SETTINGS: {
+      name: '23_EventTypeProcurementSettings',
+      headers: ['ID','TenantID','EventTypeID','Action','FieldMapJSON','Status','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    MATERIAL_NEEDS: {
+      name: '18_MaterialNeeds',
+      headers: ['ID','TenantID','ProjectID','SourceEventID','ItemName','ItemCode','Unit','RequestedQuantity','NeededBy','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    PURCHASE_ORDERS: {
+      name: '19_PurchaseOrders',
+      headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    PURCHASE_ORDER_ITEMS: {
+      name: '20_PurchaseOrderItems',
+      headers: ['ID','TenantID','PurchaseOrderID','MaterialNeedID','ItemName','ItemCode','Unit','OrderedQuantity','UnitPrice','Notes','CreatedAt','UpdatedAt']
+    },
+
+    PURCHASE_ALLOCATIONS: {
+      name: '21_PurchaseAllocations',
+      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','MaterialNeedID','AllocatedQuantity','CreatedAt']
+    },
+
+    MATERIAL_RECEIPTS: {
+      name: '22_MaterialReceipts',
+      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','QuantityReceived','ReceivedAt','WarehouseDepartmentID','SourceEventID','Notes','ReceivedBy','CreatedAt']
     }
   },
 
@@ -162,8 +192,7 @@ function setupDatabase() {
     saveSetupMetadata_(ss);
 
    Logger.log(
-  'راه‌اندازی با موفقیت انجام شد. ' +
-  '۱۷ شیت بررسی و تنظیم شدند.'
+  'راه‌اندازی با موفقیت انجام شد. ساختار شیت‌های تعریف‌شده بررسی و تنظیم شد.'
 );
   } catch (error) {
 
@@ -406,6 +435,8 @@ function seedPermissions_(ss) {
     ['WORKFLOW_VIEW','مشاهده گردش‌کارها','WORKFLOW','مشاهده Workflowها'],
     ['WORKFLOW_MANAGE','مدیریت گردش‌کارها','WORKFLOW','مدیریت Workflowها'],
     ['REPORT_VIEW','مشاهده گزارش‌ها','REPORT','مشاهده گزارش‌ها'],
+    ['PROCUREMENT_VIEW','مشاهده پیگیری تأمین','PROCUREMENT','مشاهده نیازها، سفارش‌ها و رسیدهای ملزومات'],
+    ['PROCUREMENT_MANAGE','مدیریت پیگیری تأمین','PROCUREMENT','ثبت و مدیریت نیازها، سفارش‌های خرید و رسیدهای ملزومات'],
     ['AUDIT_VIEW','مشاهده تاریخچه تغییرات','AUDIT','مشاهده Audit Log'],
     ['SYSTEM_SETTINGS','تنظیمات سیستم','SYSTEM','مدیریت تنظیمات سیستم']
   ];
@@ -514,7 +545,7 @@ function checkDatabaseHealth() {
     );
   } else {
     SpreadsheetApp.getUi().alert(
-      'بررسی سلامت موفق بود.\n\nهر ۱۷ شیت و سرستون‌های آن‌ها صحیح هستند.'
+      'بررسی سلامت موفق بود.\n\nتمام شیت‌های تعریف‌شده و سرستون‌های آن‌ها صحیح هستند.'
     );
   }
 }

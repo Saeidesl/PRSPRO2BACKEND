@@ -157,6 +157,7 @@ const Router = {
       return EventTypeService.list(params);
     }
 
+
     if (path.indexOf('/event-types/') === 0) {
       this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
       const parts = path.split('/');
@@ -168,6 +169,11 @@ const Router = {
 
       if (parts[3] === 'fields') {
         return EventFieldService.listByEventType(eventTypeId, params);
+      }
+
+      if (parts[3] === 'procurement') {
+        AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+        return ProcurementEventIntegrationService.get(eventTypeId, params);
       }
 
       return EventTypeService.get(eventTypeId, params);
@@ -278,6 +284,21 @@ const Router = {
       return ProjectService.dashboardLookups(params);
     }
 
+    if (path === '/procurement/dashboard') {
+      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.dashboard(params);
+    }
+
+    if (path === '/procurement/needs') {
+      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.listNeeds(params);
+    }
+
+    if (path === '/procurement/orders') {
+      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.listOrders(params);
+    }
+
     if (path === '/dashboard') {
       AccessControlService.require(params, 'REPORT_VIEW');
       return ReportService.dashboard(params);
@@ -340,6 +361,21 @@ const Router = {
       );
     }
 
+    if (path === '/procurement/needs') {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.createNeed(body, params);
+    }
+
+    if (path === '/procurement/orders') {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.createOrder(body, params);
+    }
+
+    if (path === '/procurement/receipts') {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.createReceipt(body, params);
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_CREATE');
       return ProjectService.create(body, params);
@@ -372,6 +408,12 @@ const Router = {
     if (path === '/event-types') {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.create(body, params);
+    }
+
+    const eventTypeProcurementMatch = path.match(/^\/event-types\/([^/]+)\/procurement$/);
+    if (eventTypeProcurementMatch) {
+      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+      return ProcurementEventIntegrationService.save(eventTypeProcurementMatch[1], body, params);
     }
 
     if (path.indexOf('/event-types/') === 0) {
@@ -495,7 +537,6 @@ const Router = {
       AccessControlService.require(params, 'WORKFLOW_MANAGE');
       return WorkflowService.update(path.split('/')[2], body, params);
     }
-
     if (path.indexOf('/event-types/') === 0) {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.update(path.split('/')[2], body, params);

@@ -807,6 +807,16 @@ const EventService = {
       PreviousAvailableDepartmentIDs: project ? (project.AvailableDepartmentIDs || '') : ''
     };
 
+    // Reject missing/invalid mapped procurement inputs before writing the event.
+    if (typeof ProcurementEventIntegrationService !== 'undefined') {
+      ProcurementEventIntegrationService.validate(
+        eventType,
+        validatedDynamicData || {},
+        project ? project.ID : '',
+        requestParams
+      );
+    }
+
     const created = EventRepository.insert(newEvent);
 
     if (hasDynamicData) {
@@ -826,6 +836,32 @@ const EventService = {
         OldData: null,
         NewData: createdData,
         Reason: 'ثبت اطلاعات پویای رویداد'
+      });
+    }
+
+    let procurementIntegration = { status: 'NOT_CONFIGURED' };
+    try {
+      procurementIntegration = ProcurementEventIntegrationService.apply(
+        eventType,
+        created,
+        hasDynamicData ? validatedDynamicData : {},
+        requestParams
+      ) || { status: 'NOT_CONFIGURED' };
+    } catch (integrationError) {
+      // The production event is already persisted. Record the integration failure
+      // explicitly so it is not mistaken for a successful procurement update.
+      procurementIntegration = {
+        status: 'FAILED',
+        message: String(integrationError && integrationError.message || integrationError)
+      };
+      AuditService.log({
+        TenantID: user.TenantID,
+        UserID: user.ID,
+        Action: 'PROCUREMENT_INTEGRATION_FAILED',
+        EntityType: 'EVENT',
+        EntityID: created.ID,
+        NewData: procurementIntegration,
+        Reason: 'رویداد ثبت شد اما اتصال تأمین نیازمند بررسی است.'
       });
     }
 
@@ -881,7 +917,8 @@ const EventService = {
         projectStatus: updatedProject ? updatedProject.Status : '',
         availableDepartmentIDs: updatedProject
           ? this._parseArray_(updatedProject.AvailableDepartmentIDs)
-          : []
+          : [],
+        procurementIntegration: procurementIntegration
       },
       {
         message: workflowMoved
