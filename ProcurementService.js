@@ -147,6 +147,9 @@ const ProcurementService = {
         if (!need || String(need.TenantID) !== String(user.TenantID)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با قلم سفارش معتبر نیست.');
         }
+        if (need.ProjectID && (!project || String(need.ProjectID) !== String(project.ID))) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نیاز پروژه‌ای را نمی‌توان در سفارش عمومی یا سفارش پروژه‌ای دیگر ثبت کرد.');
+        }
       }
 
       var allocations = Array.isArray(item.Allocations) ? item.Allocations : [];
