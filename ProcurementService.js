@@ -328,6 +328,7 @@ const ProcurementService = {
       var plannedByItem = {};
       var plannedByItemProject = {};
       var existingReceipts = ProcurementRepository.getReceipts(user.TenantID);
+      var allAllocations = ProcurementRepository.getAllocations(user.TenantID);
       entries.forEach(function(entry) {
         if (!entry || !entry.PurchaseOrderItemID) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'قلم یکی از دریافت‌ها مشخص نشده است.');
@@ -354,7 +355,7 @@ const ProcurementService = {
         if (prior + plannedByItem[key] > ordered) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت‌های انتخاب‌شده از مقدار باقیمانده سفارش «' + String(item.ItemName || '') + '» بیشتر است.');
         }
-        var allocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
+        var allocations = allAllocations.filter(function(allocation) {
           return String(allocation.PurchaseOrderItemID || '') === key;
         });
         if (allocations.length) {
