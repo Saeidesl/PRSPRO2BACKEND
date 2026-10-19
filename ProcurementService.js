@@ -120,8 +120,12 @@ const ProcurementService = {
       var itemId = String(item.ID || '');
       if (allocationsByExistingItem[itemId]) return;
       var needId = String(item.MaterialNeedID || '');
-      if (needId) orderedByNeedBeforeOrder[needId] =
-        (orderedByNeedBeforeOrder[needId] || 0) + (Number(item.OrderedQuantity) || 0);
+      if (needId) {
+        var legacySurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
+          ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
+        orderedByNeedBeforeOrder[needId] = (orderedByNeedBeforeOrder[needId] || 0) +
+          Math.max(0, (Number(item.OrderedQuantity) || 0) - legacySurplus);
+      }
     });
     // Validate and normalize the entire order graph before the first write.
     // Google Sheets cannot atomically commit across multiple sheets.
@@ -510,6 +514,7 @@ const ProcurementService = {
       receiptsByItem[key].quantity += Number(receipt.QuantityReceived) || 0;
       receiptsByItem[key].records.push({
         ID: receipt.ID || '',
+        ProjectID: String(receipt.ProjectID || ''),
         QuantityReceived: Number(receipt.QuantityReceived) || 0,
         ReceivedAt: receipt.ReceivedAt || receipt.CreatedAt || '',
         Notes: receipt.Notes || ''
