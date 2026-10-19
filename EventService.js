@@ -240,7 +240,9 @@ const EventService = {
     });
 
     return Response.success(
-      this._enrichEventsBatch_(filtered, tenantId)
+      this._enrichEventsBatch_(filtered, tenantId).concat(
+        this._procurementTimelineEvents_(projectId, tenantId)
+      )
     );
   },
 
@@ -414,6 +416,119 @@ const EventService = {
   },
 
   // فهرست رویدادهای یک پروژه
+
+  // Build read-only timeline cards from procurement source records. These are projections,
+  // not duplicated event-sheet rows, so retries and historical data cannot create duplicates.
+  _procurementTimelineEvents_: function(projectId, tenantId) {
+    if (typeof ProcurementRepository === 'undefined') return [];
+    const orders = ProcurementRepository.getOrders(tenantId) || [];
+    const items = ProcurementRepository.getItems(tenantId) || [];
+    const allocations = ProcurementRepository.getAllocations(tenantId) || [];
+    const needs = ProcurementRepository.getNeeds(tenantId) || [];
+    const receipts = ProcurementRepository.getReceipts(tenantId) || [];
+    const itemsByOrder = Object.create(null);
+    const allocationsByItem = Object.create(null);
+    const needsById = Object.create(null);
+    const ordersById = Object.create(null);
+
+    orders.forEach(function(order) { ordersById[String(order.ID)] = order; });
+    needs.forEach(function(need) { needsById[String(need.ID)] = need; });
+    items.forEach(function(item) {
+      const key = String(item.PurchaseOrderID || '');
+      if (!itemsByOrder[key]) itemsByOrder[key] = [];
+      itemsByOrder[key].push(item);
+    });
+    allocations.forEach(function(allocation) {
+      const key = String(allocation.PurchaseOrderItemID || '');
+      if (!allocationsByItem[key]) allocationsByItem[key] = [];
+      allocationsByItem[key].push(allocation);
+    });
+
+    const timeline = [];
+    orders.forEach(function(order) {
+      const orderItems = itemsByOrder[String(order.ID)] || [];
+      const projectLines = [];
+      orderItems.forEach(function(item) {
+        const itemAllocations = allocationsByItem[String(item.ID)] || [];
+        const projectAllocations = itemAllocations.filter(function(allocation) {
+          return String(allocation.ProjectID || '') === String(projectId);
+        });
+        if (projectAllocations.length) {
+          const allocatedQuantity = projectAllocations.reduce(function(sum, allocation) {
+            return sum + (Number(allocation.AllocatedQuantity) || 0);
+          }, 0);
+          projectLines.push(String(item.ItemName || 'قلم سفارش') + ': ' + allocatedQuantity + ' ' + String(item.Unit || ''));
+          return;
+        }
+        if (itemAllocations.length) return;
+        const need = needsById[String(item.MaterialNeedID || '')];
+        const itemProjectId = item.ProjectID || (need && need.ProjectID) || order.ProjectID || '';
+        if (String(itemProjectId) === String(projectId)) {
+          projectLines.push(String(item.ItemName || 'قلم سفارش') + ': ' +
+            (Number(item.OrderedQuantity) || 0) + ' ' + String(item.Unit || ''));
+        }
+      });
+      if (!projectLines.length) return;
+      const descriptionParts = [];
+      descriptionParts.push('شماره سفارش: ' + String(order.OrderNumber || order.Code || order.ID || '-'));
+      if (order.SupplierName) descriptionParts.push('تأمین‌کننده: ' + String(order.SupplierName));
+      descriptionParts.push('اقلام مربوط به این پروژه: ' + projectLines.join('؛ '));
+      if (order.Notes) descriptionParts.push('توضیحات: ' + String(order.Notes));
+      timeline.push({
+        ID: 'PROC-ORDER-' + String(order.ID) + '-' + String(projectId),
+        IsProcurementTimeline: true,
+        ProcurementRecordType: 'PURCHASE_ORDER',
+        ProjectID: String(projectId),
+        EventTypeName: 'ثبت سفارش خرید',
+        EventTypeCode: 'PROCUREMENT_ORDER',
+        Status: 'SUBMITTED',
+        Description: descriptionParts.join(' | '),
+        OccurredAt: order.CreatedAt || order.OrderDate || order.UpdatedAt || '',
+        CreatedAt: order.CreatedAt || order.OrderDate || '',
+        CreatedBy: order.CreatedBy || '',
+        CreatedByName: '',
+        PerformedBy: order.CreatedBy || '',
+        PerformedByName: '',
+        DepartmentName: 'تدارکات',
+        ProcurementRecordID: String(order.ID)
+      });
+    });
+
+    receipts.forEach(function(receipt) {
+      if (String(receipt.ProjectID || '') !== String(projectId)) return;
+      const item = items.find(function(candidate) {
+        return String(candidate.ID) === String(receipt.PurchaseOrderItemID);
+      });
+      if (!item) return;
+      const order = ordersById[String(item.PurchaseOrderID || '')] || {};
+      const descriptionParts = [];
+      descriptionParts.push('شماره سفارش: ' + String(order.OrderNumber || order.Code || order.ID || '-'));
+      descriptionParts.push('قلم دریافت‌شده: ' + String(item.ItemName || 'قلم سفارش') + '، مقدار: ' +
+        (Number(receipt.QuantityReceived) || 0) + ' ' + String(item.Unit || ''));
+      if (receipt.Notes) descriptionParts.push('توضیحات دریافت: ' + String(receipt.Notes));
+      timeline.push({
+        ID: 'PROC-RECEIPT-' + String(receipt.ID),
+        IsProcurementTimeline: true,
+        ProcurementRecordType: 'MATERIAL_RECEIPT',
+        ProjectID: String(projectId),
+        EventTypeName: 'دریافت کالا در انبار',
+        EventTypeCode: 'WAREHOUSE_RECEIPT',
+        Status: 'SUBMITTED',
+        Description: descriptionParts.join(' | '),
+        OccurredAt: receipt.ReceivedAt || receipt.CreatedAt || '',
+        CreatedAt: receipt.CreatedAt || receipt.ReceivedAt || '',
+        CreatedBy: receipt.ReceivedBy || '',
+        CreatedByName: '',
+        PerformedBy: receipt.ReceivedBy || '',
+        PerformedByName: '',
+        DepartmentName: 'انبار',
+        ProcurementRecordID: String(receipt.ID)
+      });
+    });
+
+    return timeline;
+  },
+
   listByProject: function(projectId, params) {
     Validator.required(projectId, 'ProjectID');
 
@@ -467,6 +582,7 @@ const EventService = {
       const status = String(event.Status || '').toUpperCase();
       return String(event.TenantID) === tenantId && status !== 'VOID' && status !== 'CANCELLED';
     });
+    Array.prototype.push.apply(events, this._procurementTimelineEvents_(projectId, tenantId));
 
     function eventTime(event) {
       const value = event.OccurredAt || event.CreatedAt || '';
@@ -483,11 +599,18 @@ const EventService = {
     const total = events.length;
     const start = (pageNumber - 1) * pageSize;
     const pageEvents = events.slice(start, start + pageSize);
-    const enrichedEvents = this._enrichEventsBatch_(pageEvents, tenantId);
+    const actualPageEvents = pageEvents.filter(function(event) { return !event.IsProcurementTimeline; });
+    const enrichedActualEvents = this._enrichEventsBatch_(actualPageEvents, tenantId);
+    const enrichedById = Object.create(null);
+    enrichedActualEvents.forEach(function(event) { enrichedById[String(event.ID)] = event; });
+    const enrichedEvents = pageEvents.map(function(event) {
+      return event.IsProcurementTimeline ? event : (enrichedById[String(event.ID)] || event);
+    });
     const eventIds = Object.create(null);
     const eventTypeIds = Object.create(null);
 
     pageEvents.forEach(function(event) {
+      if (event.IsProcurementTimeline) return;
       eventIds[String(event.ID)] = true;
       eventTypeIds[String(event.EventTypeID)] = true;
     });
@@ -562,11 +685,19 @@ const EventService = {
     const events = (EventRepository.findByProjectId(projectId) || []).filter(function(event) {
       return String(event.TenantID) === tenantId;
     });
-    const enrichedEvents = this._enrichEventsBatch_(events, tenantId);
+    Array.prototype.push.apply(events, this._procurementTimelineEvents_(projectId, tenantId));
+    const actualEvents = events.filter(function(event) { return !event.IsProcurementTimeline; });
+    const enrichedActualEvents = this._enrichEventsBatch_(actualEvents, tenantId);
+    const enrichedById = Object.create(null);
+    enrichedActualEvents.forEach(function(event) { enrichedById[String(event.ID)] = event; });
+    const enrichedEvents = events.map(function(event) {
+      return event.IsProcurementTimeline ? event : (enrichedById[String(event.ID)] || event);
+    });
     const eventIds = Object.create(null);
     const eventTypeIds = Object.create(null);
 
     events.forEach(function(event) {
+      if (event.IsProcurementTimeline) return;
       eventIds[String(event.ID)] = true;
       eventTypeIds[String(event.EventTypeID)] = true;
     });
