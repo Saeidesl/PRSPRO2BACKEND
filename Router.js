@@ -371,6 +371,11 @@ const Router = {
       return ProcurementService.createOrder(body, params);
     }
 
+    if (path === '/procurement/receipts/batch') {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.createReceiptsBatch(body, params);
+    }
+
     if (path === '/procurement/receipts') {
       AccessControlService.require(params, 'PROCUREMENT_MANAGE');
       return ProcurementService.createReceipt(body, params);
