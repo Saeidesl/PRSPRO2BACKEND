@@ -83,6 +83,18 @@ const ProcurementService = {
   },
 
   createOrder: function(body, params) {
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت سفارش دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
+    }
+    try {
+      return this._createOrderUnlocked_(body, params);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  _createOrderUnlocked_: function(body, params) {
     body = body || {};
     var user = this._user_(params);
     if (!Array.isArray(body.Items) || !body.Items.length) {
@@ -108,8 +120,12 @@ const ProcurementService = {
       var itemId = String(item.ID || '');
       if (allocationsByExistingItem[itemId]) return;
       var needId = String(item.MaterialNeedID || '');
-      if (needId) orderedByNeedBeforeOrder[needId] =
-        (orderedByNeedBeforeOrder[needId] || 0) + (Number(item.OrderedQuantity) || 0);
+      if (needId) {
+        var legacySurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
+          ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
+        orderedByNeedBeforeOrder[needId] = (orderedByNeedBeforeOrder[needId] || 0) +
+          Math.max(0, (Number(item.OrderedQuantity) || 0) - legacySurplus);
+      }
     });
     // Validate and normalize the entire order graph before the first write.
     // Google Sheets cannot atomically commit across multiple sheets.
@@ -130,6 +146,9 @@ const ProcurementService = {
         need = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.NEEDS, needId);
         if (!need || String(need.TenantID) !== String(user.TenantID)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با قلم سفارش معتبر نیست.');
+        }
+        if (need.ProjectID && (!project || String(need.ProjectID) !== String(project.ID))) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نیاز پروژه‌ای را نمی‌توان در سفارش عمومی یا سفارش پروژه‌ای دیگر ثبت کرد.');
         }
       }
 
@@ -297,7 +316,38 @@ const ProcurementService = {
     var projectId = body.ProjectID || '';
     this._validateProject_(projectId, user.TenantID);
 
-    var prior = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) {
+    var itemAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
+      return String(allocation.PurchaseOrderItemID || '') === String(item.ID);
+    });
+    if (itemAllocations.length) {
+      if (!projectId) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای دریافت این قلم باید پروژه تخصیص‌یافته انتخاب شود.');
+      }
+      var allocatedToProject = itemAllocations.filter(function(allocation) {
+        return String(allocation.ProjectID || '') === String(projectId);
+      }).reduce(function(sum, allocation) {
+        return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
+      }, 0);
+      if (allocatedToProject <= 0) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این قلم سفارش به پروژه انتخاب‌شده تخصیص نیافته است.');
+      }
+      var projectReceived = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) {
+        return String(receipt.PurchaseOrderItemID) === String(item.ID) && String(receipt.ProjectID || '') === String(projectId);
+      }).reduce(function(sum, receipt) {
+        return sum + (Number(receipt.QuantityReceived) || 0);
+      }, 0);
+      if (projectReceived + quantity > allocatedToProject) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار دریافت از سهم تخصیص‌یافته این پروژه بیشتر است.');
+      }
+    } else {
+      var expectedProjectId = item.ProjectID || order.ProjectID || '';
+      if (expectedProjectId && String(projectId) !== String(expectedProjectId)) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه دریافت با پروژه مرتبط با قلم سفارش مطابقت ندارد.');
+      }
+    }
+
+    var allPriorReceipts = ProcurementRepository.getReceipts(user.TenantID);
+    var prior = allPriorReceipts.filter(function(receipt) {
       return String(receipt.PurchaseOrderItemID) === String(item.ID);
     }).reduce(function(sum, receipt) {
       return sum + (Number(receipt.QuantityReceived) || 0);
@@ -339,8 +389,10 @@ const ProcurementService = {
       }, 0);
     });
     var updated = Object.assign({}, order);
-    updated.Status = allReceived >= allOrdered ? 'RECEIVED' :
-      (allReceived > 0 ? 'PARTIALLY_RECEIVED' : 'ACTIVE');
+    if (String(order.Status || '').toUpperCase() !== 'NEEDS_REVIEW') {
+      updated.Status = allReceived >= allOrdered ? 'RECEIVED' :
+        (allReceived > 0 ? 'PARTIALLY_RECEIVED' : 'ACTIVE');
+    }
     updated.UpdatedAt = now;
     GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'MATERIAL_RECEIPT',EntityID:receipt.ID,NewData:receipt});
@@ -465,6 +517,7 @@ const ProcurementService = {
       receiptsByItem[key].quantity += Number(receipt.QuantityReceived) || 0;
       receiptsByItem[key].records.push({
         ID: receipt.ID || '',
+        ProjectID: String(receipt.ProjectID || ''),
         QuantityReceived: Number(receipt.QuantityReceived) || 0,
         ReceivedAt: receipt.ReceivedAt || receipt.CreatedAt || '',
         Notes: receipt.Notes || ''
@@ -493,6 +546,13 @@ const ProcurementService = {
         if (!projectIds.length && order.ProjectID) projectIds.push(String(order.ProjectID));
         itemCopy.ProjectID = projectIds.length === 1 ? projectIds[0] : '';
         itemCopy.ProjectIDs = projectIds;
+        itemCopy.Allocations = linkedAllocations.map(function(allocation) {
+          return {
+            ProjectID: String(allocation.ProjectID || ''),
+            MaterialNeedID: String(allocation.MaterialNeedID || ''),
+            AllocatedQuantity: Number(allocation.AllocatedQuantity) || 0
+          };
+        });
         var itemReceipts = receiptsByItem[String(item.ID)] || { quantity: 0, records: [] };
         itemCopy.ReceivedQuantity = itemReceipts.quantity || 0;
         itemCopy.Receipts = itemReceipts.records || [];
