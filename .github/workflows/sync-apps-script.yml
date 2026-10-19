@@ -1,0 +1,54 @@
+name: Sync backend to Google Apps Script
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.js'
+      - 'appsscript.json'
+      - '.github/workflows/sync-apps-script.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install --global @google/clasp
+
+      - name: Configure clasp credentials
+        env:
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+        run: |
+          test -n "$CLASP_CREDENTIALS" || (echo "Missing CLASP_CREDENTIALS secret" && exit 1)
+          printf '%s' "$CLASP_CREDENTIALS" > "$HOME/.clasprc.json"
+
+      - name: Prepare Apps Script source files
+        env:
+          SCRIPT_ID: ${{ secrets.APPS_SCRIPT_ID }}
+        run: |
+          test -n "$SCRIPT_ID" || (echo "Missing APPS_SCRIPT_ID secret" && exit 1)
+          mkdir -p deploy
+          cp appsscript.json deploy/appsscript.json
+          for file in *.js; do
+            [ -f "$file" ] || continue
+            name="${file%.js}"
+            name="${name%.gs}"
+            cp "$file" "deploy/$name.gs"
+          done
+          printf '{"scriptId":"%s","rootDir":"deploy"}\n' "$SCRIPT_ID" > .clasp.json
+
+      - name: Push source to Apps Script
+        run: clasp push --force
