@@ -461,8 +461,21 @@ const ProcurementService = {
     receipts.forEach(function(receipt) {
       var key = String(receipt.PurchaseOrderItemID || '');
       if (!key) return;
-      receiptsByItem[key] = (receiptsByItem[key] || 0) +
-        (Number(receipt.QuantityReceived) || 0);
+      receiptsByItem[key] = receiptsByItem[key] || { quantity: 0, records: [] };
+      receiptsByItem[key].quantity += Number(receipt.QuantityReceived) || 0;
+      receiptsByItem[key].records.push({
+        ID: receipt.ID || '',
+        QuantityReceived: Number(receipt.QuantityReceived) || 0,
+        ReceivedAt: receipt.ReceivedAt || receipt.CreatedAt || '',
+        Notes: receipt.Notes || ''
+      });
+    });
+    Object.keys(receiptsByItem).forEach(function(key) {
+      receiptsByItem[key].records.sort(function(a, b) {
+        var aTime = new Date(a.ReceivedAt || 0).getTime() || 0;
+        var bTime = new Date(b.ReceivedAt || 0).getTime() || 0;
+        return aTime - bTime;
+      });
     });
 
     return Response.success(orders.map(function(order) {
@@ -480,7 +493,9 @@ const ProcurementService = {
         if (!projectIds.length && order.ProjectID) projectIds.push(String(order.ProjectID));
         itemCopy.ProjectID = projectIds.length === 1 ? projectIds[0] : '';
         itemCopy.ProjectIDs = projectIds;
-        itemCopy.ReceivedQuantity = receiptsByItem[String(item.ID)] || 0;
+        var itemReceipts = receiptsByItem[String(item.ID)] || { quantity: 0, records: [] };
+        itemCopy.ReceivedQuantity = itemReceipts.quantity || 0;
+        itemCopy.Receipts = itemReceipts.records || [];
         itemCopy.RemainingQuantity = Math.max(
           0, (Number(item.OrderedQuantity) || 0) - itemCopy.ReceivedQuantity
         );
