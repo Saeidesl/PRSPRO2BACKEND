@@ -301,6 +301,100 @@ const ProcurementService = {
   },
 
   createReceipt: function(body, params) {
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت دریافت دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
+    }
+    try {
+      return this._createReceiptUnlocked_(body, params);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  createReceiptsBatch: function(body, params) {
+    body = body || {};
+    var entries = body.Receipts;
+    if (!Array.isArray(entries) || !entries.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای ثبت دریافت، حداقل یک قلم لازم است.');
+    }
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت دریافت دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
+    }
+    try {
+      var user = this._user_(params);
+      var itemsById = {};
+      var plannedByItem = {};
+      var plannedByItemProject = {};
+      var existingReceipts = ProcurementRepository.getReceipts(user.TenantID);
+      var allAllocations = ProcurementRepository.getAllocations(user.TenantID);
+      entries.forEach(function(entry) {
+        if (!entry || !entry.PurchaseOrderItemID) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'قلم یکی از دریافت‌ها مشخص نشده است.');
+        }
+        var quantity = this._number_(entry.QuantityReceived, 'مقدار تحویل', false);
+        var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, entry.PurchaseOrderItemID);
+        if (!item || String(item.TenantID) !== String(user.TenantID)) {
+          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
+        }
+        var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
+        if (!order || String(order.TenantID) !== String(user.TenantID) || String(order.Status).toUpperCase() === 'CANCELLED') {
+          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
+        }
+        var projectId = entry.ProjectID || '';
+        this._validateProject_(projectId, user.TenantID);
+        this._validateEvent_(entry.SourceEventID || '', user.TenantID);
+        var key = String(item.ID);
+        var projectKey = key + '|' + String(projectId);
+        var prior = existingReceipts.filter(function(receipt) {
+          return String(receipt.PurchaseOrderItemID) === key;
+        }).reduce(function(sum, receipt) { return sum + (Number(receipt.QuantityReceived) || 0); }, 0);
+        var ordered = Math.max(0, Number(item.OrderedQuantity) || 0);
+        plannedByItem[key] = (plannedByItem[key] || 0) + quantity;
+        if (prior + plannedByItem[key] > ordered) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت‌های انتخاب‌شده از مقدار باقیمانده سفارش «' + String(item.ItemName || '') + '» بیشتر است.');
+        }
+        var allocations = allAllocations.filter(function(allocation) {
+          return String(allocation.PurchaseOrderItemID || '') === key;
+        });
+        if (allocations.length) {
+          if (!projectId) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای دریافت این قلم باید پروژه تخصیص‌یافته انتخاب شود.');
+          }
+          var allocated = allocations.filter(function(allocation) {
+            return String(allocation.ProjectID || '') === String(projectId);
+          }).reduce(function(sum, allocation) { return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0); }, 0);
+          if (allocated <= 0) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این قلم سفارش به پروژه انتخاب‌شده تخصیص نیافته است.');
+          }
+          var receivedForProject = existingReceipts.filter(function(receipt) {
+            return String(receipt.PurchaseOrderItemID) === key && String(receipt.ProjectID || '') === String(projectId);
+          }).reduce(function(sum, receipt) { return sum + (Number(receipt.QuantityReceived) || 0); }, 0);
+          plannedByItemProject[projectKey] = (plannedByItemProject[projectKey] || 0) + quantity;
+          if (receivedForProject + plannedByItemProject[projectKey] > allocated) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت از سهم تخصیص‌یافته پروژه برای قلم «' + String(item.ItemName || '') + '» بیشتر است.');
+          }
+        } else {
+          var expectedProjectId = item.ProjectID || order.ProjectID || '';
+          if (expectedProjectId && String(projectId) !== String(expectedProjectId)) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه دریافت با پروژه مرتبط با قلم سفارش مطابقت ندارد.');
+          }
+        }
+        itemsById[key] = item;
+      }, this);
+
+      var created = [];
+      entries.forEach(function(entry) {
+        created.push(this._createReceiptUnlocked_(entry, params).data);
+      }, this);
+      return Response.success(created);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  _createReceiptUnlocked_: function(body, params) {
     body = body || {};
     var user = this._user_(params);
     Validator.required(body.PurchaseOrderItemID, 'قلم سفارش');
