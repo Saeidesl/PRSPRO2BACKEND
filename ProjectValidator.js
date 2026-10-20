@@ -95,7 +95,7 @@ const ProjectValidator = {
 
     }
 
-    if (data.Quantity !== undefined && data.Quantity !== null) {
+    if (data.Quantity !== undefined && data.Quantity !== null && String(data.Quantity).trim() !== '') {
       var quantity = Number(data.Quantity);
       if (!isFinite(quantity) || quantity < 1 || Math.floor(quantity) !== quantity) {
         throw ErrorHandler.create(
