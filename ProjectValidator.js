@@ -40,6 +40,14 @@ const ProjectValidator = {
       }
     }
 
+    if (data.ColorSizeJSON !== undefined && data.ColorSizeJSON !== null &&
+        String(data.ColorSizeJSON).length > 20000) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'اطلاعات رنگ‌بندی و سایزبندی بیش از حد مجاز است.'
+      );
+    }
+
     if (data.Description !== undefined && data.Description !== null) {
       Validator.string(
         data.Description,
