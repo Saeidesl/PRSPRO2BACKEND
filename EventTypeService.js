@@ -42,6 +42,9 @@ const EventTypeService = {
 
     result.AllowVoid =
       this._toBoolean_(result.AllowVoid);
+    result.UseProjectColors = this._toBoolean_(result.UseProjectColors);
+    result.UseProjectSizes = this._toBoolean_(result.UseProjectSizes);
+    result.TrackVariantQuantity = this._toBoolean_(result.TrackVariantQuantity);
 
     return result;
   },
@@ -61,7 +64,10 @@ const EventTypeService = {
     [
       'MovesProjectToStep',
       'AllowAttachments',
-      'AllowVoid'
+      'AllowVoid',
+      'UseProjectColors',
+      'UseProjectSizes',
+      'TrackVariantQuantity'
     ].forEach(function(field) {
       if (result[field] !== undefined) {
         result[field] = self._toBoolean_(result[field]);
@@ -406,6 +412,9 @@ const EventTypeService = {
         data.AvailableDepartmentIDs
       ),
       AllowVoid: this._toBoolean_(data.AllowVoid),
+      UseProjectColors: this._toBoolean_(data.UseProjectColors),
+      UseProjectSizes: this._toBoolean_(data.UseProjectSizes),
+      TrackVariantQuantity: this._toBoolean_(data.TrackVariantQuantity),
       Status: data.Status || Constants.STATUS.ACTIVE,
       CreatedAt: now,
       UpdatedAt: now
