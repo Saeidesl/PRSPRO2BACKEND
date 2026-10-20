@@ -375,6 +375,27 @@ const ProjectService = {
 
     }
 
+    // کد پروژه و گردش‌کار پس از ایجاد هویت ثابت پروژه هستند.
+    if (
+      data.ProjectCode !== undefined &&
+      String(data.ProjectCode).trim() !== String(existing.ProjectCode || '').trim()
+    ) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'کد پروژه پس از ایجاد قابل تغییر نیست.'
+      );
+    }
+
+    if (
+      data.WorkflowID !== undefined &&
+      String(data.WorkflowID || '').trim() !== String(existing.WorkflowID || '').trim()
+    ) {
+      throw ErrorHandler.create(
+        Constants.ERROR.INVALID_WORKFLOW,
+        'گردش‌کار پروژه پس از ایجاد قابل تغییر نیست.'
+      );
+    }
+
     const updateData = {};
 
     if (data.WorkflowID !== undefined) {
