@@ -239,63 +239,59 @@ function createAllSheets_(ss) {
  * مغایرت‌های غیر افزایشی متوقف می‌شوند تا از جابه‌جایی یا حذف اطلاعات جلوگیری شود.
  */
 function ensureHeaders_(sheet, headers) {
+  // Header rows must accept column names even if an older setup applied data validation there.
+  const existingLastColumn = Math.max(sheet.getLastColumn(), headers.length, 1);
+  sheet.getRange(1, 1, 1, existingLastColumn).clearDataValidations();
 
-  // قدیمی‌ترین نسخه‌ها اعتبارسنجی ستون‌ها را اشتباهاً روی ردیف عنوان هم اعمال کرده‌اند.
-  // ردیف عنوان باید نام ستون را بپذیرد؛ اعتبارسنجی داده‌ها دوباره در applyAllValidations_ تنظیم می‌شود.
-  sheet.getRange(1, 1, 1, Math.max(headers.length, sheet.getLastColumn(), 1))
-    .clearDataValidations();
-
-  if (sheet.getMaxColumns() < headers.length) {
-    sheet.insertColumnsAfter(
-      sheet.getMaxColumns(),
-      headers.length - sheet.getMaxColumns()
-    );
-  }
-
-  const current = sheet
-    .getRange(1, 1, 1, headers.length)
-    .getValues()[0];
-
-  const hasHeaders = current.some(function(value) {
-    return String(value).trim() !== '';
-  });
+  const currentLastColumn = sheet.getLastColumn();
+  const current = currentLastColumn > 0
+    ? sheet.getRange(1, 1, 1, currentLastColumn).getDisplayValues()[0]
+        .map(function(value) { return String(value).trim(); })
+    : [];
+  const hasHeaders = current.some(function(value) { return value !== ''; });
 
   if (!hasHeaders) {
+    if (sheet.getMaxColumns() < headers.length) {
+      sheet.insertColumnsAfter(
+        sheet.getMaxColumns(),
+        headers.length - sheet.getMaxColumns()
+      );
+    }
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     return;
   }
 
-  const firstBlank = current.findIndex(function(value) {
-    return String(value).trim() === '';
-  });
-  const appendOnly = firstBlank > 0 &&
-    current.slice(firstBlank).every(function(value) {
-      return String(value).trim() === '';
-    }) &&
-    headers.slice(0, firstBlank).every(function(header, index) {
-      return String(current[index]).trim() === header;
-    });
-
-  // Safe schema extension: add only new trailing columns. Never reorder or overwrite existing data.
-  if (appendOnly) {
-    sheet.getRange(1, firstBlank + 1, 1, headers.length - firstBlank)
-      .setValues([headers.slice(firstBlank)]);
-    return;
-  }
-
-  const mismatch = headers.some(function(header, index) {
-    return String(current[index]).trim() !== header;
+  // Existing installations may have appended newer columns in a different order.
+  // The repository maps records by header name, so preserve every existing column and
+  // append only missing required headers. Never reorder, overwrite, or delete user data.
+  const seen = Object.create(null);
+  current.forEach(function(header) {
+    if (!header) return;
+    if (seen[header]) {
+      throw new Error(
+        'شیت "' + sheet.getName() + '" دارای سرستون تکراری "' + header +
+        '" است. برای جلوگیری از آسیب به اطلاعات، عملیات متوقف شد.'
+      );
+    }
+    seen[header] = true;
   });
 
-  if (mismatch) {
-    throw new Error(
-      'سرستون‌های شیت "' + sheet.getName() +
-      '" با ساختار مورد انتظار مطابقت ندارند. ' +
-      'برای محافظت از اطلاعات، عملیات متوقف شد.'
-    );
+  const missing = headers.filter(function(header) {
+    return current.indexOf(header) === -1;
+  });
+
+  if (missing.length) {
+    const startColumn = Math.max(sheet.getLastColumn(), 0) + 1;
+    const requiredLastColumn = startColumn + missing.length - 1;
+    if (sheet.getMaxColumns() < requiredLastColumn) {
+      sheet.insertColumnsAfter(
+        sheet.getMaxColumns(),
+        requiredLastColumn - sheet.getMaxColumns()
+      );
+    }
+    sheet.getRange(1, startColumn, 1, missing.length).setValues([missing]);
   }
 }
-
 
 
 /**
