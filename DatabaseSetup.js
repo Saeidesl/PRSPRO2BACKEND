@@ -405,11 +405,37 @@ function repairAdminAccess() {
     });
     if (!adminDept) throw new Error('واحد فعال ADMIN پیدا نشد. ابتدا bootstrapAdminAccess را اجرا کن.');
 
-    const adminUser = read(usersSheet, 9).find(function(r) {
-      return String(r[1]) === tenantId && String(r[5]) === String(adminDept[0])
-        && String(r[6] || '').toUpperCase() === 'ACTIVE';
+    const allUserRows = read(usersSheet, 9);
+    let adminUser = allUserRows.find(function(r) {
+      return String(r[1]) === tenantId &&
+        String(r[3] || '').trim().toLowerCase() === 'admin' &&
+        String(r[6] || '').toUpperCase() === 'ACTIVE';
     });
-    if (!adminUser) throw new Error('کاربر فعال متصل به واحد ADMIN پیدا نشد.');
+
+    if (adminUser && String(adminUser[5]) !== String(adminDept[0])) {
+      const userHeaders = usersSheet.getRange(1, 1, 1, usersSheet.getLastColumn()).getValues()[0];
+      const departmentColumn = userHeaders.indexOf('DepartmentID') + 1;
+      const userRowIndex = allUserRows.findIndex(function(r) {
+        return String(r[0]) === String(adminUser[0]);
+      }) + 2;
+      if (departmentColumn < 1 || userRowIndex < 2) {
+        throw new Error('ستون DepartmentID یا ردیف حساب admin پیدا نشد.');
+      }
+      usersSheet.getRange(userRowIndex, departmentColumn).setValue(String(adminDept[0]));
+      adminUser[5] = String(adminDept[0]);
+      Logger.log('واحد حساب admin به ADMIN اصلاح شد.');
+    }
+
+    if (!adminUser) {
+      adminUser = allUserRows.find(function(r) {
+        return String(r[1]) === tenantId &&
+          String(r[5]) === String(adminDept[0]) &&
+          String(r[6] || '').toUpperCase() === 'ACTIVE';
+      });
+    }
+    if (!adminUser) {
+      throw new Error('کاربر فعال admin در شرکت انتخاب‌شده پیدا نشد. بررسی کن ردیف کاربر admin در شیت 02_Users فعال باشد و TenantID آن با شرکت فعال مطابقت داشته باشد.');
+    }
 
     const now = nowISO_();
     const roles = read(rolesSheet, 7);
