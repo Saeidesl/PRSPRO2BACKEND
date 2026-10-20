@@ -264,6 +264,108 @@ function resetDatabaseSheets() {
 }
 
 
+/**
+ * ایجاد دسترسی اولیه مدیر سیستم پس از بازسازی دیتابیس.
+ * بدون رابط کاربری هم از ویرایشگر Apps Script قابل اجراست.
+ * رمز عبور تصادفی تولید می‌شود و فقط در Execution log نمایش داده می‌شود.
+ * اجرای مجدد، در صورت وجود حساب فعال ADMIN، حساب جدید نمی‌سازد.
+ */
+function bootstrapAdminAccess() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      throw new Error('Spreadsheet پیدا نشد. این تابع را از پروژه Apps Script متصل به فایل دیتابیس اجرا کن.');
+    }
+
+    const tenantSheet = ss.getSheetByName(APP_CONFIG.SHEETS.TENANTS.name);
+    const departmentSheet = ss.getSheetByName(APP_CONFIG.SHEETS.DEPARTMENTS.name);
+    const userSheet = ss.getSheetByName(APP_CONFIG.SHEETS.USERS.name);
+    if (!tenantSheet || !departmentSheet || !userSheet) {
+      throw new Error('شیت‌های Tenant، Departments یا Users پیدا نشدند. ابتدا resetDatabaseSheets یا setupDatabase را کامل اجرا کن.');
+    }
+
+    seedTenant_(ss);
+
+    const tenantRows = tenantSheet.getLastRow() > 1
+      ? tenantSheet.getRange(2, 1, tenantSheet.getLastRow() - 1, 7).getValues()
+      : [];
+    const tenant = tenantRows.find(function(row) {
+      return String(row[2] || '').trim() === APP_CONFIG.DEFAULT_TENANT.CODE &&
+        String(row[4] || '').toUpperCase() === 'ACTIVE';
+    }) || tenantRows.find(function(row) {
+      return String(row[4] || '').toUpperCase() === 'ACTIVE';
+    });
+    if (!tenant) throw new Error('هیچ Tenant فعالی پیدا نشد.');
+
+    const tenantId = String(tenant[0]);
+    let departments = departmentSheet.getLastRow() > 1
+      ? departmentSheet.getRange(2, 1, departmentSheet.getLastRow() - 1, 7).getValues()
+      : [];
+    let adminDepartment = departments.find(function(row) {
+      return String(row[1]) === tenantId &&
+        String(row[3] || '').trim().toUpperCase() === 'ADMIN';
+    });
+
+    if (!adminDepartment) {
+      const departmentId = generateId_('DEP');
+      const now = nowISO_();
+      departmentSheet.appendRow([
+        departmentId, tenantId, 'مدیریت سیستم', 'ADMIN', 'ACTIVE', now, now
+      ]);
+      adminDepartment = [departmentId, tenantId, 'مدیریت سیستم', 'ADMIN', 'ACTIVE', now, now];
+    }
+
+    const userRows = userSheet.getLastRow() > 1
+      ? userSheet.getRange(2, 1, userSheet.getLastRow() - 1, 9).getValues()
+      : [];
+    const activeAdmin = userRows.find(function(row) {
+      if (String(row[1]) !== tenantId || String(row[5]) !== String(adminDepartment[0])) return false;
+      return String(row[6] || '').toUpperCase() === 'ACTIVE';
+    });
+
+    if (activeAdmin) {
+      Logger.log('حساب مدیر فعال از قبل وجود دارد. نام کاربری: ' + String(activeAdmin[3]));
+      Logger.log('برای امنیت، رمز عبور جدید تولید نشد. اگر رمز را نمی‌دانی، باید روند بازنشانی رمز اجرا شود.');
+      return;
+    }
+
+    const username = 'admin';
+    const usernameExists = userRows.some(function(row) {
+      return String(row[1]) === tenantId &&
+        String(row[3] || '').trim().toLowerCase() === username;
+    });
+    if (usernameExists) {
+      throw new Error('نام کاربری admin قبلاً برای حساب دیگری استفاده شده است. ابتدا نام کاربری تکراری را در شیت 02_Users بررسی و اصلاح کن، سپس دوباره اجرا کن.');
+    }
+
+    const password = Utilities.getUuid().replace(/-/g, '') +
+      Utilities.getUuid().replace(/-/g, '').substring(0, 8);
+    const now = nowISO_();
+    userSheet.appendRow([
+      'USR_' + Utilities.getUuid().replace(/-/g, ''),
+      tenantId,
+      'مدیر سیستم',
+      username,
+      AuthService.hashPassword_(password),
+      String(adminDepartment[0]),
+      'ACTIVE',
+      now,
+      now
+    ]);
+
+    Logger.log('حساب مدیر سیستم ایجاد شد.');
+    Logger.log('نام کاربری: ' + username);
+    Logger.log('رمز عبور موقت: ' + password);
+    Logger.log('این رمز را همین حالا در محل امن نگه دار؛ فقط در Execution log همین اجرا نمایش داده می‌شود. بعد از ورود، آن را از بخش مدیریت کاربران تغییر بده.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
 function setupDatabase() {
 
   const lock = LockService.getScriptLock();
