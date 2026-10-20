@@ -366,6 +366,100 @@ function bootstrapAdminAccess() {
 }
 
 
+/**
+ * ترمیم دسترسی حساب مدیر پس از ورود اولیه.
+ * داده‌های موجود را حذف نمی‌کند؛ نقش مدیر را ایجاد/تکمیل و به حساب ADMIN متصل می‌کند.
+ */
+function repairAdminAccess() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error('فایل دیتابیس پیدا نشد.');
+
+    seedInitialData_(ss);
+
+    const tenantSheet = ss.getSheetByName('01_Tenants');
+    const deptSheet = ss.getSheetByName('03_Departments');
+    const usersSheet = ss.getSheetByName('02_Users');
+    const rolesSheet = ss.getSheetByName('04_Roles');
+    const permissionsSheet = ss.getSheetByName('05_Permissions');
+    const userRolesSheet = ss.getSheetByName('06_UserRoles');
+    const rolePermissionsSheet = ss.getSheetByName('07_RolePermissions');
+    [tenantSheet, deptSheet, usersSheet, rolesSheet, permissionsSheet, userRolesSheet, rolePermissionsSheet]
+      .forEach(function(sheet) { if (!sheet) throw new Error('یکی از شیت‌های لازم برای دسترسی مدیر وجود ندارد.'); });
+
+    const read = function(sheet, width) {
+      return sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getValues() : [];
+    };
+    const tenants = read(tenantSheet, 7);
+    const tenant = tenants.find(function(r) {
+      return String(r[2] || '').trim() === 'MAIN' && String(r[4] || '').toUpperCase() === 'ACTIVE';
+    }) || tenants.find(function(r) { return String(r[4] || '').toUpperCase() === 'ACTIVE'; });
+    if (!tenant) throw new Error('شرکت فعال پیدا نشد.');
+    const tenantId = String(tenant[0]);
+
+    const adminDept = read(deptSheet, 7).find(function(r) {
+      return String(r[1]) === tenantId && String(r[3] || '').trim().toUpperCase() === 'ADMIN'
+        && String(r[4] || '').toUpperCase() === 'ACTIVE';
+    });
+    if (!adminDept) throw new Error('واحد فعال ADMIN پیدا نشد. ابتدا bootstrapAdminAccess را اجرا کن.');
+
+    const adminUser = read(usersSheet, 9).find(function(r) {
+      return String(r[1]) === tenantId && String(r[5]) === String(adminDept[0])
+        && String(r[6] || '').toUpperCase() === 'ACTIVE';
+    });
+    if (!adminUser) throw new Error('کاربر فعال متصل به واحد ADMIN پیدا نشد.');
+
+    const now = nowISO_();
+    const roles = read(rolesSheet, 7);
+    let role = roles.find(function(r) {
+      return String(r[1]) === tenantId && ['SYS_ADMIN', 'ADMIN'].indexOf(String(r[3] || '').toUpperCase()) >= 0;
+    });
+    if (!role) {
+      const newRole = ['ROL_' + Utilities.getUuid().replace(/-/g, ''), tenantId, 'مدیر سیستم', 'SYS_ADMIN', 'ACTIVE', now, now];
+      rolesSheet.appendRow(newRole);
+      role = newRole;
+    } else if (String(role[4] || '').toUpperCase() !== 'ACTIVE') {
+      const headers = rolesSheet.getRange(1, 1, 1, rolesSheet.getLastColumn()).getValues()[0];
+      const statusCol = headers.indexOf('Status') + 1;
+      if (statusCol > 0) rolesSheet.getRange(roles.findIndex(function(r) { return String(r[0]) === String(role[0]); }) + 2, statusCol).setValue('ACTIVE');
+      role[4] = 'ACTIVE';
+    }
+    const roleId = String(role[0]);
+
+    const permissionRows = read(permissionsSheet, 6);
+    const activePermissions = permissionRows.filter(function(r) { return String(r[5] || '').toUpperCase() === 'ACTIVE' && r[0]; });
+    const rolePermRows = read(rolePermissionsSheet, 5);
+    const linkedPermissionIds = new Set(rolePermRows.filter(function(r) {
+      return String(r[1]) === tenantId && String(r[2]) === roleId;
+    }).map(function(r) { return String(r[3]); }));
+    activePermissions.forEach(function(p) {
+      if (!linkedPermissionIds.has(String(p[0]))) {
+        rolePermissionsSheet.appendRow(['RP_' + Utilities.getUuid().replace(/-/g, ''), tenantId, roleId, String(p[0]), now]);
+      }
+    });
+
+    const userRoleRows = read(userRolesSheet, 5);
+    const alreadyAssigned = userRoleRows.some(function(r) {
+      return String(r[1]) === tenantId && String(r[2]) === String(adminUser[0]) && String(r[3]) === roleId;
+    });
+    if (!alreadyAssigned) {
+      userRolesSheet.appendRow(['UR_' + Utilities.getUuid().replace(/-/g, ''), tenantId, String(adminUser[0]), roleId, now]);
+    }
+
+    Logger.log('ترمیم دسترسی مدیر انجام شد.');
+    Logger.log('نام کاربری مدیر: ' + String(adminUser[3]));
+    Logger.log('کد واحد: ADMIN');
+    Logger.log('نقش: ' + String(role[2]) + ' (' + String(role[3]) + ')');
+    Logger.log('تعداد مجوزهای فعال متصل به نقش: ' + activePermissions.length);
+    Logger.log('اکنون از برنامه خارج شو و دوباره وارد شو؛ اگر صفحه همچنان محدود است، صفحه را کامل تازه‌سازی کن.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
 function setupDatabase() {
 
   const lock = LockService.getScriptLock();
