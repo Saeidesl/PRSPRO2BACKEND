@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON']
     },
 
     WORKFLOWS: {
