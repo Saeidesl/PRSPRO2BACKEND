@@ -497,6 +497,63 @@ function seedInitialData_(ss) {
 
   seedTenant_(ss);
   seedPermissions_(ss);
+  seedProjectStatuses_(ss);
+}
+
+/**
+ * ایجاد وضعیت‌های پایه پروژه برای هر شرکت فعال؛ قابل اجرای مجدد و بدون تکرار.
+ */
+function seedProjectStatuses_(ss) {
+  const sheet = ss.getSheetByName('18_ProjectStatuses');
+  const tenantSheet = ss.getSheetByName('01_Tenants');
+  if (!sheet || !tenantSheet) return;
+
+  const tenants = tenantSheet.getLastRow() > 1
+    ? tenantSheet.getRange(2, 1, tenantSheet.getLastRow() - 1, 7).getValues()
+    : [];
+  const existingRows = sheet.getLastRow() > 1
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getValues()
+    : [];
+  const existingKeys = new Set();
+
+  existingRows.forEach(function(row) {
+    const tenantId = String(row[1] || '').trim();
+    const code = String(row[2] || '').trim();
+    if (tenantId && code) existingKeys.add(tenantId + '|' + code);
+  });
+
+  const defaults = [
+    ['ACTIVE', 'فعال'],
+    ['ON_HOLD', 'متوقف'],
+    ['COMPLETED', 'تکمیل‌شده'],
+    ['CANCELLED', 'لغوشده']
+  ];
+  const now = nowISO_();
+  const rows = [];
+
+  tenants.forEach(function(tenant) {
+    if (!tenant[0] || String(tenant[4] || '').toUpperCase() !== 'ACTIVE') return;
+    const tenantId = String(tenant[0]);
+
+    defaults.forEach(function(item) {
+      const key = tenantId + '|' + item[0];
+      if (existingKeys.has(key)) return;
+      rows.push([
+        'PST_' + Utilities.getUuid().replace(/-/g, '').substring(0, 12),
+        tenantId,
+        item[0],
+        item[1],
+        'ACTIVE',
+        now,
+        now
+      ]);
+      existingKeys.add(key);
+    });
+  });
+
+  if (rows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 7).setValues(rows);
+  }
 }
 
 
