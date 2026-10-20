@@ -240,6 +240,11 @@ function createAllSheets_(ss) {
  */
 function ensureHeaders_(sheet, headers) {
 
+  // قدیمی‌ترین نسخه‌ها اعتبارسنجی ستون‌ها را اشتباهاً روی ردیف عنوان هم اعمال کرده‌اند.
+  // ردیف عنوان باید نام ستون را بپذیرد؛ اعتبارسنجی داده‌ها دوباره در applyAllValidations_ تنظیم می‌شود.
+  sheet.getRange(1, 1, 1, Math.max(headers.length, sheet.getLastColumn(), 1))
+    .clearDataValidations();
+
   if (sheet.getMaxColumns() < headers.length) {
     sheet.insertColumnsAfter(
       sheet.getMaxColumns(),
