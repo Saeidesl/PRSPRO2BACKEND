@@ -122,6 +122,11 @@ const APP_CONFIG = {
       headers: ['ID','TenantID','ProjectID','SourceEventID','ItemName','ItemCode','Unit','RequestedQuantity','NeededBy','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
     },
 
+    PROJECT_STATUSES: {
+      name: '18_ProjectStatuses',
+      headers: ['ID','TenantID','Code','Name','Status','CreatedAt','UpdatedAt']
+    },
+
     PURCHASE_ORDERS: {
       name: '19_PurchaseOrders',
       headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
