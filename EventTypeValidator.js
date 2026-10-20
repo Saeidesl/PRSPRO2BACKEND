@@ -51,6 +51,18 @@ const EventTypeValidator = {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد مستقل از پروژه نمی‌تواند رنگ، سایز یا مقدار ترکیب پروژه را ثبت کند.');
     }
 
+    const flagEnabled = function(value) {
+      return value === true || String(value).toLowerCase() === 'true';
+    };
+    if (flagEnabled(data.TrackVariantQuantity) &&
+        !flagEnabled(data.UseProjectColors) &&
+        !flagEnabled(data.UseProjectSizes)) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'برای ثبت مقدار ترکیب، دست‌کم رنگ یا سایز باید فعال باشد.'
+      );
+    }
+
     ['UseProjectColors', 'UseProjectSizes', 'TrackVariantQuantity'].forEach(function(fieldName) {
       if (data[fieldName] !== undefined && typeof data[fieldName] !== 'boolean' &&
           String(data[fieldName]).toLowerCase() !== 'true' && String(data[fieldName]).toLowerCase() !== 'false') {
