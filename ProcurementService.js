@@ -325,54 +325,73 @@ const ProcurementService = {
     try {
       var user = this._user_(params);
       var itemsById = {};
+      var ordersById = {};
+      var allocationsByItem = {};
+      var receivedByItem = {};
+      var receivedByItemProject = {};
       var plannedByItem = {};
       var plannedByItemProject = {};
+      var normalizedEntries = [];
       var existingReceipts = ProcurementRepository.getReceipts(user.TenantID);
       var allAllocations = ProcurementRepository.getAllocations(user.TenantID);
+
+      existingReceipts.forEach(function(receipt) {
+        var itemKey = String(receipt.PurchaseOrderItemID || '');
+        var quantity = Number(receipt.QuantityReceived) || 0;
+        if (!itemKey) return;
+        receivedByItem[itemKey] = (receivedByItem[itemKey] || 0) + quantity;
+        var projectKey = itemKey + '|' + String(receipt.ProjectID || '');
+        receivedByItemProject[projectKey] = (receivedByItemProject[projectKey] || 0) + quantity;
+      });
+      allAllocations.forEach(function(allocation) {
+        var key = String(allocation.PurchaseOrderItemID || '');
+        if (!key) return;
+        if (!allocationsByItem[key]) allocationsByItem[key] = [];
+        allocationsByItem[key].push(allocation);
+      });
+
       entries.forEach(function(entry) {
         if (!entry || !entry.PurchaseOrderItemID) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'قلم یکی از دریافت‌ها مشخص نشده است.');
         }
         var quantity = this._number_(entry.QuantityReceived, 'مقدار تحویل', false);
-        var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, entry.PurchaseOrderItemID);
+        var key = String(entry.PurchaseOrderItemID);
+        var item = itemsById[key] || GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, key);
         if (!item || String(item.TenantID) !== String(user.TenantID)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
         }
-        var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
+        var orderKey = String(item.PurchaseOrderID || '');
+        var order = ordersById[orderKey] || GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, orderKey);
         if (!order || String(order.TenantID) !== String(user.TenantID) || String(order.Status).toUpperCase() === 'CANCELLED') {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
         }
         var projectId = entry.ProjectID || '';
         this._validateProject_(projectId, user.TenantID);
         this._validateEvent_(entry.SourceEventID || '', user.TenantID);
-        var key = String(item.ID);
-        var projectKey = key + '|' + String(projectId);
-        var prior = existingReceipts.filter(function(receipt) {
-          return String(receipt.PurchaseOrderItemID) === key;
-        }).reduce(function(sum, receipt) { return sum + (Number(receipt.QuantityReceived) || 0); }, 0);
+
+        var prior = receivedByItem[key] || 0;
         var ordered = Math.max(0, Number(item.OrderedQuantity) || 0);
         plannedByItem[key] = (plannedByItem[key] || 0) + quantity;
         if (prior + plannedByItem[key] > ordered) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت‌های انتخاب‌شده از مقدار باقیمانده سفارش «' + String(item.ItemName || '') + '» بیشتر است.');
         }
-        var allocations = allAllocations.filter(function(allocation) {
-          return String(allocation.PurchaseOrderItemID || '') === key;
-        });
+
+        var allocations = allocationsByItem[key] || [];
+        var projectKey = key + '|' + String(projectId);
         if (allocations.length) {
           if (!projectId) {
             throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای دریافت این قلم باید پروژه تخصیص‌یافته انتخاب شود.');
           }
           var allocated = allocations.filter(function(allocation) {
             return String(allocation.ProjectID || '') === String(projectId);
-          }).reduce(function(sum, allocation) { return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0); }, 0);
+          }).reduce(function(sum, allocation) {
+            return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
+          }, 0);
           if (allocated <= 0) {
             throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این قلم سفارش به پروژه انتخاب‌شده تخصیص نیافته است.');
           }
-          var receivedForProject = existingReceipts.filter(function(receipt) {
-            return String(receipt.PurchaseOrderItemID) === key && String(receipt.ProjectID || '') === String(projectId);
-          }).reduce(function(sum, receipt) { return sum + (Number(receipt.QuantityReceived) || 0); }, 0);
           plannedByItemProject[projectKey] = (plannedByItemProject[projectKey] || 0) + quantity;
-          if (receivedForProject + plannedByItemProject[projectKey] > allocated) {
+          if ((receivedByItemProject[projectKey] || 0) + plannedByItemProject[projectKey] > allocated) {
             throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت از سهم تخصیص‌یافته پروژه برای قلم «' + String(item.ItemName || '') + '» بیشتر است.');
           }
         } else {
@@ -381,13 +400,83 @@ const ProcurementService = {
             throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه دریافت با پروژه مرتبط با قلم سفارش مطابقت ندارد.');
           }
         }
+
         itemsById[key] = item;
+        ordersById[orderKey] = order;
+        normalizedEntries.push({
+          item: item,
+          order: order,
+          body: entry,
+          projectId: projectId,
+          quantity: quantity
+        });
       }, this);
 
-      var created = [];
-      entries.forEach(function(entry) {
-        created.push(this._createReceiptUnlocked_(entry, params).data);
+      var now = this._now_();
+      var created = normalizedEntries.map(function(entry) {
+        return {
+          ID: this._id_('REC'),
+          TenantID: user.TenantID,
+          PurchaseOrderItemID: entry.item.ID,
+          ProjectID: entry.projectId,
+          QuantityReceived: entry.quantity,
+          ReceivedAt: entry.body.ReceivedAt || now,
+          WarehouseDepartmentID: entry.body.WarehouseDepartmentID || '',
+          SourceEventID: entry.body.SourceEventID || '',
+          Notes: String(entry.body.Notes || ''),
+          ReceivedBy: user.ID,
+          CreatedAt: now
+        };
       }, this);
+
+      // One sheet write instead of re-reading and re-writing receipt totals per line.
+      GoogleSheetsRepository.insertMany(ProcurementRepository.SHEETS.RECEIPTS, created);
+
+      var allItems = ProcurementRepository.getItems(user.TenantID);
+      var itemsByOrder = {};
+      allItems.forEach(function(item) {
+        var orderKey = String(item.PurchaseOrderID || '');
+        if (!itemsByOrder[orderKey]) itemsByOrder[orderKey] = [];
+        itemsByOrder[orderKey].push(item);
+      });
+      var receiptTotals = Object.assign({}, receivedByItem);
+      created.forEach(function(receipt) {
+        var key = String(receipt.PurchaseOrderItemID || '');
+        receiptTotals[key] = (receiptTotals[key] || 0) + (Number(receipt.QuantityReceived) || 0);
+      });
+
+      var updatedOrders = {};
+      normalizedEntries.forEach(function(entry) {
+        var order = entry.order;
+        var orderKey = String(order.ID);
+        if (updatedOrders[orderKey]) return;
+        var orderItems = itemsByOrder[orderKey] || [];
+        var orderedTotal = 0;
+        var receivedTotal = 0;
+        orderItems.forEach(function(item) {
+          orderedTotal += Math.max(0, Number(item.OrderedQuantity) || 0);
+          receivedTotal += Math.min(Math.max(0, Number(item.OrderedQuantity) || 0), receiptTotals[String(item.ID)] || 0);
+        });
+        if (String(order.Status || '').toUpperCase() !== 'NEEDS_REVIEW') {
+          var updated = Object.assign({}, order);
+          updated.Status = orderedTotal > 0 && receivedTotal >= orderedTotal ? 'RECEIVED' :
+            (receivedTotal > 0 ? 'PARTIALLY_RECEIVED' : 'ACTIVE');
+          updated.UpdatedAt = now;
+          GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+        }
+        updatedOrders[orderKey] = true;
+      });
+
+      created.forEach(function(receipt) {
+        AuditService.log({
+          TenantID: user.TenantID,
+          UserID: user.ID,
+          Action: 'CREATE',
+          EntityType: 'MATERIAL_RECEIPT',
+          EntityID: receipt.ID,
+          NewData: receipt
+        });
+      });
       return Response.success(created);
     } finally {
       lock.releaseLock();
@@ -665,6 +754,84 @@ const ProcurementService = {
       copy.ProjectIDs = orderProjectIds;
       return copy;
     }));
+  },
+
+  /**
+   * Combined procurement workspace response. Reuses request-scoped sheet caches
+   * so the frontend can render the main screen with one backend round-trip.
+   */
+  workspace: function(params) {
+    var dashboardResponse = this.dashboard(params);
+    var needsResponse = this.listNeeds(params);
+    var ordersResponse = this.listOrders(params);
+    return Response.success({
+      summary: dashboardResponse && dashboardResponse.data ? dashboardResponse.data.summary : {},
+      needs: needsResponse && Array.isArray(needsResponse.data) ? needsResponse.data : [],
+      orders: ordersResponse && Array.isArray(ordersResponse.data) ? ordersResponse.data : []
+    });
+  },
+
+  /**
+   * Full procurement reporting dataset. Only tenant-owned records are included.
+   * Filtering and export are handled client-side after this one on-demand request.
+   */
+  reports: function(params) {
+    var user = this._user_(params);
+    var needsResponse = this.listNeeds(params);
+    var ordersResponse = this.listOrders(params);
+    var needs = needsResponse && Array.isArray(needsResponse.data) ? needsResponse.data : [];
+    var orders = ordersResponse && Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+    var projects = ProjectRepository.getAll().filter(function(project) {
+      return String(project.TenantID || '') === String(user.TenantID || '');
+    });
+    var projectById = {};
+    projects.forEach(function(project) {
+      projectById[String(project.ID)] = {
+        ID: project.ID,
+        ProjectCode: project.ProjectCode || project.Code || '',
+        Title: project.Title || project.Name || '',
+        Quantity: project.Quantity !== undefined ? project.Quantity : (project.TotalQuantity || ''),
+        Status: project.Status || ''
+      };
+    });
+
+    needs = needs.map(function(need) {
+      var copy = Object.assign({}, need);
+      var project = projectById[String(need.ProjectID || '')];
+      copy.ProjectCode = project ? project.ProjectCode : '';
+      copy.ProjectTitle = project ? project.Title : '';
+      return copy;
+    });
+
+    orders = orders.map(function(order) {
+      var copy = Object.assign({}, order);
+      var ids = Array.isArray(order.ProjectIDs) ? order.ProjectIDs.slice() : [];
+      if (!ids.length && order.ProjectID) ids.push(String(order.ProjectID));
+      copy.ProjectLabels = ids.map(function(id) {
+        var project = projectById[String(id)];
+        return project ? [project.ProjectCode, project.Title].filter(Boolean).join(' — ') : String(id);
+      });
+      copy.Items = (Array.isArray(order.Items) ? order.Items : []).map(function(item) {
+        var itemCopy = Object.assign({}, item);
+        var itemIds = Array.isArray(item.ProjectIDs) ? item.ProjectIDs.slice() : [];
+        if (!itemIds.length && item.ProjectID) itemIds.push(String(item.ProjectID));
+        itemCopy.ProjectLabels = itemIds.map(function(id) {
+          var project = projectById[String(id)];
+          return project ? [project.ProjectCode, project.Title].filter(Boolean).join(' — ') : String(id);
+        });
+        return itemCopy;
+      });
+      return copy;
+    });
+
+    return Response.success({
+      generatedAt: this._now_(),
+      projects: projects.map(function(project) {
+        return projectById[String(project.ID)];
+      }),
+      needs: needs,
+      orders: orders
+    });
   },
 
   dashboard: function(params) {

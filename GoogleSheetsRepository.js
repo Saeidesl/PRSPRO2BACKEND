@@ -424,6 +424,53 @@ const GoogleSheetsRepository = {
     }
   },
 
+  insertMany: function(sheetName, records) {
+    const totalStart = Date.now();
+    let lockWaitMs = 0;
+    let writeMs = 0;
+    let lockAcquired = false;
+    records = Array.isArray(records) ? records : [];
+    if (!records.length) return [];
+
+    try {
+      const sheet = this.getSheet(sheetName);
+      const headers = this.getHeaders(sheetName);
+      if (headers.length === 0) {
+        throw ErrorHandler.create(
+          Constants.ERROR.NOT_FOUND,
+          'ساختار ستون‌های شیت مشخص نیست: ' + sheetName
+        );
+      }
+      const rows = records.map(function(data) {
+        return headers.map(function(header) {
+          return data[header] !== undefined ? data[header] : '';
+        });
+      });
+
+      const lock = LockService.getScriptLock();
+      const lockStart = Date.now();
+      lock.waitLock(10000);
+      lockWaitMs = Date.now() - lockStart;
+      lockAcquired = true;
+      try {
+        const writeStart = Date.now();
+        const targetRow = sheet.getLastRow() + 1;
+        sheet.getRange(targetRow, 1, rows.length, headers.length).setValues(rows);
+        writeMs = Date.now() - writeStart;
+        this._invalidateSheetRecordCache(sheetName);
+        return records;
+      } finally {
+        if (lockAcquired) lock.releaseLock();
+      }
+    } finally {
+      this._logTiming('insertMany', sheetName, totalStart, {
+        recordCount: records.length,
+        lockWaitMs: lockWaitMs,
+        writeMs: writeMs
+      });
+    }
+  },
+
   updateById: function(sheetName, id, data) {
     const totalStart = Date.now();
     let lockWaitMs = 0;

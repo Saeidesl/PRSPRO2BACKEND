@@ -284,6 +284,16 @@ const Router = {
       return ProjectService.dashboardLookups(params);
     }
 
+    if (path === '/procurement/workspace') {
+      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.workspace(params);
+    }
+
+    if (path === '/procurement/reports') {
+      this.requireAny(params, ['REPORT_VIEW', 'PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+      return ProcurementService.reports(params);
+    }
+
     if (path === '/procurement/dashboard') {
       this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
       return ProcurementService.dashboard(params);
