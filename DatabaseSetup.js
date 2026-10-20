@@ -175,6 +175,95 @@ const APP_CONFIG = {
 /**
  * راه‌اندازی دیتابیس
  */
+/**
+ * بازسازی کامل شیت‌های دیتابیس از ابتدا.
+ * این عملیات همه شیت‌های موجود در فایل متصل را حذف می‌کند؛ فقط پس از تأیید صریح اجرا شود.
+ */
+function resetDatabaseSheets() {
+  const ui = SpreadsheetApp.getUi();
+  const choice = ui.alert(
+    'بازسازی کامل دیتابیس',
+    'هشدار: تمام شیت‌های این فایل Google Sheets حذف و از نو ساخته می‌شوند. ' +
+      'این عملیات قابل بازگشت نیست. فقط در صورتی ادامه بده که مطمئنی اطلاعاتی برای نگهداری وجود ندارد.',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (choice !== ui.Button.YES) {
+    ui.alert('عملیات لغو شد. هیچ شیتی تغییر نکرد.');
+    return;
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error('فایل Google Sheets پیدا نشد.');
+
+    const definitions = Object.values(APP_CONFIG.SHEETS);
+    if (!definitions.length) throw new Error('تعریف شیت‌ها خالی است.');
+
+    // Google Sheets اجازه حذف آخرین شیت را نمی‌دهد؛ یک شیت موقت را نگه می‌داریم.
+    const sheets = ss.getSheets();
+    if (!sheets.length) throw new Error('هیچ شیتی برای شروع بازسازی پیدا نشد.');
+    const keeper = sheets[0];
+
+    sheets.forEach(function(sheet) {
+      if (sheet.getSheetId() !== keeper.getSheetId()) {
+        ss.deleteSheet(sheet);
+      }
+    });
+
+    const temporaryName = '__DB_RESET_TEMP__';
+    const existingTemporary = ss.getSheetByName(temporaryName);
+    if (existingTemporary && existingTemporary.getSheetId() !== keeper.getSheetId()) {
+      ss.deleteSheet(existingTemporary);
+    }
+    keeper.setName(temporaryName);
+    keeper.clear();
+    if (keeper.getFilter()) keeper.getFilter().remove();
+    keeper.getBandings().forEach(function(banding) { banding.remove(); });
+    keeper.getMergedRanges().forEach(function(range) { range.breakApart(); });
+
+    definitions.forEach(function(definition) {
+      const sheet = ss.insertSheet(definition.name);
+      if (sheet.getMaxColumns() < definition.headers.length) {
+        sheet.insertColumnsAfter(
+          sheet.getMaxColumns(),
+          definition.headers.length - sheet.getMaxColumns()
+        );
+      }
+      sheet.getRange(1, 1, 1, definition.headers.length)
+        .setValues([definition.headers]);
+    });
+
+    ss.deleteSheet(keeper);
+
+    applyAllFormatting_(ss);
+    applyAllValidations_(ss);
+    seedInitialData_(ss);
+    saveSetupMetadata_(ss);
+
+    ui.alert(
+      'بازسازی کامل شد',
+      'همه شیت‌های دیتابیس با سرستون‌های استاندارد ساخته شدند و داده‌های پایه ایجاد شدند. اکنون می‌توانی checkDatabaseHealth را اجرا کنی.',
+      ui.ButtonSet.OK
+    );
+    Logger.log('بازسازی کامل دیتابیس انجام شد. تعداد شیت‌های تعریف‌شده: ' + definitions.length);
+  } catch (error) {
+    Logger.log(error.stack || error);
+    SpreadsheetApp.getUi().alert(
+      'خطا در بازسازی دیتابیس',
+      error.message || String(error),
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    throw error;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
 function setupDatabase() {
 
   const lock = LockService.getScriptLock();
@@ -737,6 +826,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('سیستم تولید')
     .addItem('راه‌اندازی / بررسی دیتابیس', 'setupDatabase')
+    .addItem('حذف و بازسازی کامل شیت‌ها', 'resetDatabaseSheets')
     .addItem('بررسی سلامت دیتابیس', 'checkDatabaseHealth')
     .addToUi();
 }
