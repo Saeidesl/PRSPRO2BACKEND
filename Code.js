@@ -5,3 +5,5 @@ function doGet(e) {
 function doPost(e) {
   return webAppDoPost(e);
 }
+
+// Harmless comment added to verify automatic GitHub-to-Apps-Script sync.
