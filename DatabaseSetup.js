@@ -7,7 +7,7 @@
 
 const APP_CONFIG = {
 
-  VERSION: '1.1.1',
+  VERSION: '1.1.2',
 
   DEFAULT_TENANT: {
     NAME: 'شرکت اصلی',
