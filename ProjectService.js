@@ -504,7 +504,10 @@ const ProjectService = {
     }
 
     if (data.Quantity !== undefined) {
-      updateData.Quantity = Number(data.Quantity);
+      updateData.Quantity =
+        data.Quantity === null || String(data.Quantity).trim() === ''
+          ? ''
+          : Number(data.Quantity);
     }
 
     if (
