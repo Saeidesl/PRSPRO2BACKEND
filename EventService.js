@@ -892,6 +892,40 @@ const EventService = {
       );
     }
 
+    const useProjectColors = EventTypeService._toBoolean_(eventType.UseProjectColors);
+    const useProjectSizes = EventTypeService._toBoolean_(eventType.UseProjectSizes);
+    const trackVariantQuantity = EventTypeService._toBoolean_(eventType.TrackVariantQuantity);
+    let selectedColor = '';
+    let selectedSize = '';
+    let variantQuantity = '';
+
+    if (useProjectColors || useProjectSizes || trackVariantQuantity) {
+      if (!project) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت رنگ، سایز یا مقدار ترکیب فقط برای رویداد مرتبط با پروژه امکان‌پذیر است.');
+      let projectVariants = { colors: [], sizes: [] };
+      try {
+        const parsed = JSON.parse(String(project.ColorSizeJSON || '{"colors":[],"sizes":[]}'));
+        if (parsed && typeof parsed === 'object') {
+          projectVariants.colors = Array.isArray(parsed.colors) ? parsed.colors : [];
+          projectVariants.sizes = Array.isArray(parsed.sizes) ? parsed.sizes : [];
+        }
+      } catch (error) {}
+      selectedColor = String(event.Color || '').trim();
+      selectedSize = String(event.Size || '').trim();
+      if (useProjectColors) {
+        if (!selectedColor || projectVariants.colors.indexOf(selectedColor) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رنگ انتخاب‌شده در مشخصات همین پروژه وجود ندارد.');
+      } else if (selectedColor) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت رنگ پروژه را ندارد.');
+      if (useProjectSizes) {
+        if (!selectedSize || projectVariants.sizes.indexOf(selectedSize) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سایز انتخاب‌شده در مشخصات همین پروژه وجود ندارد.');
+      } else if (selectedSize) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت سایز پروژه را ندارد.');
+      if (trackVariantQuantity) {
+        const q = Number(event.VariantQuantity);
+        if (event.VariantQuantity === undefined || event.VariantQuantity === null || String(event.VariantQuantity).trim() === '' || !isFinite(q) || q < 1 || Math.floor(q) !== q) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تولید ترکیب باید عدد صحیح بزرگ‌تر از صفر باشد.');
+        variantQuantity = q;
+      } else if (event.VariantQuantity !== undefined && String(event.VariantQuantity).trim() !== '') throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت مقدار ترکیب را ندارد.');
+    } else if (event.Color || event.Size || (event.VariantQuantity !== undefined && String(event.VariantQuantity).trim() !== '')) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد برای ثبت رنگ، سایز یا مقدار ترکیب تنظیم نشده است.');
+    }
+
     const projectChanges = project
       ? this._getConfiguredChanges_(
           project,
@@ -931,6 +965,9 @@ const EventService = {
       CreatedAt: now,
       Description: event.Description || '',
       Status: Constants.STATUS.ACTIVE,
+      Color: selectedColor,
+      Size: selectedSize,
+      VariantQuantity: variantQuantity,
 
       // سابقه وضعیت پروژه پیش از اعمال رویداد
       PreviousStepID: project ? (project.CurrentStepID || '') : '',
