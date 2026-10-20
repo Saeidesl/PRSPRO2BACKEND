@@ -44,6 +44,20 @@ const EventTypeValidator = {
       Validator.enum(data.ConnectionType, ['PROJECT', 'INDEPENDENT'], 'ConnectionType');
     }
 
+    if (String(data.ConnectionType || '').toUpperCase() === 'INDEPENDENT' &&
+        [data.UseProjectColors, data.UseProjectSizes, data.TrackVariantQuantity].some(function(value) {
+          return value === true || String(value).toLowerCase() === 'true';
+        })) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد مستقل از پروژه نمی‌تواند رنگ، سایز یا مقدار ترکیب پروژه را ثبت کند.');
+    }
+
+    ['UseProjectColors', 'UseProjectSizes', 'TrackVariantQuantity'].forEach(function(fieldName) {
+      if (data[fieldName] !== undefined && typeof data[fieldName] !== 'boolean' &&
+          String(data[fieldName]).toLowerCase() !== 'true' && String(data[fieldName]).toLowerCase() !== 'false') {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم ' + fieldName + ' معتبر نیست.');
+      }
+    });
+
     if (data.Version !== undefined &&
         data.Version !== null &&
         data.Version !== '') {
