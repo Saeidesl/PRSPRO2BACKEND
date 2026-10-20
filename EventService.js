@@ -239,10 +239,10 @@ const EventService = {
       return String(event.TenantID) === tenantId;
     });
 
+    // فهرست عمومی رویدادها پروژهٔ مشخصی ندارد؛
+    // رویدادهای تدارکات فقط در timeline یک پروژه اضافه می‌شوند.
     return Response.success(
-      this._enrichEventsBatch_(filtered, tenantId).concat(
-        this._procurementTimelineEvents_(projectId, tenantId)
-      )
+      this._enrichEventsBatch_(filtered, tenantId)
     );
   },
 
