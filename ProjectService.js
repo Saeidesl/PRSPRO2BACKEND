@@ -260,7 +260,11 @@ const ProjectService = {
         project.Title,
 
       Quantity:
-        Number(project.Quantity),
+        project.Quantity === undefined ||
+        project.Quantity === null ||
+        String(project.Quantity).trim() === ''
+          ? ''
+          : Number(project.Quantity),
 
       Description:
         project.Description ||
