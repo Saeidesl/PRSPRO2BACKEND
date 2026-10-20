@@ -667,6 +667,84 @@ const ProcurementService = {
     }));
   },
 
+  /**
+   * Combined procurement workspace response. Reuses request-scoped sheet caches
+   * so the frontend can render the main screen with one backend round-trip.
+   */
+  workspace: function(params) {
+    var dashboardResponse = this.dashboard(params);
+    var needsResponse = this.listNeeds(params);
+    var ordersResponse = this.listOrders(params);
+    return Response.success({
+      summary: dashboardResponse && dashboardResponse.data ? dashboardResponse.data.summary : {},
+      needs: needsResponse && Array.isArray(needsResponse.data) ? needsResponse.data : [],
+      orders: ordersResponse && Array.isArray(ordersResponse.data) ? ordersResponse.data : []
+    });
+  },
+
+  /**
+   * Full procurement reporting dataset. Only tenant-owned records are included.
+   * Filtering and export are handled client-side after this one on-demand request.
+   */
+  reports: function(params) {
+    var user = this._user_(params);
+    var needsResponse = this.listNeeds(params);
+    var ordersResponse = this.listOrders(params);
+    var needs = needsResponse && Array.isArray(needsResponse.data) ? needsResponse.data : [];
+    var orders = ordersResponse && Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+    var projects = ProjectRepository.getAll().filter(function(project) {
+      return String(project.TenantID || '') === String(user.TenantID || '');
+    });
+    var projectById = {};
+    projects.forEach(function(project) {
+      projectById[String(project.ID)] = {
+        ID: project.ID,
+        ProjectCode: project.ProjectCode || project.Code || '',
+        Title: project.Title || project.Name || '',
+        Quantity: project.Quantity !== undefined ? project.Quantity : (project.TotalQuantity || ''),
+        Status: project.Status || ''
+      };
+    });
+
+    needs = needs.map(function(need) {
+      var copy = Object.assign({}, need);
+      var project = projectById[String(need.ProjectID || '')];
+      copy.ProjectCode = project ? project.ProjectCode : '';
+      copy.ProjectTitle = project ? project.Title : '';
+      return copy;
+    });
+
+    orders = orders.map(function(order) {
+      var copy = Object.assign({}, order);
+      var ids = Array.isArray(order.ProjectIDs) ? order.ProjectIDs.slice() : [];
+      if (!ids.length && order.ProjectID) ids.push(String(order.ProjectID));
+      copy.ProjectLabels = ids.map(function(id) {
+        var project = projectById[String(id)];
+        return project ? [project.ProjectCode, project.Title].filter(Boolean).join(' — ') : String(id);
+      });
+      copy.Items = (Array.isArray(order.Items) ? order.Items : []).map(function(item) {
+        var itemCopy = Object.assign({}, item);
+        var itemIds = Array.isArray(item.ProjectIDs) ? item.ProjectIDs.slice() : [];
+        if (!itemIds.length && item.ProjectID) itemIds.push(String(item.ProjectID));
+        itemCopy.ProjectLabels = itemIds.map(function(id) {
+          var project = projectById[String(id)];
+          return project ? [project.ProjectCode, project.Title].filter(Boolean).join(' — ') : String(id);
+        });
+        return itemCopy;
+      });
+      return copy;
+    });
+
+    return Response.success({
+      generatedAt: this._now_(),
+      projects: projects.map(function(project) {
+        return projectById[String(project.ID)];
+      }),
+      needs: needs,
+      orders: orders
+    });
+  },
+
   dashboard: function(params) {
     var user = this._user_(params);
     var needs = ProcurementRepository.getNeeds(user.TenantID);
