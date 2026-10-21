@@ -380,19 +380,30 @@ const ProcurementService = {
         var projectKey = key + '|' + String(projectId);
         if (allocations.length) {
           if (!projectId) {
-            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای دریافت این قلم باید پروژه تخصیص‌یافته انتخاب شود.');
-          }
-          var allocated = allocations.filter(function(allocation) {
-            return String(allocation.ProjectID || '') === String(projectId);
-          }).reduce(function(sum, allocation) {
-            return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
-          }, 0);
-          if (allocated <= 0) {
-            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این قلم سفارش به پروژه انتخاب‌شده تخصیص نیافته است.');
-          }
-          plannedByItemProject[projectKey] = (plannedByItemProject[projectKey] || 0) + quantity;
-          if ((receivedByItemProject[projectKey] || 0) + plannedByItemProject[projectKey] > allocated) {
-            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت از سهم تخصیص‌یافته پروژه برای قلم «' + String(item.ItemName || '') + '» بیشتر است.');
+            // Unallocated surplus may be received as general warehouse stock, but only
+            // up to the portion of the order that is not allocated to any project.
+            var allocatedTotal = allocations.reduce(function(sum, allocation) {
+              return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
+            }, 0);
+            var unallocatedQuantity = Math.max(0, ordered - allocatedTotal);
+            plannedByItemProject[projectKey] = (plannedByItemProject[projectKey] || 0) + quantity;
+            if (unallocatedQuantity <= 0 ||
+                (receivedByItemProject[projectKey] || 0) + plannedByItemProject[projectKey] > unallocatedQuantity) {
+              throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای این قلم سهم عمومیِ دریافت‌نشده وجود ندارد؛ پروژه تخصیص‌یافته را انتخاب کنید.');
+            }
+          } else {
+            var allocated = allocations.filter(function(allocation) {
+              return String(allocation.ProjectID || '') === String(projectId);
+            }).reduce(function(sum, allocation) {
+              return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
+            }, 0);
+            if (allocated <= 0) {
+              throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این قلم سفارش به پروژه انتخاب‌شده تخصیص نیافته است.');
+            }
+            plannedByItemProject[projectKey] = (plannedByItemProject[projectKey] || 0) + quantity;
+            if ((receivedByItemProject[projectKey] || 0) + plannedByItemProject[projectKey] > allocated) {
+              throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت از سهم تخصیص‌یافته پروژه برای قلم «' + String(item.ItemName || '') + '» بیشتر است.');
+            }
           }
         } else {
           var expectedProjectId = item.ProjectID || order.ProjectID || '';
