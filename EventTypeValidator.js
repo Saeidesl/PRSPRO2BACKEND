@@ -113,6 +113,14 @@ const EventTypeValidator = {
       );
     }
 
+    if (data.TargetStepStatus !== undefined &&
+        data.TargetStepStatus !== null) {
+      Validator.string(data.TargetStepStatus, 'TargetStepStatus');
+      if (String(data.TargetStepStatus).length > 100) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'وضعیت کار در مرحله نباید بیشتر از ۱۰۰ نویسه باشد.');
+      }
+    }
+
     [
       'AllowedDepartmentIDs',
       'AllowedUserIDs',
