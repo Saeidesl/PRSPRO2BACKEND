@@ -41,20 +41,19 @@ const EventService = {
   },
 
   _checkProjectAvailability_: function(project, user) {
-    const available = this._parseArray_(
-      project.AvailableDepartmentIDs
-    );
-
-    if (
-      !this._isAdmin_(user) &&
-      available.length > 0 &&
-      !available.some(function(id) {
-        return String(id) === String(user.DepartmentID || '');
-      })
-    ) {
+    if (this._isAdmin_(user)) return;
+    const departments = this._parseArray_(project.AvailableDepartmentIDs);
+    const users = this._parseArray_(project.AllowedUserIDs);
+    if (!departments.length && !users.length) return;
+    const allowed = departments.some(function(id) {
+      return String(id) === String(user.DepartmentID || '');
+    }) || users.some(function(id) {
+      return String(id) === String(user.ID);
+    });
+    if (!allowed) {
       throw ErrorHandler.create(
         Constants.ERROR.PERMISSION_DENIED,
-        'این پروژه در حال حاضر برای واحد شما در دسترس نیست.'
+        'این پروژه برای واحد یا کاربر شما مجاز نیست.'
       );
     }
   },
