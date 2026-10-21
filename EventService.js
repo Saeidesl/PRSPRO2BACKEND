@@ -41,7 +41,8 @@ const EventService = {
   },
 
   _checkProjectAvailability_: function(project, user) {
-    if (this._isAdmin_(user)) return;
+    if (this._isAdmin_(user) ||
+        String(project.CreatedBy || '') === String(user.ID || '')) return;
     const departments = this._parseArray_(project.AvailableDepartmentIDs);
     const users = this._parseArray_(project.AllowedUserIDs);
     if (!departments.length && !users.length) return;
