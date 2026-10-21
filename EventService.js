@@ -999,7 +999,8 @@ const EventService = {
       // سابقه وضعیت پروژه پیش از اعمال رویداد
       PreviousStepID: project ? (project.CurrentStepID || '') : '',
       PreviousProjectStatus: project ? (project.Status || '') : '',
-      PreviousAvailableDepartmentIDs: project ? (project.AvailableDepartmentIDs || '') : ''
+      PreviousAvailableDepartmentIDs: project ? (project.AvailableDepartmentIDs || '') : '',
+      PreviousSnapshotCaptured: project ? true : false
     };
 
     // Reject missing/invalid mapped procurement inputs before writing the event.
@@ -1241,9 +1242,14 @@ const EventService = {
     });
 
     const hasPreviousSnapshot =
-      event.PreviousStepID !== undefined &&
-      event.PreviousProjectStatus !== undefined &&
-      event.PreviousAvailableDepartmentIDs !== undefined;
+      this._toBoolean_(event.PreviousSnapshotCaptured) ||
+      (
+        event.PreviousSnapshotCaptured === undefined &&
+        event.PreviousStepID !== undefined &&
+        event.PreviousProjectStatus !== undefined &&
+        event.PreviousAvailableDepartmentIDs !== undefined &&
+        String(event.PreviousProjectStatus || '').trim() !== ''
+      );
 
     if (
       hasExpectedChanges &&
