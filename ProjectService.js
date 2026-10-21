@@ -339,13 +339,17 @@ const ProjectService = {
     // به‌صورت پیش‌فرض در همین وضعیت قرار می‌گیرد؛ در غیر این صورت رفتار قبلی حفظ می‌شود.
     let initialStatus = project.Status || Constants.STATUS.ACTIVE;
     if (!project.Status && typeof ProjectStatusService !== 'undefined' && ProjectStatusService._getRows_) {
-      const awaitingStatus = ProjectStatusService._getRows_().find(function(item) {
-        const name = String(item.Name || '').replace(/[\u200c\s]+/g, ' ').trim();
-        return String(item.TenantID) === String(tenantId) &&
-          String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
-          (name === 'در انتظار اقدام' || name === 'درانتظار اقدام');
-      });
-      if (awaitingStatus) initialStatus = awaitingStatus.Code || initialStatus;
+      try {
+        const awaitingStatus = ProjectStatusService._getRows_().find(function(item) {
+          const name = String(item.Name || '').replace(/[\u200c\s]+/g, ' ').trim();
+          return String(item.TenantID) === String(tenantId) &&
+            String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+            (name === 'در انتظار اقدام' || name === 'درانتظار اقدام');
+        });
+        if (awaitingStatus) initialStatus = awaitingStatus.Code || initialStatus;
+      } catch (statusLookupError) {
+        // وضعیت پیش‌فرض اختیاری است؛ نبودن شیت نباید ایجاد پروژه را متوقف کند.
+      }
     }
 
     const newProject = {
