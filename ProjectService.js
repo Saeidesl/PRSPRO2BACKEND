@@ -43,7 +43,24 @@ const ProjectService = {
       const fullName = [item.FirstName || '', item.LastName || ''].join(' ').trim();
       return { ID: item.ID, Name: item.Name || item.FullName || item.DisplayName || fullName || item.Username || String(item.ID), DepartmentID: item.DepartmentID || '' };
     });
-    return Response.success({ departments: departments, users: users });
+    // One request now supplies all three form lookup lists, avoiding a second
+    // round-trip just to load workflows. Keep filtering tenant-scoped here.
+    const workflows = (WorkflowRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    }).map(function(item) {
+      return {
+        ID: item.ID,
+        Name: item.Name || item.Title || item.WorkflowName || item.Code || String(item.ID),
+        Code: item.Code || '',
+        Status: item.Status || 'ACTIVE'
+      };
+    });
+    return Response.success({
+      departments: departments,
+      users: users,
+      workflows: workflows
+    });
   },
 
   dashboardLookups: function(params) {
