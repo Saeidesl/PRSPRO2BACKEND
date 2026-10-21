@@ -113,7 +113,8 @@ const ProjectService = {
 
 
   _isProjectAvailableToUser_: function(project, user) {
-    if (AccessControlService.isAdmin(user)) return true;
+    if (AccessControlService.isAdmin(user) ||
+        String(project.CreatedBy || '') === String(user.ID || '')) return true;
     function parse(value) {
       if (Array.isArray(value)) return value;
       try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; }
