@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs']
     },
 
     WORKFLOWS: {
@@ -80,7 +80,7 @@ const APP_CONFIG = {
 
     EVENTS: {
       name: '13_Events',
-      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity']
+      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','VariantDetailsJSON']
     },
 
     EVENT_DATA: {
