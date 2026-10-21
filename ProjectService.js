@@ -466,15 +466,13 @@ const ProjectService = {
     }
 
     if (
-      String(existing.TenantID) !==
-      String(user.TenantID)
+      String(existing.TenantID) !== String(user.TenantID) ||
+      !this._isProjectAvailableToUser_(existing, user)
     ) {
-
       throw ErrorHandler.create(
         Constants.ERROR.NOT_FOUND,
         'پروژه مورد نظر پیدا نشد.'
       );
-
     }
 
     // کد پروژه و گردش‌کار پس از ایجاد هویت ثابت پروژه هستند.
