@@ -379,6 +379,8 @@ const ProjectService = {
       CurrentStepID:
         firstStep.ID,
 
+      CurrentStepStatus: '',
+
       Status:
         project.Status ||
         Constants.STATUS.ACTIVE,
