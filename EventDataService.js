@@ -33,6 +33,13 @@ const EventDataService = {
         'رویداد مورد نظر پیدا نشد.'
       );
     }
+    if (event.ProjectID) {
+      const project = ProjectRepository.findById(event.ProjectID);
+      if (!project || String(project.TenantID) !== String(currentUser.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(project, currentUser)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+      }
+    }
 
     const stored =
       EventDataRepository.findByEventId(eventId);
@@ -314,6 +321,13 @@ const EventDataService = {
         Constants.ERROR.NOT_FOUND,
         'رویداد مورد نظر پیدا نشد.'
       );
+    }
+    if (event.ProjectID) {
+      const project = ProjectRepository.findById(event.ProjectID);
+      if (!project || String(project.TenantID) !== String(currentUser.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(project, currentUser)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+      }
     }
 
     if (String(event.Status) === Constants.STATUS.VOID) {

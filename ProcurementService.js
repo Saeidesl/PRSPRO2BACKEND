@@ -33,19 +33,29 @@ const ProcurementService = {
     return number;
   },
 
-  _validateProject_: function(projectId, tenantId) {
+  _isProjectVisible_: function(projectId, user) {
+    if (!projectId) return true;
+    var project = ProjectRepository.findById(projectId);
+    return !!project && String(project.TenantID) === String(user.TenantID) &&
+      ProjectService._isProjectAvailableToUser_(project, user);
+  },
+
+  _validateProject_: function(projectId, tenantId, user) {
     if (!projectId) return null;
     var project = ProjectRepository.findById(projectId);
-    if (!project || String(project.TenantID) !== String(tenantId)) {
+    if (!project || String(project.TenantID) !== String(tenantId) ||
+        (user && !ProjectService._isProjectAvailableToUser_(project, user))) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه معتبر نیست.');
     }
     return project;
   },
 
-  _validateEvent_: function(eventId, tenantId) {
+  _validateEvent_: function(eventId, tenantId, user) {
     if (!eventId) return null;
     var event = EventRepository.findById(eventId);
-    if (!event || String(event.TenantID) !== String(tenantId)) {
+    if (!event || String(event.TenantID) !== String(tenantId) ||
+        (event.ProjectID && user &&
+          !this._isProjectVisible_(event.ProjectID, user))) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد منبع معتبر نیست.');
     }
     return event;
@@ -57,8 +67,8 @@ const ProcurementService = {
     Validator.required(body.ItemName, 'نام ملزوم');
     Validator.required(body.Unit, 'واحد اندازه‌گیری');
     var quantity = this._number_(body.RequestedQuantity, 'مقدار موردنیاز', false);
-    this._validateProject_(body.ProjectID, user.TenantID);
-    this._validateEvent_(body.SourceEventID, user.TenantID);
+    this._validateProject_(body.ProjectID, user.TenantID, user);
+    this._validateEvent_(body.SourceEventID, user.TenantID, user);
 
     var now = this._now_();
     var record = {
@@ -138,7 +148,7 @@ const ProcurementService = {
       var price = item.UnitPrice === '' || item.UnitPrice === undefined || item.UnitPrice === null
         ? '' : self._number_(item.UnitPrice, 'قیمت واحد', true);
       // A project-level order header is the default for each line unless a line explicitly overrides it.
-      var project = self._validateProject_(item.ProjectID || body.ProjectID, user.TenantID);
+      var project = self._validateProject_(item.ProjectID || body.ProjectID, user.TenantID, user);
       var needId = item.MaterialNeedID || '';
       var need = null;
 
@@ -187,7 +197,7 @@ const ProcurementService = {
         if (!allocation || typeof allocation !== 'object') {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تخصیص قلم سفارش معتبر نیست.');
         }
-        var allocationProject = self._validateProject_(allocation.ProjectID, user.TenantID);
+        var allocationProject = self._validateProject_(allocation.ProjectID, user.TenantID, user);
         var allocationQuantity = self._number_(allocation.AllocatedQuantity, 'مقدار تخصیص', false);
         var allocationNeedId = allocation.MaterialNeedID || needId || '';
         var allocationNeed = null;
@@ -366,8 +376,8 @@ const ProcurementService = {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
         }
         var projectId = entry.ProjectID || '';
-        this._validateProject_(projectId, user.TenantID);
-        this._validateEvent_(entry.SourceEventID || '', user.TenantID);
+        this._validateProject_(projectId, user.TenantID, user);
+        this._validateEvent_(entry.SourceEventID || '', user.TenantID, user);
 
         var prior = receivedByItem[key] || 0;
         var ordered = Math.max(0, Number(item.OrderedQuantity) || 0);
@@ -508,7 +518,7 @@ const ProcurementService = {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
     }
     var projectId = body.ProjectID || '';
-    this._validateProject_(projectId, user.TenantID);
+    this._validateProject_(projectId, user.TenantID, user);
 
     var itemAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
       return String(allocation.PurchaseOrderItemID || '') === String(item.ID);
@@ -565,7 +575,7 @@ const ProcurementService = {
       ReceivedBy: user.ID,
       CreatedAt: now
     };
-    this._validateEvent_(receipt.SourceEventID, user.TenantID);
+    this._validateEvent_(receipt.SourceEventID, user.TenantID, user);
     GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.RECEIPTS, receipt);
 
     var allItems = ProcurementRepository.getItems(user.TenantID).filter(function(candidate) {
@@ -661,7 +671,9 @@ const ProcurementService = {
       }
     });
 
-    return Response.success(needs.map(function(need) {
+    return Response.success(needs.filter(function(need) {
+      return this._isProjectVisible_(need.ProjectID, user);
+    }, this).map(function(need) {
       var copy = Object.assign({}, need);
       var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
       var ordered = Math.min(requested, Math.max(0, orderedByNeed[String(need.ID)] || 0));
@@ -725,7 +737,7 @@ const ProcurementService = {
       });
     });
 
-    return Response.success(orders.map(function(order) {
+    var mappedOrders = orders.map(function(order) {
       var copy = Object.assign({}, order);
       copy.Items = (itemsByOrder[String(order.ID)] || []).map(function(item) {
         var itemCopy = Object.assign({}, item);
@@ -764,7 +776,14 @@ const ProcurementService = {
       copy.ProjectID = orderProjectIds.length === 1 ? orderProjectIds[0] : (order.ProjectID || '');
       copy.ProjectIDs = orderProjectIds;
       return copy;
-    }));
+    });
+    // Orders allocated to any inaccessible project are omitted as a whole to
+    // prevent leaking hidden project labels, item quantities, or receipt details.
+    var visibleOrders = mappedOrders.filter(function(order) {
+      var ids = Array.isArray(order.ProjectIDs) ? order.ProjectIDs : [];
+      return ids.every(function(id) { return this._isProjectVisible_(id, user); }, this);
+    }, this);
+    return Response.success(visibleOrders);
   },
 
   /**
@@ -793,7 +812,8 @@ const ProcurementService = {
     var needs = needsResponse && Array.isArray(needsResponse.data) ? needsResponse.data : [];
     var orders = ordersResponse && Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
     var projects = ProjectRepository.getAll().filter(function(project) {
-      return String(project.TenantID || '') === String(user.TenantID || '');
+      return String(project.TenantID || '') === String(user.TenantID || '') &&
+        ProjectService._isProjectAvailableToUser_(project, user);
     });
     var projectById = {};
     projects.forEach(function(project) {
@@ -848,9 +868,35 @@ const ProcurementService = {
   dashboard: function(params) {
     var user = this._user_(params);
     var needs = ProcurementRepository.getNeeds(user.TenantID);
-    var orders = ProcurementRepository.getOrders(user.TenantID);
-    var items = ProcurementRepository.getItems(user.TenantID);
-    var receipts = ProcurementRepository.getReceipts(user.TenantID);
+    var allOrders = ProcurementRepository.getOrders(user.TenantID);
+    var allItems = ProcurementRepository.getItems(user.TenantID);
+    var allReceipts = ProcurementRepository.getReceipts(user.TenantID);
+
+    // Reuse the same visibility rules as the procurement workspace before
+    // computing aggregate counts, so hidden-project records cannot affect totals.
+    needs = needs.filter(function(need) {
+      return this._isProjectVisible_(need.ProjectID, user);
+    }, this);
+    var visibleOrdersResponse = this.listOrders(params);
+    var visibleOrders = visibleOrdersResponse && Array.isArray(visibleOrdersResponse.data)
+      ? visibleOrdersResponse.data : [];
+    var visibleOrderIds = Object.create(null);
+    var visibleItemIds = Object.create(null);
+    visibleOrders.forEach(function(order) {
+      visibleOrderIds[String(order.ID)] = true;
+      (Array.isArray(order.Items) ? order.Items : []).forEach(function(item) {
+        visibleItemIds[String(item.ID)] = true;
+      });
+    });
+    var orders = allOrders.filter(function(order) {
+      return !!visibleOrderIds[String(order.ID)];
+    });
+    var items = allItems.filter(function(item) {
+      return !!visibleItemIds[String(item.ID)];
+    });
+    var receipts = allReceipts.filter(function(receipt) {
+      return !!visibleItemIds[String(receipt.PurchaseOrderItemID || '')];
+    });
     var receivedByItem = {};
 
     receipts.forEach(function(receipt) {

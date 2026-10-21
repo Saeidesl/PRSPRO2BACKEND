@@ -22,8 +22,8 @@ const ReportService = {
       ReportRepository.getProjects()
         .filter(function(project) {
 
-          return String(project.TenantID) ===
-            String(tenantId);
+          return String(project.TenantID) === String(tenantId) &&
+            ProjectService._isProjectAvailableToUser_(project, currentUser);
 
         });
 
@@ -32,8 +32,11 @@ const ReportService = {
       ReportRepository.getEvents()
         .filter(function(event) {
 
-          return String(event.TenantID) ===
-            String(tenantId);
+          if (String(event.TenantID) !== String(tenantId)) return false;
+          if (!event.ProjectID) return true;
+          return projects.some(function(project) {
+            return String(project.ID) === String(event.ProjectID);
+          });
 
         });
 
