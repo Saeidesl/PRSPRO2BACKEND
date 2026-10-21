@@ -267,10 +267,12 @@ const ProjectService = {
 
     }
 
+    // Reading the workflow list in one range is faster than scanning the ID
+    // column and then reading the matching row separately.
     const workflow =
-      WorkflowRepository.findById(
-        project.WorkflowID
-      );
+      (WorkflowRepository.getAll() || []).find(function(item) {
+        return String(item.ID) === String(project.WorkflowID);
+      }) || null;
 
     if (!workflow) {
 
@@ -325,12 +327,15 @@ const ProjectService = {
     if (!departmentIds.length) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'حداقل یک واحد مجاز برای پروژه انتخاب کنید.');
     }
-    const tenantDepartments = DepartmentRepository.getAll().filter(function(item) {
-      return String(item.TenantID) === String(tenantId) &&
-        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    const validDepartmentIds = Object.create(null);
+    (DepartmentRepository.getAll() || []).forEach(function(item) {
+      if (String(item.TenantID) === String(tenantId) &&
+          String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+        validDepartmentIds[String(item.ID)] = true;
+      }
     });
     const invalidDepartment = departmentIds.some(function(id) {
-      return !tenantDepartments.some(function(item) { return String(item.ID) === id; });
+      return !validDepartmentIds[id];
     });
     if (invalidDepartment) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'یکی از واحدهای انتخاب‌شده معتبر نیست.');
@@ -339,12 +344,15 @@ const ProjectService = {
     const allowedUserIds = Array.isArray(project.AllowedUserIDs)
       ? project.AllowedUserIDs.map(function(id) { return String(id || '').trim(); }).filter(Boolean)
       : [];
-    const tenantUsers = UserRepository.getAll().filter(function(item) {
-      return String(item.TenantID) === String(tenantId) &&
-        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    const validUserIds = Object.create(null);
+    (UserRepository.getAll() || []).forEach(function(item) {
+      if (String(item.TenantID) === String(tenantId) &&
+          String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+        validUserIds[String(item.ID)] = true;
+      }
     });
     if (allowedUserIds.some(function(id) {
-      return !tenantUsers.some(function(item) { return String(item.ID) === id; });
+      return !validUserIds[id];
     })) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'یکی از کاربران مجاز معتبر نیست.');
     }
