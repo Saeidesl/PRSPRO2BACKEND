@@ -868,9 +868,35 @@ const ProcurementService = {
   dashboard: function(params) {
     var user = this._user_(params);
     var needs = ProcurementRepository.getNeeds(user.TenantID);
-    var orders = ProcurementRepository.getOrders(user.TenantID);
-    var items = ProcurementRepository.getItems(user.TenantID);
-    var receipts = ProcurementRepository.getReceipts(user.TenantID);
+    var allOrders = ProcurementRepository.getOrders(user.TenantID);
+    var allItems = ProcurementRepository.getItems(user.TenantID);
+    var allReceipts = ProcurementRepository.getReceipts(user.TenantID);
+
+    // Reuse the same visibility rules as the procurement workspace before
+    // computing aggregate counts, so hidden-project records cannot affect totals.
+    needs = needs.filter(function(need) {
+      return this._isProjectVisible_(need.ProjectID, user);
+    }, this);
+    var visibleOrdersResponse = this.listOrders(params);
+    var visibleOrders = visibleOrdersResponse && Array.isArray(visibleOrdersResponse.data)
+      ? visibleOrdersResponse.data : [];
+    var visibleOrderIds = Object.create(null);
+    var visibleItemIds = Object.create(null);
+    visibleOrders.forEach(function(order) {
+      visibleOrderIds[String(order.ID)] = true;
+      (Array.isArray(order.Items) ? order.Items : []).forEach(function(item) {
+        visibleItemIds[String(item.ID)] = true;
+      });
+    });
+    var orders = allOrders.filter(function(order) {
+      return !!visibleOrderIds[String(order.ID)];
+    });
+    var items = allItems.filter(function(item) {
+      return !!visibleItemIds[String(item.ID)];
+    });
+    var receipts = allReceipts.filter(function(receipt) {
+      return !!visibleItemIds[String(receipt.PurchaseOrderItemID || '')];
+    });
     var receivedByItem = {};
 
     receipts.forEach(function(receipt) {
