@@ -55,11 +55,22 @@ const ProjectValidator = {
       );
     }
 
-    if (data.WorkflowID !== undefined && data.WorkflowID !== null && data.WorkflowID !== '') {
-      Validator.id(
-        data.WorkflowID,
-        'WorkflowID'
-      );
+    Validator.required(data.WorkflowID, 'گردش کار');
+    Validator.id(data.WorkflowID, 'WorkflowID');
+
+    if (!Array.isArray(data.AvailableDepartmentIDs) || data.AvailableDepartmentIDs.length < 1) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'حداقل یک واحد مجاز برای پروژه انتخاب کنید.');
+    }
+    if (data.AvailableDepartmentIDs.length > 100) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تعداد واحدهای مجاز بیش از حد مجاز است.');
+    }
+    if (data.AllowedUserIDs !== undefined && data.AllowedUserIDs !== null &&
+        (!Array.isArray(data.AllowedUserIDs) || data.AllowedUserIDs.length > 500)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست کاربران مجاز معتبر نیست.');
+    }
+    if (data.NotifyEnabled !== undefined && typeof data.NotifyEnabled !== 'boolean' &&
+        !['true', 'false'].includes(String(data.NotifyEnabled).toLowerCase())) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم اطلاع‌رسانی معتبر نیست.');
     }
 
     return true;
