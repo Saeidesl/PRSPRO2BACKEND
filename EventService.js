@@ -205,6 +205,10 @@ const EventService = {
       changes.Status = eventType.TargetProjectStatus;
     }
 
+    if (eventType.TargetStepStatus !== undefined && eventType.TargetStepStatus !== null) {
+      changes.CurrentStepStatus = String(eventType.TargetStepStatus).trim();
+    }
+
     const availableDepartments = this._parseArray_(
       eventType.AvailableDepartmentIDs
     );
@@ -999,6 +1003,7 @@ const EventService = {
       // سابقه وضعیت پروژه پیش از اعمال رویداد
       PreviousStepID: project ? (project.CurrentStepID || '') : '',
       PreviousProjectStatus: project ? (project.Status || '') : '',
+      PreviousCurrentStepStatus: project ? (project.CurrentStepStatus || '') : '',
       PreviousAvailableDepartmentIDs: project ? (project.AvailableDepartmentIDs || '') : '',
       PreviousSnapshotCaptured: project ? true : false
     };
@@ -1247,6 +1252,7 @@ const EventService = {
         event.PreviousSnapshotCaptured === undefined &&
         event.PreviousStepID !== undefined &&
         event.PreviousProjectStatus !== undefined &&
+        event.PreviousCurrentStepStatus !== undefined &&
         event.PreviousAvailableDepartmentIDs !== undefined &&
         String(event.PreviousProjectStatus || '').trim() !== ''
       );
@@ -1267,6 +1273,7 @@ const EventService = {
     if (project && hasExpectedChanges && hasPreviousSnapshot) {
       const restoreData = {
         CurrentStepID: event.PreviousStepID,
+        CurrentStepStatus: event.PreviousCurrentStepStatus || '',
         Status: event.PreviousProjectStatus,
         AvailableDepartmentIDs:
           event.PreviousAvailableDepartmentIDs,
