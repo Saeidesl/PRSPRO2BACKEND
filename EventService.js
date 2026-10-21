@@ -41,21 +41,8 @@ const EventService = {
   },
 
   _checkProjectAvailability_: function(project, user) {
-    if (this._isAdmin_(user) ||
-        String(project.CreatedBy || '') === String(user.ID || '')) return;
-    const departments = this._parseArray_(project.AvailableDepartmentIDs);
-    const users = this._parseArray_(project.AllowedUserIDs);
-    if (!departments.length && !users.length) return;
-    const allowed = departments.some(function(id) {
-      return String(id) === String(user.DepartmentID || '');
-    }) || users.some(function(id) {
-      return String(id) === String(user.ID);
-    });
-    if (!allowed) {
-      throw ErrorHandler.create(
-        Constants.ERROR.PERMISSION_DENIED,
-        'این پروژه برای واحد یا کاربر شما مجاز نیست.'
-      );
+    if (!ProjectService._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
     }
   },
 
@@ -241,7 +228,11 @@ const EventService = {
     const events = EventRepository.getAll() || [];
 
     const filtered = events.filter(function(event) {
-      return String(event.TenantID) === tenantId;
+      if (String(event.TenantID) !== tenantId) return false;
+      if (!event.ProjectID) return true;
+      const project = ProjectRepository.findById(event.ProjectID);
+      return !!project && String(project.TenantID) === tenantId &&
+        ProjectService._isProjectAvailableToUser_(project, user);
     });
 
     // فهرست عمومی رویدادها پروژهٔ مشخصی ندارد؛
@@ -409,10 +400,14 @@ const EventService = {
     }
 
     if (String(event.TenantID) !== String(user.TenantID)) {
-      throw ErrorHandler.create(
-        Constants.ERROR.NOT_FOUND,
-        'رویداد مورد نظر پیدا نشد.'
-      );
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+    }
+    if (event.ProjectID) {
+      const project = ProjectRepository.findById(event.ProjectID);
+      if (!project || String(project.TenantID) !== String(user.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(project, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+      }
     }
 
     return Response.success(
@@ -547,11 +542,9 @@ const EventService = {
       );
     }
 
-    if (String(project.TenantID) !== String(user.TenantID)) {
-      throw ErrorHandler.create(
-        Constants.ERROR.NOT_FOUND,
-        'پروژه مورد نظر پیدا نشد.'
-      );
+    if (String(project.TenantID) !== String(user.TenantID) ||
+        !ProjectService._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
     }
 
     const tenantId = String(user.TenantID);
@@ -571,11 +564,9 @@ const EventService = {
     const user = AccessControlService.getCurrentUser(params || {});
     const project = ProjectRepository.findById(projectId);
 
-    if (!project || String(project.TenantID) !== String(user.TenantID)) {
-      throw ErrorHandler.create(
-        Constants.ERROR.NOT_FOUND,
-        'پروژه مورد نظر پیدا نشد.'
-      );
+    if (!project || String(project.TenantID) !== String(user.TenantID) ||
+        !ProjectService._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
     }
 
     const tenantId = String(user.TenantID);
@@ -679,11 +670,9 @@ const EventService = {
       );
     }
 
-    if (String(project.TenantID) !== String(user.TenantID)) {
-      throw ErrorHandler.create(
-        Constants.ERROR.NOT_FOUND,
-        'پروژه مورد نظر پیدا نشد.'
-      );
+    if (String(project.TenantID) !== String(user.TenantID) ||
+        !ProjectService._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
     }
 
     const tenantId = String(user.TenantID);
