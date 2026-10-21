@@ -402,6 +402,7 @@ const EventTypeService = {
       ),
       TargetDepartmentID: data.TargetDepartmentID || '',
       TargetProjectStatus: data.TargetProjectStatus || '',
+      TargetStepStatus: data.TargetStepStatus || '',
       AllowedDepartmentIDs: this._parseArray_(
         data.AllowedDepartmentIDs
       ),
