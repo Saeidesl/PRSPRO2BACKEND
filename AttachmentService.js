@@ -153,15 +153,14 @@ const AttachmentService = {
     }
 
     if (
-      String(entity.TenantID) !==
-      String(currentUser.TenantID)
+      String(entity.TenantID) !== String(currentUser.TenantID) ||
+      (String(entityType) === 'PROJECT' &&
+        !ProjectService._isProjectAvailableToUser_(entity, currentUser))
     ) {
-
       throw ErrorHandler.create(
         Constants.ERROR.NOT_FOUND,
         'رکورد مورد نظر پیدا نشد.'
       );
-
     }
 
     const attachments =
@@ -249,17 +248,15 @@ const AttachmentService = {
     }
 
     if (
-      String(entity.TenantID) !==
-      String(currentUser.TenantID)
+      String(entity.TenantID) !== String(currentUser.TenantID) ||
+      (String(data.EntityType) === 'PROJECT' &&
+        !ProjectService._isProjectAvailableToUser_(entity, currentUser))
     ) {
-
       throw ErrorHandler.create(
         Constants.ERROR.NOT_FOUND,
         'رکورد مورد نظر پیدا نشد.'
       );
-
     }
-
 
     /*
      * UploadedBy نباید از ورودی کاربر گرفته شود.
