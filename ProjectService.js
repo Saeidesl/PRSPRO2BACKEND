@@ -112,6 +112,23 @@ const ProjectService = {
   },
 
 
+  _isProjectAvailableToUser_: function(project, user) {
+    if (AccessControlService.isAdmin(user)) return true;
+    function parse(value) {
+      if (Array.isArray(value)) return value;
+      try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; }
+      catch (error) { return []; }
+    }
+    const departments = parse(project.AvailableDepartmentIDs);
+    const users = parse(project.AllowedUserIDs);
+    if (!departments.length && !users.length) return true;
+    return departments.some(function(id) {
+      return String(id) === String(user.DepartmentID || '');
+    }) || users.some(function(id) {
+      return String(id) === String(user.ID);
+    });
+  },
+
   list: function(params) {
 
     const user =
@@ -125,8 +142,8 @@ const ProjectService = {
     const tenantProjects =
       projects.filter(function(project) {
 
-        return String(project.TenantID) ===
-          String(user.TenantID);
+        return String(project.TenantID) === String(user.TenantID) &&
+          ProjectService._isProjectAvailableToUser_(project, user);
 
       });
 
@@ -162,15 +179,13 @@ const ProjectService = {
     }
 
     if (
-      String(project.TenantID) !==
-      String(user.TenantID)
+      String(project.TenantID) !== String(user.TenantID) ||
+      !this._isProjectAvailableToUser_(project, user)
     ) {
-
       throw ErrorHandler.create(
         Constants.ERROR.NOT_FOUND,
         'پروژه مورد نظر پیدا نشد.'
       );
-
     }
 
     return Response.success(
