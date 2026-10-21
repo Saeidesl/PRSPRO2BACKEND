@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus']
     },
 
     WORKFLOWS: {
@@ -70,7 +70,7 @@ const APP_CONFIG = {
 
     EVENT_TYPES: {
       name: '11_EventTypes',
-      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity']
+      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity','TargetStepStatus']
     },
 
     EVENT_FIELDS: {
@@ -80,7 +80,7 @@ const APP_CONFIG = {
 
     EVENTS: {
       name: '13_Events',
-      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON']
+      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON','PreviousCurrentStepStatus']
     },
 
     EVENT_DATA: {
