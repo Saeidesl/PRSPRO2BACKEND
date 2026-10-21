@@ -335,6 +335,19 @@ const ProjectService = {
     const now =
       new Date().toISOString();
 
+    // اگر شرکت وضعیت «در انتظار اقدام» را تعریف کرده باشد، پروژه جدید
+    // به‌صورت پیش‌فرض در همین وضعیت قرار می‌گیرد؛ در غیر این صورت رفتار قبلی حفظ می‌شود.
+    let initialStatus = project.Status || Constants.STATUS.ACTIVE;
+    if (!project.Status && typeof ProjectStatusService !== 'undefined' && ProjectStatusService._getRows_) {
+      const awaitingStatus = ProjectStatusService._getRows_().find(function(item) {
+        const name = String(item.Name || '').replace(/[\u200c\s]+/g, ' ').trim();
+        return String(item.TenantID) === String(tenantId) &&
+          String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+          (name === 'در انتظار اقدام' || name === 'درانتظار اقدام');
+      });
+      if (awaitingStatus) initialStatus = awaitingStatus.Code || initialStatus;
+    }
+
     const newProject = {
 
       ID:
@@ -382,8 +395,7 @@ const ProjectService = {
       CurrentStepStatus: '',
 
       Status:
-        project.Status ||
-        Constants.STATUS.ACTIVE,
+        initialStatus,
 
       CreatedBy:
         user.ID,
