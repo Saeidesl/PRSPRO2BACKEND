@@ -1140,6 +1140,13 @@ const EventService = {
         'رویداد مورد نظر پیدا نشد.'
       );
     }
+    if (event.ProjectID) {
+      const linkedProject = ProjectRepository.findById(event.ProjectID);
+      if (!linkedProject || String(linkedProject.TenantID) !== String(user.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(linkedProject, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+      }
+    }
 
     if (
       String(event.Status).toUpperCase() ===
