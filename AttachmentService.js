@@ -437,6 +437,10 @@ const AttachmentService = {
 
     }
 
+    if (!this._isAttachmentVisibleToUser_(attachment, currentUser)) {
+      throw ErrorHandler.create(Constants.ERROR.FILE_NOT_FOUND, 'فایل مورد نظر پیدا نشد.');
+    }
+
     if (
       String(attachment.Status) ===
       Constants.STATUS.DELETED
@@ -523,6 +527,10 @@ const AttachmentService = {
         'فایل مورد نظر پیدا نشد.'
       );
 
+    }
+
+    if (!this._isAttachmentVisibleToUser_(attachment, currentUser)) {
+      throw ErrorHandler.create(Constants.ERROR.FILE_NOT_FOUND, 'فایل مورد نظر پیدا نشد.');
     }
 
     if (
