@@ -122,7 +122,7 @@ const ProjectService = {
     }
     const departments = parse(project.AvailableDepartmentIDs);
     const users = parse(project.AllowedUserIDs);
-    if (!departments.length && !users.length) return true;
+    // Fail closed when a record has no valid access list.
     return departments.some(function(id) {
       return String(id) === String(user.DepartmentID || '');
     }) || users.some(function(id) {
