@@ -6,6 +6,21 @@
 
 const AttachmentService = {
 
+  _isAttachmentVisibleToUser_: function(attachment, user) {
+    if (!attachment || String(attachment.TenantID) !== String(user.TenantID)) return false;
+    var type = String(attachment.EntityType || '').toUpperCase();
+    var entity = type === 'PROJECT' ? ProjectRepository.findById(attachment.EntityID)
+      : (type === 'EVENT' ? EventRepository.findById(attachment.EntityID) : null);
+    if (!entity || String(entity.TenantID) !== String(user.TenantID)) return false;
+    if (type === 'PROJECT') return ProjectService._isProjectAvailableToUser_(entity, user);
+    if (type === 'EVENT' && entity.ProjectID) {
+      var project = ProjectRepository.findById(entity.ProjectID);
+      return !!project && String(project.TenantID) === String(user.TenantID) &&
+        ProjectService._isProjectAvailableToUser_(project, user);
+    }
+    return type === 'EVENT';
+  },
+
   list: function(params) {
 
     const currentUser =
@@ -19,10 +34,9 @@ const AttachmentService = {
     const tenantAttachments =
       attachments.filter(function(attachment) {
 
-        return String(attachment.TenantID) ===
-          String(currentUser.TenantID) &&
-          String(attachment.Status) !==
-          Constants.STATUS.DELETED;
+        return String(attachment.TenantID) === String(currentUser.TenantID) &&
+          String(attachment.Status) !== Constants.STATUS.DELETED &&
+          AttachmentService._isAttachmentVisibleToUser_(attachment, currentUser);
 
       });
 
@@ -72,6 +86,10 @@ const AttachmentService = {
         'فایل مورد نظر پیدا نشد.'
       );
 
+    }
+
+    if (!this._isAttachmentVisibleToUser_(attachment, currentUser)) {
+      throw ErrorHandler.create(Constants.ERROR.FILE_NOT_FOUND, 'فایل مورد نظر پیدا نشد.');
     }
 
     if (
