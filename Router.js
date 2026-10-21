@@ -89,6 +89,11 @@ const Router = {
       return DepartmentService.get(departmentId, params);
     }
 
+    if (path === '/project-form/lookups') {
+      AccessControlService.require(params, 'PROJECT_CREATE');
+      return ProjectService.projectFormLookups(params);
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_VIEW');
       return ProjectService.list(params);
