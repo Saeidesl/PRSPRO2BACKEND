@@ -205,7 +205,8 @@ const EventService = {
       changes.Status = eventType.TargetProjectStatus;
     }
 
-    if (eventType.TargetStepStatus !== undefined && eventType.TargetStepStatus !== null) {
+    if (eventType.TargetStepStatus !== undefined && eventType.TargetStepStatus !== null &&
+        String(eventType.TargetStepStatus).trim() !== '') {
       changes.CurrentStepStatus = String(eventType.TargetStepStatus).trim();
     }
 
