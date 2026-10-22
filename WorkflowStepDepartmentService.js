@@ -20,65 +20,16 @@ const WorkflowStepDepartmentService = {
     });
   },
 
+  // Single and bulk assignment share one validation and persistence path.
+  // This keeps the public API behavior consistent and prevents logic drift.
   assign: function(data, params) {
-    const user = AccessControlService.getCurrentUser(params || {});
     data = data || {};
-
-    const workflowId = data.WorkflowID;
-    const stepId = data.WorkflowStepID;
-    const departmentId = data.DepartmentID;
-
-    if (!workflowId || !stepId || !departmentId) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'گردش‌کار، مرحله و دپارتمان الزامی هستند.');
-    }
-
-    const workflow = WorkflowRepository.findById(workflowId);
-    if (!workflow || String(workflow.TenantID) !== String(user.TenantID)) {
-      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
-    }
-    if (String(workflow.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'اتصال واحد به گردش‌کار غیرفعال امکان‌پذیر نیست.');
-    }
-
-    const step = WorkflowStepRepository.findById(stepId);
-    if (!step ||
-        String(step.TenantID) !== String(user.TenantID) ||
-        String(step.WorkflowID) !== String(workflowId) ||
-        String(step.Status).toUpperCase() !== 'ACTIVE') {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'مرحله انتخاب‌شده معتبر یا فعال نیست.');
-    }
-
-    const department = DepartmentRepository.findById(departmentId);
-    if (!department ||
-        String(department.TenantID) !== String(user.TenantID) ||
-        String(department.Status).toUpperCase() !== 'ACTIVE') {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'دپارتمان انتخاب‌شده معتبر یا فعال نیست.');
-    }
-
-    const assignments = WorkflowStepDepartmentRepository.findByWorkflowId(workflowId).filter(function(item) {
-      return String(item.TenantID) === String(user.TenantID) &&
-        String(item.DepartmentID) === String(departmentId) &&
-        String(item.Status).toUpperCase() === 'ACTIVE';
-    });
-
-    if (assignments.length > 0) {
-      if (String(assignments[0].WorkflowStepID) === String(stepId)) {
-        return assignments[0];
-      }
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'این دپارتمان قبلاً به مرحله دیگری در همین گردش‌کار متصل شده است.');
-    }
-
-    const now = new Date();
-    return WorkflowStepDepartmentRepository.insert({
-      ID: 'WSD_' + Utilities.getUuid(),
-      TenantID: user.TenantID,
-      WorkflowID: workflowId,
-      WorkflowStepID: stepId,
-      DepartmentID: departmentId,
-      Status: 'ACTIVE',
-      CreatedAt: now,
-      UpdatedAt: now
-    });
+    const workflowId = data.WorkflowID || data.workflowId;
+    const result = this.assignMany(workflowId, [{
+      DepartmentID: data.DepartmentID || data.departmentId,
+      WorkflowStepID: data.WorkflowStepID || data.workflowStepId
+    }], params);
+    return result.assignments[0] || null;
   },
 
   assignMany: function(workflowId, assignments, params) {
@@ -172,7 +123,15 @@ const WorkflowStepDepartmentService = {
     });
 
     if (toInsert.length) {
-      WorkflowStepDepartmentRepository.insertMany(toInsert);
+      // Keep batch writes as the preferred path, but remain compatible with
+      // an older deployed repository object that does not expose insertMany.
+      if (typeof WorkflowStepDepartmentRepository.insertMany === 'function') {
+        WorkflowStepDepartmentRepository.insertMany(toInsert);
+      } else {
+        toInsert.forEach(function(record) {
+          WorkflowStepDepartmentRepository.insert(record);
+        });
+      }
     }
 
     return {
