@@ -677,40 +677,8 @@ const ProjectService = {
       }
     }
 
-    if (
-      data.ProjectCode !== undefined
-    ) {
-
-      const newProjectCode =
-        String(data.ProjectCode).trim();
-
-      const projects =
-        ProjectRepository.getAll();
-
-      const duplicate =
-        projects.some(function(item) {
-
-          return String(item.ID) !==
-            String(id) &&
-            String(item.TenantID) ===
-            String(user.TenantID) &&
-            String(item.ProjectCode) ===
-            newProjectCode;
-
-        });
-
-      if (duplicate) {
-
-        throw ErrorHandler.create(
-          Constants.ERROR.DUPLICATE,
-          'کد پروژه قبلاً در این Tenant ثبت شده است.'
-        );
-
-      }
-
-      updateData.ProjectCode =
-        newProjectCode;
-    }
+    // ProjectCode is immutable and was checked above. Do not reread every
+    // project row for an unchanged code during ordinary edits.
 
     if (
       data.Title !== undefined
@@ -781,13 +749,40 @@ const ProjectService = {
         String(data.NotifyEnabled).toLowerCase() === 'true';
     }
 
-    if (
-      data.Status !== undefined
-    ) {
-
-      updateData.Status =
-        data.Status;
-
+    if (data.Status !== undefined && String(data.Status).trim() !== '') {
+      const requestedStatus = String(data.Status).trim();
+      const currentStatus = String(existing.Status || '');
+      if (requestedStatus === currentStatus) {
+        // Permit editing other fields while preserving a status that has since
+        // become inactive; the edit form may expose it only as the current value.
+        updateData.Status = currentStatus;
+      } else {
+        const allStatuses = typeof ProjectStatusService !== 'undefined' &&
+          ProjectStatusService && typeof ProjectStatusService._getRows_ === 'function'
+          ? (ProjectStatusService._getRows_() || [])
+          : [];
+        const activeStatuses = allStatuses.filter(function(item) {
+          return String(item.TenantID) === String(user.TenantID) &&
+            String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        });
+        const matchingStatus = activeStatuses.find(function(item) {
+          return String(item.Code || '') === requestedStatus ||
+            String(item.ID || '') === requestedStatus;
+        });
+        if (matchingStatus) {
+          updateData.Status = matchingStatus.Code || matchingStatus.ID;
+        } else if (!activeStatuses.length &&
+          [Constants.STATUS.ACTIVE, Constants.STATUS.ON_HOLD,
+            Constants.STATUS.COMPLETED, Constants.STATUS.CANCELLED].indexOf(requestedStatus) !== -1) {
+          // Compatibility for installations that have not seeded status rows yet.
+          updateData.Status = requestedStatus;
+        } else {
+          throw ErrorHandler.create(
+            Constants.ERROR.VALIDATION_ERROR,
+            'وضعیت انتخاب‌شده معتبر یا فعال نیست.'
+          );
+        }
+      }
     }
 
     updateData.UpdatedAt =
