@@ -58,24 +58,63 @@ const ProjectService = {
     });
     // Active, tenant-scoped project statuses are included in the same
     // lookup request so the create form does not need another server round-trip.
-    let projectStatuses = [];
+    // Do not silently convert sheet/schema errors into an empty list: that made
+    // the UI claim that no active statuses existed even when loading had failed.
+    const readProjectStatusRows = function() {
+      return ProjectStatusService._getRows_() || [];
+    };
+    const isActiveProjectStatus = function(item) {
+      return String(item.Status || 'ACTIVE').trim().toUpperCase() === 'ACTIVE';
+    };
+    const belongsToTenant = function(item) {
+      return String(item.TenantID || '').trim() === tenantId.trim();
+    };
+
+    let statusRows;
     try {
-      projectStatuses = (ProjectStatusService._getRows_() || []).filter(function(item) {
-        return String(item.TenantID) === tenantId &&
-          String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-      }).map(function(item) {
-        return {
-          ID: item.ID,
-          Code: item.Code || '',
-          Name: item.Name || item.Code || String(item.ID)
-        };
-      }).sort(function(a, b) {
-        return String(a.Name).localeCompare(String(b.Name), 'fa');
-      });
-    } catch (statusLookupError) {
-      // Preserve form availability on older installations without the status sheet.
-      projectStatuses = [];
+      statusRows = readProjectStatusRows();
+    } catch (statusSheetError) {
+      // Upgrade older installations automatically when the status sheet is
+      // missing. setupProjectStatuses is idempotent and preserves existing rows.
+      if (typeof setupProjectStatuses !== 'function') {
+        throw new Error('بارگذاری وضعیت‌های پروژه ناموفق بود: ' + statusSheetError.message);
+      }
+      try {
+        setupProjectStatuses();
+        statusRows = readProjectStatusRows();
+      } catch (setupError) {
+        throw new Error('شیت وضعیت‌های پروژه آماده نیست و ایجاد/بررسی آن ناموفق بود: ' + setupError.message);
+      }
     }
+
+    let tenantActiveStatuses = statusRows.filter(function(item) {
+      return belongsToTenant(item) && isActiveProjectStatus(item);
+    });
+
+    // If this tenant has no status rows yet, seed the standard statuses for
+    // active tenants. This also repairs installations where the migration was
+    // deployed but never executed. Existing custom statuses are not overwritten.
+    if (!tenantActiveStatuses.length && typeof setupProjectStatuses === 'function') {
+      try {
+        setupProjectStatuses();
+        statusRows = readProjectStatusRows();
+        tenantActiveStatuses = statusRows.filter(function(item) {
+          return belongsToTenant(item) && isActiveProjectStatus(item);
+        });
+      } catch (setupError) {
+        throw new Error('آماده‌سازی وضعیت‌های پیش‌فرض پروژه ناموفق بود: ' + setupError.message);
+      }
+    }
+
+    const projectStatuses = tenantActiveStatuses.map(function(item) {
+      return {
+        ID: item.ID,
+        Code: item.Code || '',
+        Name: item.Name || item.Code || String(item.ID)
+      };
+    }).sort(function(a, b) {
+      return String(a.Name).localeCompare(String(b.Name), 'fa');
+    });
 
     return Response.success({
       departments: departments,
