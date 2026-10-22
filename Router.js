@@ -135,6 +135,11 @@ const Router = {
       return ProjectService.get(projectId, params);
     }
 
+    if (path === '/workflow-management/bootstrap') {
+      AccessControlService.require(params, 'WORKFLOW_MANAGE');
+      return WorkflowService.managementBootstrap(params);
+    }
+
     if (path === '/workflows') {
       // Project creators need read-only workflow choices during project creation.
       this.requireAny(params, ['WORKFLOW_MANAGE', 'PROJECT_CREATE']);
@@ -147,6 +152,11 @@ const Router = {
 
       if (!workflowId) {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
+      }
+
+      if (parts[3] === 'management-data') {
+        AccessControlService.require(params, 'WORKFLOW_MANAGE');
+        return WorkflowService.managementData(workflowId, params);
       }
 
       if (parts[3] === 'steps') {
