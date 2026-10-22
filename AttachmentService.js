@@ -47,6 +47,48 @@ const AttachmentService = {
   },
 
 
+  // Lightweight metadata endpoint for project-card thumbnails. It avoids
+  // returning every attachment and avoids repeated project-row lookups per file.
+  listProjectImages: function(params) {
+    const currentUser = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(currentUser.TenantID || '');
+    const visibleProjectIds = Object.create(null);
+
+    (ProjectRepository.getAll() || []).forEach(function(project) {
+      if (String(project.TenantID) === tenantId &&
+          ProjectService._isProjectAvailableToUser_(project, currentUser)) {
+        visibleProjectIds[String(project.ID)] = true;
+      }
+    });
+
+    const latestByProject = Object.create(null);
+    const images = (AttachmentRepository.getAll() || []).filter(function(item) {
+      const status = String(item.Status || 'ACTIVE').toUpperCase();
+      return String(item.TenantID) === tenantId &&
+        String(item.EntityType || '').toUpperCase() === 'PROJECT' &&
+        !!visibleProjectIds[String(item.EntityID || '')] &&
+        String(item.MimeType || '').toLowerCase().indexOf('image/') === 0 &&
+        status !== String(Constants.STATUS.DELETED).toUpperCase() &&
+        status !== 'VOID';
+    });
+
+    images.sort(function(a, b) {
+      const dateA = new Date(a.UploadedAt || a.CreatedAt || 0).getTime() || 0;
+      const dateB = new Date(b.UploadedAt || b.CreatedAt || 0).getTime() || 0;
+      return dateB - dateA;
+    });
+
+    images.forEach(function(item) {
+      const projectId = String(item.EntityID || '');
+      if (projectId && !latestByProject[projectId]) latestByProject[projectId] = item;
+    });
+
+    return Response.success(Object.keys(latestByProject).map(function(projectId) {
+      return latestByProject[projectId];
+    }));
+  },
+
+
   get: function(
     id,
     params
