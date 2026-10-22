@@ -1,0 +1,57 @@
+name: Backend source checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.js'
+      - 'appsscript.json'
+      - '.github/workflows/backend-check.yml'
+  pull_request:
+    paths:
+      - '**.js'
+      - 'appsscript.json'
+      - '.github/workflows/backend-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate manifest and all source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f appsscript.json
+          node -e "JSON.parse(require('fs').readFileSync('appsscript.json', 'utf8'));"
+          count=0
+          declare -A names=()
+          for file in *.js; do
+            [ -f "$file" ] || continue
+            node --check "$file"
+            name="${file%.js}"
+            name="${name%.gs}"
+            if [[ -n "${names[$name]+x}" ]]; then
+              echo "Duplicate Apps Script target name: $name.gs"
+              exit 1
+            fi
+            names["$name"]=1
+            count=$((count + 1))
+          done
+          if [ "$count" -lt 60 ]; then
+            echo "Expected at least 60 backend source files, found $count."
+            exit 1
+          fi
+          echo "Validated $count JavaScript source files and appsscript.json."
