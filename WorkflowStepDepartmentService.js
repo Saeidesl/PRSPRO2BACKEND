@@ -153,8 +153,11 @@ const WorkflowStepDepartmentService = {
       return item;
     }
 
+    // INACTIVE is accepted by both the current and older sheet validations.
+    // This keeps soft-removal reliable even if setupDatabase() has not yet
+    // refreshed the validation rule to include DELETED.
     return WorkflowStepDepartmentRepository.update(id, {
-      Status: 'DELETED',
+      Status: 'INACTIVE',
       UpdatedAt: new Date()
     });
   }
