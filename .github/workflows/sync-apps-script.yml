@@ -19,6 +19,10 @@ concurrency:
 
 jobs:
   validate-and-sync:
+    # Production Apps Script sync is opt-in. Set repository variable
+    # ALLOW_APPS_SCRIPT_DEPLOY=true and manually dispatch this workflow only
+    # after the target deployment has been explicitly approved.
+    if: github.event_name == 'workflow_dispatch' && vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
