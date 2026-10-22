@@ -89,6 +89,12 @@ const Router = {
       return DepartmentService.get(departmentId, params);
     }
 
+    if (path === '/project-card-images') {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      AccessControlService.require(params, 'ATTACHMENT_VIEW');
+      return AttachmentService.listProjectImages(params);
+    }
+
     if (path === '/project-form/lookups') {
       AccessControlService.require(params, 'PROJECT_CREATE');
       return ProjectService.projectFormLookups(params);
