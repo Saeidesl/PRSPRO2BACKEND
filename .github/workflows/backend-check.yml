@@ -30,6 +30,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Run backend unit tests
+        run: node --test tests/*.test.js
+
       - name: Validate manifest and all source files
         shell: bash
         run: |
