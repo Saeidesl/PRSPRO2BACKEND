@@ -56,10 +56,32 @@ const ProjectService = {
         Status: item.Status || 'ACTIVE'
       };
     });
+    // Active, tenant-scoped project statuses are included in the same
+    // lookup request so the create form does not need another server round-trip.
+    let projectStatuses = [];
+    try {
+      projectStatuses = (ProjectStatusService._getRows_() || []).filter(function(item) {
+        return String(item.TenantID) === tenantId &&
+          String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      }).map(function(item) {
+        return {
+          ID: item.ID,
+          Code: item.Code || '',
+          Name: item.Name || item.Code || String(item.ID)
+        };
+      }).sort(function(a, b) {
+        return String(a.Name).localeCompare(String(b.Name), 'fa');
+      });
+    } catch (statusLookupError) {
+      // Preserve form availability on older installations without the status sheet.
+      projectStatuses = [];
+    }
+
     return Response.success({
       departments: departments,
       users: users,
-      workflows: workflows
+      workflows: workflows,
+      projectStatuses: projectStatuses
     });
   },
 
@@ -360,10 +382,27 @@ const ProjectService = {
     const now =
       new Date().toISOString();
 
-    // اگر شرکت وضعیت «در انتظار اقدام» را تعریف کرده باشد، پروژه جدید
-    // به‌صورت پیش‌فرض در همین وضعیت قرار می‌گیرد؛ در غیر این صورت رفتار قبلی حفظ می‌شود.
+    // A requested initial status must be an active status defined for this tenant.
+    // Keep the legacy default behavior when no status was supplied by older clients.
     let initialStatus = project.Status || Constants.STATUS.ACTIVE;
-    if (!project.Status && typeof ProjectStatusService !== 'undefined' && ProjectStatusService._getRows_) {
+    if (project.Status) {
+      let validStatus = null;
+      if (typeof ProjectStatusService !== 'undefined' && ProjectStatusService._getRows_) {
+        validStatus = (ProjectStatusService._getRows_() || []).find(function(item) {
+          return String(item.TenantID) === String(tenantId) &&
+            String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+            (String(item.Code || '') === String(project.Status) ||
+             String(item.ID || '') === String(project.Status));
+        }) || null;
+      }
+      if (!validStatus) {
+        throw ErrorHandler.create(
+          Constants.ERROR.VALIDATION_ERROR,
+          'وضعیت انتخاب‌شده معتبر یا فعال نیست.'
+        );
+      }
+      initialStatus = validStatus.Code || validStatus.ID;
+    } else if (typeof ProjectStatusService !== 'undefined' && ProjectStatusService._getRows_) {
       try {
         const awaitingStatus = ProjectStatusService._getRows_().find(function(item) {
           const name = String(item.Name || '').replace(/[\u200c\s]+/g, ' ').trim();
