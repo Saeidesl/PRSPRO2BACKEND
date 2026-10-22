@@ -47,6 +47,10 @@ const WorkflowStepDepartmentRepository = {
     return GoogleSheetsRepository.insert(this.SHEET_NAME, data);
   },
 
+  insertMany: function(records) {
+    return GoogleSheetsRepository.insertMany(this.SHEET_NAME, records);
+  },
+
   update: function(id, data) {
     return GoogleSheetsRepository.updateById(
       this.SHEET_NAME,
