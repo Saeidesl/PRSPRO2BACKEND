@@ -6,6 +6,106 @@
 
 const ReportService = {
 
+  _unwrapResponse_: function(response) {
+    if (!response || typeof response !== 'object') return response;
+    if (response.data !== undefined) return response.data;
+    return response;
+  },
+
+  listReportProjects: function(params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID || '');
+    const projects = (ProjectRepository.getAll() || []).filter(function(project) {
+      return String(project.TenantID || '') === tenantId &&
+        ProjectService._isProjectAvailableToUser_(project, user);
+    }).sort(function(a, b) {
+      return new Date(b.CreatedAt || 0).getTime() - new Date(a.CreatedAt || 0).getTime();
+    }).map(function(project) {
+      return {
+        ID: project.ID,
+        ProjectCode: project.ProjectCode || project.Code || '',
+        Title: project.Title || project.Name || '',
+        Quantity: project.Quantity !== undefined ? project.Quantity : (project.TotalQuantity || ''),
+        Status: project.Status || '',
+        WorkflowID: project.WorkflowID || '',
+        CurrentStepID: project.CurrentStepID || '',
+        CreatedAt: project.CreatedAt || '',
+        Description: project.Description || ''
+      };
+    });
+    return Response.success({ items: projects, total: projects.length });
+  },
+
+  projectReport: function(projectId, params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID || '');
+    const project = ProjectRepository.findById(projectId);
+    if (!project || String(project.TenantID || '') !== tenantId ||
+        !ProjectService._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
+    }
+
+    const eventResponse = EventService.listByProject(projectId, params || {});
+    const eventPayload = this._unwrapResponse_(eventResponse);
+    const eventRows = Array.isArray(eventPayload) ? eventPayload :
+      (eventPayload && Array.isArray(eventPayload.items) ? eventPayload.items : []);
+    const events = eventRows.filter(function(event) {
+      const status = String(event.Status || '').trim().toUpperCase();
+      return status !== 'VOID' && status !== 'CANCELLED' && status !== 'CANCELED';
+    });
+
+    let procurement = { needs: [], orders: [] };
+    if (typeof ProcurementService !== 'undefined' &&
+        ProcurementService && typeof ProcurementService.reports === 'function') {
+      const procurementPayload = this._unwrapResponse_(ProcurementService.reports(params || {})) || {};
+      const allNeeds = Array.isArray(procurementPayload.needs) ? procurementPayload.needs : [];
+      const allOrders = Array.isArray(procurementPayload.orders) ? procurementPayload.orders : [];
+      procurement.needs = allNeeds.filter(function(need) {
+        return String(need.ProjectID || '') === String(projectId);
+      });
+      procurement.orders = allOrders.map(function(order) {
+        const ids = Array.isArray(order.ProjectIDs) ? order.ProjectIDs.map(String) : [];
+        if (!ids.length && order.ProjectID) ids.push(String(order.ProjectID));
+        const matchingItems = (Array.isArray(order.Items) ? order.Items : []).filter(function(item) {
+          const itemIds = Array.isArray(item.ProjectIDs) ? item.ProjectIDs.map(String) : [];
+          if (!itemIds.length && item.ProjectID) itemIds.push(String(item.ProjectID));
+          return itemIds.indexOf(String(projectId)) !== -1 ||
+            (!itemIds.length && String(order.ProjectID || '') === String(projectId));
+        });
+        const belongsToProject = ids.indexOf(String(projectId)) !== -1 ||
+          matchingItems.length > 0 ||
+          String(order.ProjectID || '') === String(projectId);
+        if (!belongsToProject) return null;
+        const copy = Object.assign({}, order);
+        copy.Items = matchingItems;
+        return copy;
+      }).filter(Boolean);
+    }
+
+    return Response.success({
+      project: {
+        ID: project.ID,
+        ProjectCode: project.ProjectCode || project.Code || '',
+        Title: project.Title || project.Name || '',
+        Quantity: project.Quantity !== undefined ? project.Quantity : (project.TotalQuantity || ''),
+        Status: project.Status || '',
+        WorkflowID: project.WorkflowID || '',
+        WorkflowVersion: project.WorkflowVersion || '',
+        CurrentStepID: project.CurrentStepID || '',
+        CurrentStepStatus: project.CurrentStepStatus || '',
+        CreatedAt: project.CreatedAt || '',
+        UpdatedAt: project.UpdatedAt || '',
+        Description: project.Description || '',
+        ColorSizeJSON: project.ColorSizeJSON || ''
+      },
+      events: events,
+      procurement: procurement,
+      generatedAt: new Date().toISOString()
+    });
+  },
+
+
+
   dashboard: function(params) {
 
     const currentUser =
