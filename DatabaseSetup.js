@@ -771,7 +771,7 @@ function applyAllValidations_(ss) {
   setListValidation_(ss, '15_Attachments', 3, APP_CONFIG.ATTACHMENT_ENTITY_TYPES);
   setListValidation_(ss, '15_Attachments', 8, APP_CONFIG.STORAGE_PROVIDERS);
   setListValidation_(ss, '15_Attachments', 12, ['ACTIVE','DELETED']);
-  setListValidation_(ss, '17_WorkflowStepDepartments', 6, ['ACTIVE','INACTIVE']);
+  setListValidation_(ss, '17_WorkflowStepDepartments', 6, ['ACTIVE','INACTIVE','DELETED']);
 }
 
 
