@@ -320,6 +320,20 @@ const Router = {
       return ProcurementService.listOrders(params);
     }
 
+    if (path === '/reports/projects') {
+      AccessControlService.require(params, 'REPORT_VIEW');
+      return ReportService.listReportProjects(params);
+    }
+
+    if (path.indexOf('/reports/project/') === 0) {
+      AccessControlService.require(params, 'REPORT_VIEW');
+      const reportProjectId = path.split('/')[3];
+      if (!reportProjectId) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'شناسه پروژه برای گزارش مشخص نیست.');
+      }
+      return ReportService.projectReport(reportProjectId, params);
+    }
+
     if (path === '/dashboard') {
       AccessControlService.require(params, 'REPORT_VIEW');
       return ReportService.dashboard(params);
