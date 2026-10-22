@@ -721,6 +721,11 @@ const ProjectService = {
 
     }
 
+    // رنگ‌بندی و سایزبندی پس از ایجاد پروژه نیز از مسیر ویرایش قابل به‌روزرسانی است.
+    if (data.ColorSizeJSON !== undefined) {
+      updateData.ColorSizeJSON = this._normalizeColorSizeJSON_(data.ColorSizeJSON);
+    }
+
     if (data.Quantity !== undefined) {
       updateData.Quantity =
         data.Quantity === null || String(data.Quantity).trim() === ''
