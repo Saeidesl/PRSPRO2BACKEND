@@ -62,25 +62,22 @@ const AttachmentService = {
     });
 
     const latestByProject = Object.create(null);
-    const images = (AttachmentRepository.getAll() || []).filter(function(item) {
+    const latestTimestampByProject = Object.create(null);
+    (AttachmentRepository.getAll() || []).forEach(function(item) {
       const status = String(item.Status || 'ACTIVE').toUpperCase();
-      return String(item.TenantID) === tenantId &&
-        String(item.EntityType || '').toUpperCase() === 'PROJECT' &&
-        !!visibleProjectIds[String(item.EntityID || '')] &&
-        String(item.MimeType || '').toLowerCase().indexOf('image/') === 0 &&
-        status !== String(Constants.STATUS.DELETED).toUpperCase() &&
-        status !== 'VOID';
-    });
-
-    images.sort(function(a, b) {
-      const dateA = new Date(a.UploadedAt || a.CreatedAt || 0).getTime() || 0;
-      const dateB = new Date(b.UploadedAt || b.CreatedAt || 0).getTime() || 0;
-      return dateB - dateA;
-    });
-
-    images.forEach(function(item) {
       const projectId = String(item.EntityID || '');
-      if (projectId && !latestByProject[projectId]) latestByProject[projectId] = item;
+      if (String(item.TenantID) !== tenantId ||
+          String(item.EntityType || '').toUpperCase() !== 'PROJECT' ||
+          !visibleProjectIds[projectId] ||
+          String(item.MimeType || '').toLowerCase().indexOf('image/') !== 0 ||
+          status === String(Constants.STATUS.DELETED).toUpperCase() ||
+          status === 'VOID') return;
+
+      const timestamp = new Date(item.UploadedAt || item.CreatedAt || 0).getTime() || 0;
+      if (!latestByProject[projectId] || timestamp > latestTimestampByProject[projectId]) {
+        latestByProject[projectId] = item;
+        latestTimestampByProject[projectId] = timestamp;
+      }
     });
 
     return Response.success(Object.keys(latestByProject).map(function(projectId) {
