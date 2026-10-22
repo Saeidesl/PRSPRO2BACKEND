@@ -36,6 +36,9 @@ const WorkflowStepDepartmentService = {
     if (!workflow || String(workflow.TenantID) !== String(user.TenantID)) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
     }
+    if (String(workflow.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'اتصال واحد به گردش‌کار غیرفعال امکان‌پذیر نیست.');
+    }
 
     const step = WorkflowStepRepository.findById(stepId);
     if (!step ||
@@ -93,6 +96,9 @@ const WorkflowStepDepartmentService = {
     const workflow = WorkflowRepository.findById(id);
     if (!workflow || String(workflow.TenantID) !== String(user.TenantID)) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
+    }
+    if (String(workflow.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'اتصال واحد به گردش‌کار غیرفعال امکان‌پذیر نیست.');
     }
 
     // Read each lookup sheet once for the entire batch instead of once per row.
