@@ -172,7 +172,15 @@ const WorkflowStepDepartmentService = {
     });
 
     if (toInsert.length) {
-      WorkflowStepDepartmentRepository.insertMany(toInsert);
+      // Keep batch writes as the preferred path, but remain compatible with
+      // an older deployed repository object that does not expose insertMany.
+      if (typeof WorkflowStepDepartmentRepository.insertMany === 'function') {
+        WorkflowStepDepartmentRepository.insertMany(toInsert);
+      } else {
+        toInsert.forEach(function(record) {
+          WorkflowStepDepartmentRepository.insert(record);
+        });
+      }
     }
 
     return {
