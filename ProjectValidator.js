@@ -145,19 +145,10 @@ const ProjectValidator = {
       );
     }
 
-    if (data.Status !== undefined) {
-
-      Validator.enum(
-        data.Status,
-        [
-          Constants.STATUS.ACTIVE,
-          Constants.STATUS.ON_HOLD,
-          Constants.STATUS.COMPLETED,
-          Constants.STATUS.CANCELLED
-        ],
-        'Status'
-      );
-
+    // Status codes are tenant-configurable; ProjectService validates that a
+    // changed value belongs to this tenant's active status list.
+    if (data.Status !== undefined && data.Status !== null && String(data.Status).trim() !== '') {
+      Validator.string(data.Status, 'Status');
     }
 
     return true;
