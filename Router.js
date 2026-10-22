@@ -425,6 +425,14 @@ const Router = {
         return WorkflowService.createStep(workflowId, body, params);
       }
 
+      if (parts[3] === 'department-steps' && parts[4] === 'bulk') {
+        return WorkflowStepDepartmentService.assignMany(
+          workflowId,
+          body.assignments || body.Assignments,
+          params
+        );
+      }
+
       if (parts[3] === 'department-steps') {
         body.WorkflowID = workflowId;
         return WorkflowStepDepartmentService.assign(body, params);
