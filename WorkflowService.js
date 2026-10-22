@@ -1,5 +1,36 @@
 const WorkflowService = {
 
+  // Bundled read endpoint for the workflow-management screen. Keeping these
+  // lookups in one Apps Script execution avoids multiple cold-start round trips.
+  managementBootstrap: function(params) {
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID);
+    const workflows = WorkflowRepository.getAll().filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const departments = DepartmentRepository.getAll().filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    return Response.success({ workflows: workflows, departments: departments });
+  },
+
+  managementData: function(workflowId, params) {
+    Validator.id(workflowId, 'WorkflowID');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const tenantId = String(user.TenantID);
+    const workflow = WorkflowRepository.findById(workflowId);
+    if (!workflow || String(workflow.TenantID) !== tenantId) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
+    }
+    const steps = WorkflowStepRepository.findByWorkflowId(workflowId).filter(function(item) {
+      return String(item.TenantID) === tenantId;
+    });
+    const assignments = WorkflowStepDepartmentRepository.findByWorkflowId(workflowId).filter(function(item) {
+      return String(item.TenantID) === tenantId && String(item.Status).toUpperCase() === 'ACTIVE';
+    });
+    return Response.success({ steps: steps, assignments: assignments });
+  },
+
   list: function(params) {
 
     const user =
