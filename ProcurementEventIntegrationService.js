@@ -108,7 +108,8 @@ const ProcurementEventIntegrationService = {
     var action = String(row.Action).toUpperCase();
     var required = action === 'CREATE_NEED'
       ? ['ItemName', 'Unit', 'RequestedQuantity']
-      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] : []);
+      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] :
+        (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []));
     required.forEach(function(key) {
       var value = read(key);
       if (String(value === undefined || value === null ? '' : value).trim() === '') {
