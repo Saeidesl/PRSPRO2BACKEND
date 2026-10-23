@@ -78,3 +78,25 @@ test('rejects a project from another tenant when creating a material need', () =
     ProjectID: 'P2', ItemName: 'پارچه', Unit: 'متر', RequestedQuantity: 10
   }, {}), /پروژه معتبر نیست/);
 });
+
+
+test('caps cumulative allocations at the need quantity and records the remainder as surplus', () => {
+  const { service, sheets } = loadProcurementService();
+  const need = service.createNeed({
+    ProjectID: 'P1', SourceEventID: 'EV1', ItemName: 'پارچه', Unit: 'متر',
+    RequestedQuantity: 100
+  }, {}).data;
+  service.createOrder({
+    ProjectID: 'P1',
+    Items: [{ MaterialNeedID: need.ID, ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 60 }]
+  }, {});
+  const second = service.createOrder({
+    ProjectID: 'P1',
+    Items: [{ MaterialNeedID: need.ID, ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 50 }]
+  }, {}).data;
+  const secondItem = second.Items[0];
+  assert.equal(secondItem.OrderedQuantity, 50);
+  assert.equal(secondItem.SurplusQuantity, 10);
+  const allocations = sheets['21_PurchaseAllocations'].filter((row) => row.MaterialNeedID === need.ID);
+  assert.equal(allocations.reduce((sum, row) => sum + row.AllocatedQuantity, 0), 100);
+});
