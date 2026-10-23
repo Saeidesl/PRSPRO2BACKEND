@@ -64,5 +64,8 @@ test('applies confirmed quantity integration to the material planner', () => {
     {}
   );
   assert.equal(result.success, true);
-  assert.deepEqual(calls[0].slice(0, 4), ['P1', 'EV1', 840, '2']);
+  assert.equal(calls[0][0], 'P1');
+  assert.equal(calls[0][1], 'EV1');
+  assert.equal(calls[0][2], 840);
+  assert.equal(calls[0][3], '2');
 });
