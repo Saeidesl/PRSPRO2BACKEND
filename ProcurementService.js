@@ -69,6 +69,16 @@ const ProcurementService = {
     var quantity = this._number_(body.RequestedQuantity, 'مقدار موردنیاز', false);
     this._validateProject_(body.ProjectID, user.TenantID, user);
     this._validateEvent_(body.SourceEventID, user.TenantID, user);
+    if (body.SourceEventID) {
+      var replayNeed = ProcurementRepository.getNeeds(user.TenantID).find(function(need) {
+        return String(need.SourceEventID || '') === String(body.SourceEventID) &&
+          String(need.ProjectID || '') === String(body.ProjectID || '') &&
+          String(need.ItemName || '').trim() === String(body.ItemName).trim() &&
+          String(need.Unit || '').trim() === String(body.Unit).trim() &&
+          String(need.Status || '').toUpperCase() !== 'DELETED';
+      });
+      if (replayNeed) return Response.success(Object.assign({ IdempotentReplay: true }, replayNeed));
+    }
 
     var now = this._now_();
     var record = {
@@ -107,6 +117,18 @@ const ProcurementService = {
   _createOrderUnlocked_: function(body, params) {
     body = body || {};
     var user = this._user_(params);
+    var idempotencyKey = String(body.IdempotencyKey || '').trim();
+    if (idempotencyKey) {
+      var replayOrder = ProcurementRepository.getOrders(user.TenantID).find(function(existing) {
+        return String(existing.IdempotencyKey || '') === idempotencyKey;
+      });
+      if (replayOrder) {
+        var replayItems = ProcurementRepository.getItems(user.TenantID).filter(function(item) {
+          return String(item.PurchaseOrderID) === String(replayOrder.ID);
+        });
+        return Response.success({ Order: replayOrder, Items: replayItems, IdempotentReplay: true });
+      }
+    }
     if (!Array.isArray(body.Items) || !body.Items.length) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سفارش باید دست‌کم یک قلم داشته باشد.');
     }
@@ -256,7 +278,8 @@ const ProcurementService = {
       Notes: String(body.Notes || ''),
       CreatedBy: user.ID,
       CreatedAt: now,
-      UpdatedAt: now
+      UpdatedAt: now,
+      IdempotencyKey: idempotencyKey
     };
 
     // Google Sheets has no multi-sheet transaction. Validate the full payload before writing.
@@ -311,11 +334,20 @@ const ProcurementService = {
   },
 
   createReceipt: function(body, params) {
+    body = body || {};
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت دریافت دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
     }
     try {
+      var user = this._user_(params);
+      var idempotencyKey = String(body.IdempotencyKey || '').trim();
+      if (idempotencyKey) {
+        var replayReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
+          return String(existing.IdempotencyKey || '') === idempotencyKey;
+        });
+        if (replayReceipt) return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+      }
       return this._createReceiptUnlocked_(body, params);
     } finally {
       lock.releaseLock();
@@ -507,6 +539,14 @@ const ProcurementService = {
   _createReceiptUnlocked_: function(body, params) {
     body = body || {};
     var user = this._user_(params);
+    if (body.SourceEventID) {
+      var eventReceiptReplay = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
+        return String(existing.SourceEventID || '') === String(body.SourceEventID) &&
+          String(existing.PurchaseOrderItemID || '') === String(body.PurchaseOrderItemID || '') &&
+          String(existing.Status || '').toUpperCase() !== 'VOID';
+      });
+      if (eventReceiptReplay) return Response.success(Object.assign({ IdempotentReplay: true }, eventReceiptReplay));
+    }
     Validator.required(body.PurchaseOrderItemID, 'قلم سفارش');
     var quantity = this._number_(body.QuantityReceived, 'مقدار تحویل', false);
     var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, body.PurchaseOrderItemID);
@@ -573,7 +613,8 @@ const ProcurementService = {
       SourceEventID: body.SourceEventID || '',
       Notes: String(body.Notes || ''),
       ReceivedBy: user.ID,
-      CreatedAt: now
+      CreatedAt: now,
+      IdempotencyKey: String(body.IdempotencyKey || '')
     };
     this._validateEvent_(receipt.SourceEventID, user.TenantID, user);
     GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.RECEIPTS, receipt);
