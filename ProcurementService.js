@@ -762,13 +762,27 @@ const ProcurementService = {
       }
     });
 
+    var confirmedSpecKeys = Object.create(null);
+    needs.forEach(function(need) {
+      if (String(need.NeedType || '').toUpperCase() === 'CONFIRMED' &&
+          String(need.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' && need.MaterialSpecKey) {
+        confirmedSpecKeys[String(need.ProjectID) + '|' + String(need.MaterialSpecKey)] = true;
+      }
+    });
     return Response.success(needs.filter(function(need) {
-      return this._isProjectVisible_(need.ProjectID, user);
+      var specKey = String(need.ProjectID || '') + '|' + String(need.MaterialSpecKey || '');
+      var status = String(need.Status || 'ACTIVE').toUpperCase();
+      var superseded = status === 'SUPERSEDED' ||
+        (String(need.NeedType || '').toUpperCase() === 'ESTIMATED' && confirmedSpecKeys[specKey]);
+      return !superseded && this._isProjectVisible_(need.ProjectID, user);
     }, this).map(function(need) {
       var copy = Object.assign({}, need);
       var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
-      var ordered = Math.min(requested, Math.max(0, orderedByNeed[String(need.ID)] || 0));
-      var received = Math.min(requested, Math.max(0, receivedByNeed[String(need.ID)] || 0));
+      var needKey = this._needKey_(need, need.ProjectID);
+      var rawOrdered = Math.max(0, orderedByNeed[needKey] || 0);
+      var ordered = Math.min(requested, rawOrdered);
+      var received = Math.min(requested, Math.max(0, receivedByNeed[needKey] || 0));
+      copy.OverOrderedQuantity = Math.max(0, rawOrdered - requested);
       copy.OrderedQuantity = ordered;
       copy.ReceivedQuantity = received;
       copy.RemainingToOrderQuantity = Math.max(0, requested - Math.max(ordered, received));
