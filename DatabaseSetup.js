@@ -127,6 +127,16 @@ const APP_CONFIG = {
       headers: ['ID','TenantID','Code','Name','Status','CreatedAt','UpdatedAt']
     },
 
+    PROJECT_MATERIAL_SPECS: {
+      name: '24_ProjectMaterialSpecs',
+      headers: ['ID','TenantID','ProjectID','SpecKey','ItemName','ItemCode','Unit','ConsumptionPerUnit','WastagePercent','EarlyOrderPolicy','EarlyOrderQuantity','Status','Revision','Notes','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    MATERIAL_NEED_CALCULATIONS: {
+      name: '25_MaterialNeedCalculations',
+      headers: ['ID','TenantID','ProjectID','MaterialSpecID','MaterialNeedID','SourceEventID','SourceEventVersion','CalculationKey','BasisQuantity','ConsumptionPerUnit','WastagePercent','CalculatedQuantity','PreviousCalculatedQuantity','VarianceQuantity','CalculationType','Status','CreatedBy','CreatedAt']
+    },
+
     PURCHASE_ORDERS: {
       name: '19_PurchaseOrders',
       headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
