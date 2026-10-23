@@ -186,6 +186,24 @@ test('voiding the source event marks confirmed needs for review without deleting
   assert.equal(sheets['18_MaterialNeeds'].length, 1);
 });
 
+
+test('schema preparation runs before calculation lock acquisition', () => {
+  const { service } = loadService();
+  let schemaPrepared = false;
+  service._ensureSchema_ = () => { schemaPrepared = true; return true; };
+  service._recalculateProjectNeedsUnlocked_ = () => {
+    assert.equal(schemaPrepared, true);
+    return { success: true, data: {} };
+  };
+  service._createEstimatedNeedsUnlocked_ = () => {
+    assert.equal(schemaPrepared, true);
+    return { success: true, data: {} };
+  };
+  service.recalculateProjectNeeds('P1', 'EV1', 10, '1', {});
+  schemaPrepared = false;
+  service.createEstimatedNeeds('P1', {});
+});
+
 test('does not run duplicate material calculations when the script lock is unavailable', () => {
   const { service } = loadService(false);
   assert.throws(() => service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {}), /محاسبه نیازهای ملزومات دیگری در حال انجام است/);
