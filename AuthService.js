@@ -122,8 +122,6 @@ const AuthService = {
 
     const departmentCode =
       AccessControlService.getDepartmentCode(user);
-    const profile = this.getProfile_(user);
-
     return Response.success(
       {
         ID: user.ID,
@@ -132,9 +130,7 @@ const AuthService = {
         Username: user.Username,
         DepartmentID: user.DepartmentID,
         DepartmentCode: departmentCode,
-        DepartmentName: profile.DepartmentName,
-        RoleNames: profile.RoleNames,
-        IsAdmin: AccessControlService.isAdmin(user),
+        IsAdmin: departmentCode === 'ADMIN',
         Status: user.Status
       }
     );
