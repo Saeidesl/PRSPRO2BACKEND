@@ -172,6 +172,20 @@ test('confirmed quantity event creates material needs and safely replays', () =>
 });
 
 
+
+test('voiding the source event marks confirmed needs for review without deleting history', () => {
+  const { service, sheets } = loadService();
+  service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5
+  }, {});
+  service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {});
+  const result = service.markEventVoided('EV1', {}).data;
+  assert.equal(result.AffectedNeedCount, 1);
+  assert.equal(sheets['18_MaterialNeeds'][0].Status, 'NEEDS_REVIEW');
+  assert.equal(sheets['25_MaterialNeedCalculations'][0].Status, 'SOURCE_EVENT_VOIDED');
+  assert.equal(sheets['18_MaterialNeeds'].length, 1);
+});
+
 test('does not run duplicate material calculations when the script lock is unavailable', () => {
   const { service } = loadService(false);
   assert.throws(() => service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {}), /محاسبه نیازهای ملزومات دیگری در حال انجام است/);
