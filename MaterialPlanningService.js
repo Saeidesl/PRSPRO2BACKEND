@@ -248,4 +248,89 @@ const MaterialPlanningService = {
     });
     return Response.success(record);
   }
+
+  recalculateProjectNeeds: function(projectId, sourceEventId, confirmedQuantity, sourceEventVersion, params) {
+    var user = this._user_(params);
+    this._project_(projectId, user);
+    var quantity = this._number_(confirmedQuantity, 'تعداد قطعی تولید', 0.0000001, null);
+    Validator.required(sourceEventId, 'رویداد مبنای تعداد قطعی');
+    var sourceEvent = EventRepository.findById(sourceEventId);
+    if (!sourceEvent || String(sourceEvent.TenantID) !== String(user.TenantID) ||
+        String(sourceEvent.ProjectID || '') !== String(projectId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مبنای محاسبه با پروژه مطابقت ندارد.');
+    }
+    var allSpecs = this._specsForProject_(projectId, user.TenantID);
+    var latestByKey = Object.create(null);
+    allSpecs.forEach(function(spec) {
+      var key = String(spec.SpecKey || spec.ID);
+      var revision = Number(spec.Revision) || 1;
+      if (!latestByKey[key] || revision > (Number(latestByKey[key].Revision) || 1)) latestByKey[key] = spec;
+    });
+    var specs = Object.keys(latestByKey).map(function(key) { return latestByKey[key]; })
+      .filter(function(spec) { return String(spec.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+    if (!specs.length) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای این پروژه مشخصات فعال مصرف ملزومات تعریف نشده است.');
+
+    var needs = GoogleSheetsRepository.getAll('18_MaterialNeeds').filter(function(need) {
+      return String(need.TenantID) === String(user.TenantID) && String(need.ProjectID) === String(projectId);
+    });
+    var results = [];
+    var self = this;
+    specs.forEach(function(spec) {
+      var existingNeed = needs.find(function(need) {
+        return String(need.MaterialSpecID || '') === String(spec.ID) &&
+          String(need.NeedType || '').toUpperCase() === 'CONFIRMED' &&
+          String(need.Status || 'ACTIVE').toUpperCase() !== 'CANCELLED';
+      }) || null;
+      var previousQuantity = existingNeed ? Number(existingNeed.RequestedQuantity) || 0 : 0;
+      var key = [String(user.TenantID), String(projectId), String(sourceEventId),
+        String(spec.SpecKey || spec.ID), String(spec.Revision || 1), String(quantity)].join('|');
+      var calcResponse = self.recordCalculation({
+        ProjectID: projectId, MaterialSpecID: spec.ID,
+        MaterialNeedID: existingNeed ? existingNeed.ID : '',
+        SourceEventID: sourceEventId, SourceEventVersion: sourceEventVersion || '',
+        CalculationKey: key, BasisQuantity: quantity,
+        ConsumptionPerUnit: spec.ConsumptionPerUnit, WastagePercent: spec.WastagePercent || 0,
+        PreviousCalculatedQuantity: previousQuantity, CalculationType: 'CONFIRMED'
+      }, params);
+      var calculation = calcResponse && calcResponse.data ? calcResponse.data : calcResponse;
+      var now = self._now_();
+      var needRecord = existingNeed ? Object.assign({}, existingNeed, {
+        SourceEventID: sourceEventId, ItemName: spec.ItemName, ItemCode: spec.ItemCode,
+        Unit: spec.Unit, RequestedQuantity: calculation.CalculatedQuantity, Status: 'ACTIVE',
+        Notes: 'محاسبه‌شده بر اساس تعداد قطعی ' + quantity, UpdatedAt: now,
+        SpecificationRevision: spec.Revision || 1, CalculationID: calculation.ID,
+        BasisQuantity: quantity, NeedType: 'CONFIRMED', CalculationKey: key
+      }) : {
+        ID: self._id_('NEED'), TenantID: user.TenantID, ProjectID: String(projectId),
+        SourceEventID: sourceEventId, ItemName: spec.ItemName, ItemCode: spec.ItemCode,
+        Unit: spec.Unit, RequestedQuantity: calculation.CalculatedQuantity, NeededBy: '',
+        Status: 'ACTIVE', Notes: 'محاسبه‌شده بر اساس تعداد قطعی ' + quantity,
+        CreatedBy: user.ID, CreatedAt: now, UpdatedAt: now,
+        MaterialSpecID: spec.ID, SpecificationRevision: spec.Revision || 1,
+        CalculationID: calculation.ID, BasisQuantity: quantity,
+        NeedType: 'CONFIRMED', CalculationKey: key
+      };
+      if (existingNeed) GoogleSheetsRepository.updateById('18_MaterialNeeds', existingNeed.ID, needRecord);
+      else {
+        GoogleSheetsRepository.insert('18_MaterialNeeds', needRecord);
+        needs.push(needRecord);
+      }
+      GoogleSheetsRepository.updateById(self.SHEETS.CALCULATIONS, calculation.ID,
+        Object.assign({}, calculation, { MaterialNeedID: needRecord.ID }));
+      results.push({
+        MaterialNeedID: needRecord.ID, MaterialSpecID: spec.ID, ItemName: spec.ItemName,
+        Unit: spec.Unit, RequestedQuantity: calculation.CalculatedQuantity,
+        PreviousQuantity: previousQuantity, VarianceQuantity: calculation.CalculatedQuantity - previousQuantity,
+        CalculationID: calculation.ID, IdempotentReplay: calculation.IdempotentReplay === true
+      });
+    });
+    AuditService.log({
+      TenantID: user.TenantID, UserID: user.ID, Action: 'RECALCULATE',
+      EntityType: 'PROJECT_MATERIAL_NEEDS', EntityID: String(projectId),
+      NewData: { SourceEventID: sourceEventId, BasisQuantity: quantity, Results: results }
+    });
+    return Response.success({ ProjectID: String(projectId), SourceEventID: sourceEventId,
+      BasisQuantity: quantity, items: results });
+  },
+
 };
