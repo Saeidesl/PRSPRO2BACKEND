@@ -1323,11 +1323,31 @@ const EventService = {
       Reason: reason
     });
 
+    var materialNeedsReview = { status: 'NOT_APPLICABLE' };
+    if (event.ProjectID && typeof MaterialPlanningService !== 'undefined' &&
+        typeof MaterialPlanningService.markEventVoided === 'function') {
+      try {
+        materialNeedsReview = MaterialPlanningService.markEventVoided(id, params || {});
+      } catch (materialReviewError) {
+        materialNeedsReview = {
+          status: 'FAILED',
+          message: String(materialReviewError && materialReviewError.message || materialReviewError)
+        };
+        AuditService.log({
+          TenantID: user.TenantID, UserID: user.ID,
+          Action: 'MATERIAL_NEEDS_RECONCILIATION_FAILED',
+          EntityType: 'EVENT', EntityID: id, NewData: materialNeedsReview,
+          Reason: 'رویداد باطل شد اما وضعیت نیازهای ملزومات باید دستی بازبینی شود.'
+        });
+      }
+    }
+
     return Response.success(
       {
         event: updated,
         project: restoredProject,
-        projectRestored: hasExpectedChanges && hasPreviousSnapshot
+        projectRestored: hasExpectedChanges && hasPreviousSnapshot,
+        materialNeedsReview: materialNeedsReview
       },
       {
         message: hasExpectedChanges && hasPreviousSnapshot
