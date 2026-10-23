@@ -1336,4 +1336,51 @@ const EventService = {
       }
     );
   }
+
+  retryProcurementIntegration: function(eventId, params) {
+    var user = AccessControlService.getCurrentUser(params || {});
+    var event = EventRepository.findById(eventId);
+    if (!event || String(event.TenantID) !== String(user.TenantID)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+    }
+    if (event.ProjectID) {
+      var project = ProjectRepository.findById(event.ProjectID);
+      if (!project || String(project.TenantID) !== String(user.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(project, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+      }
+    }
+    if (['VOID', 'CANCELLED', 'CANCELED', 'DELETED'].indexOf(String(event.Status || '').toUpperCase()) !== -1) {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'برای رویداد لغوشده نمی‌توان اتصال تأمین را دوباره اجرا کرد.');
+    }
+    var eventType = EventTypeRepository.findById(event.EventTypeID);
+    if (!eventType || String(eventType.TenantID) !== String(user.TenantID)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع رویداد پیدا نشد.');
+    }
+    var settings = ProcurementEventIntegrationService._find_(eventType.ID, user.TenantID);
+    if (!settings || String(settings.Action || 'NONE').toUpperCase() !== 'RECALCULATE_CONFIRMED_NEEDS') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
+        'اجرای مجدد خودکار فقط برای محاسبه نیاز قطعی پشتیبانی می‌شود؛ عملیات دیگر باید پس از بررسی دستی اصلاح شوند.');
+    }
+    var stored = EventDataRepository.findByEventId(eventId);
+    var dynamicData = {};
+    if (stored && stored.DataJSON) {
+      try { dynamicData = JSON.parse(String(stored.DataJSON)); }
+      catch (error) {
+        throw ErrorHandler.create(Constants.ERROR.INTERNAL_ERROR, 'اطلاعات پویای رویداد قابل خواندن نیست.');
+      }
+    }
+    if (!dynamicData || typeof dynamicData !== 'object' || Array.isArray(dynamicData)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'داده‌های پویای رویداد معتبر نیستند.');
+    }
+    ProcurementEventIntegrationService.validate(eventType, dynamicData, event.ProjectID || '', params || {});
+    var result = ProcurementEventIntegrationService.apply(eventType, event, dynamicData, params || {});
+    AuditService.log({
+      TenantID: user.TenantID, UserID: user.ID, Action: 'PROCUREMENT_INTEGRATION_RETRY',
+      EntityType: 'EVENT', EntityID: event.ID, NewData: result,
+      Reason: 'اجرای مجدد محاسبه نیاز ملزومات'
+    });
+    return Response.success({ EventID: event.ID, status: 'SUCCEEDED', result: result && result.data !== undefined ? result.data : result });
+  },
+
 };
