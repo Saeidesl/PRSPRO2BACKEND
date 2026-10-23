@@ -253,6 +253,18 @@ const MaterialPlanningService = {
   },
 
   recalculateProjectNeeds: function(projectId, sourceEventId, confirmedQuantity, sourceEventVersion, params) {
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'محاسبه نیازهای ملزومات دیگری در حال انجام است؛ دوباره تلاش کنید.');
+    }
+    try {
+      return this._recalculateProjectNeedsUnlocked_(projectId, sourceEventId, confirmedQuantity, sourceEventVersion, params);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  _recalculateProjectNeedsUnlocked_: function(projectId, sourceEventId, confirmedQuantity, sourceEventVersion, params) {
     var user = this._user_(params);
     this._project_(projectId, user);
     var quantity = this._number_(confirmedQuantity, 'تعداد قطعی تولید', 0.0000001, null);
@@ -366,6 +378,18 @@ const MaterialPlanningService = {
 
 
   createEstimatedNeeds: function(projectId, params) {
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'محاسبه نیازهای ملزومات دیگری در حال انجام است؛ دوباره تلاش کنید.');
+    }
+    try {
+      return this._createEstimatedNeedsUnlocked_(projectId, params);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  _createEstimatedNeedsUnlocked_: function(projectId, params) {
     var user = this._user_(params);
     var project = this._project_(projectId, user);
     var suggestedQuantity = this._number_(project.Quantity, 'تعداد پیشنهادی پروژه', 0.0000001, null);
