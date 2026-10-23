@@ -113,7 +113,7 @@ const MaterialPlanningService = {
       ProjectID: String(projectId),
       SpecKey: specKey,
       ItemName: itemName,
-      ItemCode: String(body.ItemCode || ('MAT-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase())),
+      ItemCode: 'MAT-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase(),
       Unit: unit,
       ConsumptionPerUnit: consumption,
       WastagePercent: wastage,
@@ -172,6 +172,7 @@ const MaterialPlanningService = {
     }, params);
     var created = createdResponse && createdResponse.data ? createdResponse.data : createdResponse;
     created.SpecKey = input.SpecKey;
+    created.ItemCode = current.ItemCode;
     created.Revision = latestRevision + 1;
     GoogleSheetsRepository.updateById(this.SHEETS.SPECS, created.ID, created);
     var previous = Object.assign({}, current, { Status: 'SUPERSEDED', UpdatedAt: this._now_() });
