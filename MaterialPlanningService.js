@@ -145,44 +145,72 @@ const MaterialPlanningService = {
       throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'مشخصات حذف‌شده قابل ویرایش نیست.');
     }
     body = body || {};
-    var input = Object.assign({}, current, body);
-    input.SpecKey = String(current.SpecKey || current.ID);
+    var specKey = String(current.SpecKey || current.ID);
     var all = this._specsForProject_(current.ProjectID, user.TenantID).filter(function(row) {
-      return String(row.SpecKey || row.ID) === input.SpecKey;
+      return String(row.SpecKey || row.ID) === specKey;
     });
     var latestRevision = all.reduce(function(max, row) {
       return Math.max(max, Number(row.Revision) || 1);
     }, 1);
-    if (Number(current.Revision || 1) !== latestRevision) {
+    if (Number(current.Revision || 1) !== latestRevision ||
+        String(current.Status || 'ACTIVE').toUpperCase() === 'SUPERSEDED') {
       throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'این نسخه دیگر آخرین نسخه نیست؛ اطلاعات را تازه‌سازی کنید.');
     }
 
-    // Create a new immutable revision. The list endpoint selects the highest revision,
-    // so a failure while superseding the previous row cannot hide the new version.
-    var createdResponse = this.createSpecification(current.ProjectID, {
-      ItemName: input.ItemName,
-      ItemCode: input.ItemCode,
-      Unit: input.Unit,
-      ConsumptionPerUnit: input.ConsumptionPerUnit,
-      WastagePercent: input.WastagePercent,
-      EarlyOrderPolicy: input.EarlyOrderPolicy,
-      EarlyOrderQuantity: input.EarlyOrderQuantity,
-      Notes: input.Notes,
-      SpecKey: input.SpecKey + '_R' + (latestRevision + 1)
-    }, params);
-    var created = createdResponse && createdResponse.data ? createdResponse.data : createdResponse;
-    created.SpecKey = input.SpecKey;
-    created.ItemCode = current.ItemCode;
-    created.Revision = latestRevision + 1;
-    GoogleSheetsRepository.updateById(this.SHEETS.SPECS, created.ID, created);
-    var previous = Object.assign({}, current, { Status: 'SUPERSEDED', UpdatedAt: this._now_() });
+    var itemName = String(body.ItemName === undefined ? current.ItemName : body.ItemName).trim();
+    var unit = String(body.Unit === undefined ? current.Unit : body.Unit).trim();
+    Validator.required(itemName, 'نام ملزوم');
+    Validator.required(unit, 'واحد اندازه‌گیری');
+    if (itemName.length > 160 || unit.length > 40) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام ملزوم یا واحد اندازه‌گیری بیش از حد طولانی است.');
+    }
+    var consumption = this._number_(body.ConsumptionPerUnit === undefined ? current.ConsumptionPerUnit : body.ConsumptionPerUnit,
+      'مصرف برای هر واحد', 0.0000001, null);
+    var wastageInput = body.WastagePercent === undefined ? current.WastagePercent : body.WastagePercent;
+    var wastage = wastageInput === undefined || wastageInput === null || String(wastageInput).trim() === ''
+      ? 0 : this._number_(wastageInput, 'درصد ضایعات', 0, 100);
+    var policy = String(body.EarlyOrderPolicy === undefined ? current.EarlyOrderPolicy : body.EarlyOrderPolicy || 'DISABLED').trim().toUpperCase();
+    if (['DISABLED', 'ESTIMATE_ALLOWED', 'MANUAL_ALLOWED'].indexOf(policy) === -1) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست سفارش زودهنگام معتبر نیست.');
+    }
+    var earlyInput = body.EarlyOrderQuantity === undefined ? current.EarlyOrderQuantity : body.EarlyOrderQuantity;
+    var earlyQuantity = '';
+    if (policy === 'MANUAL_ALLOWED') {
+      earlyQuantity = this._number_(earlyInput, 'مقدار سفارش زودهنگام', 0.0000001, null);
+    } else if (earlyInput !== undefined && earlyInput !== null && String(earlyInput).trim() !== '') {
+      earlyQuantity = this._number_(earlyInput, 'مقدار سفارش زودهنگام', 0, null);
+    }
+
+    var now = this._now_();
+    var record = {
+      ID: this._id_('MSPEC'),
+      TenantID: user.TenantID,
+      ProjectID: String(current.ProjectID),
+      SpecKey: specKey,
+      ItemName: itemName,
+      ItemCode: String(current.ItemCode || ''),
+      Unit: unit,
+      ConsumptionPerUnit: consumption,
+      WastagePercent: wastage,
+      EarlyOrderPolicy: policy,
+      EarlyOrderQuantity: earlyQuantity,
+      Status: 'ACTIVE',
+      Revision: latestRevision + 1,
+      Notes: String(body.Notes === undefined ? current.Notes || '' : body.Notes || ''),
+      CreatedBy: user.ID,
+      CreatedAt: now,
+      UpdatedAt: now
+    };
+    // The new highest revision is authoritative even if marking the old row fails.
+    GoogleSheetsRepository.insert(this.SHEETS.SPECS, record);
+    var previous = Object.assign({}, current, { Status: 'SUPERSEDED', UpdatedAt: now });
     GoogleSheetsRepository.updateById(this.SHEETS.SPECS, current.ID, previous);
     AuditService.log({
       TenantID: user.TenantID, UserID: user.ID, Action: 'REVISE',
-      EntityType: 'PROJECT_MATERIAL_SPEC', EntityID: created.ID,
-      OldData: current, NewData: created, Reason: 'ایجاد نسخه جدید مشخصات مصرف'
+      EntityType: 'PROJECT_MATERIAL_SPEC', EntityID: record.ID,
+      OldData: current, NewData: record, Reason: 'ایجاد نسخه جدید مشخصات مصرف'
     });
-    return Response.success(created);
+    return Response.success(record);
   },
 
   listCalculationHistory: function(projectId, params) {
