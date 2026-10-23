@@ -45,7 +45,9 @@ const AccessControlService = {
   },
 
   isAdmin: function(user) {
-    return this.getDepartmentCode(user) === 'ADMIN';
+    if (!user) return false;
+    return this.getDepartmentCode(user) === 'ADMIN' ||
+      PermissionService.hasPermission(user.ID, 'SYSTEM_MANAGE', user);
   },
 
   enforceRouteAccess: function(method, path, params) {
