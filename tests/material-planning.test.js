@@ -17,6 +17,8 @@ function loadService() {
         ? { ID: 'P1', TenantID: 'T1' } : null
     },
     ProjectService: { _isProjectAvailableToUser_: () => true },
+    EventRepository: { findById: (id) => String(id) === 'EV1' || String(id) === 'EV2'
+      ? { ID: String(id), TenantID: 'T1', ProjectID: 'P1', EventTypeVersion: '1' } : null },
     GoogleSheetsRepository: {
       getAll: (name) => (sheets[name] || []).map((row) => ({ ...row })),
       findById: (name, id) => (sheets[name] || []).find((row) => String(row.ID) === String(id)) || null,
@@ -115,6 +117,26 @@ test('calculation history is idempotent and records quantity variance', () => {
   }, {}).data;
   assert.equal(changed.CalculatedQuantity, 1350);
   assert.equal(changed.VarianceQuantity, 90);
+});
+
+
+test('confirmed quantity event creates material needs and safely replays', () => {
+  const { service, sheets } = loadService();
+  service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5,
+    WastagePercent: 0
+  }, {});
+  const first = service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {}).data;
+  assert.equal(first.items[0].RequestedQuantity, 1260);
+  assert.equal(sheets['18_MaterialNeeds'].length, 1);
+  const replay = service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {}).data;
+  assert.equal(replay.items[0].RequestedQuantity, 1260);
+  assert.equal(sheets['18_MaterialNeeds'].length, 1);
+  assert.equal(sheets['25_MaterialNeedCalculations'].length, 1);
+  const revised = service.recalculateProjectNeeds('P1', 'EV2', 900, '1', {}).data;
+  assert.equal(revised.items[0].RequestedQuantity, 1350);
+  assert.equal(sheets['18_MaterialNeeds'].length, 1);
+  assert.equal(sheets['25_MaterialNeedCalculations'].length, 2);
 });
 
 test('rejects cross-tenant or invisible projects', () => {
