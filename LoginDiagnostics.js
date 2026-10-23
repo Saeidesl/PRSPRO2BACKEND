@@ -72,6 +72,21 @@ function diagnoseAuthenticationSetup() {
     return { ID: String(user.ID || ''), Username: String(user.Username || ''), TenantID: String(user.TenantID || '') };
   });
 
+  // Also flag the conventional bootstrap account even if it is not currently
+  // assigned to the ADMIN department. This is read-only; it does not change roles.
+  const adminUsernameMissingRole = activeUsers.filter(function(user) {
+    if (String(user.Username || '').trim().toLowerCase() !== 'admin') return false;
+    const key = String(user.TenantID || '') + '|' + String(user.ID || '');
+    return !usersWithAdminRole[key];
+  }).map(function(user) {
+    return {
+      ID: String(user.ID || ''),
+      Username: String(user.Username || ''),
+      TenantID: String(user.TenantID || ''),
+      DepartmentID: String(user.DepartmentID || '')
+    };
+  });
+
   const inactiveRoleAssignments = userRoles.filter(function(userRole) {
     const role = roles.find(function(item) {
       return String(item.ID) === String(userRole.RoleID) &&
@@ -86,6 +101,7 @@ function diagnoseAuthenticationSetup() {
     activeUserCount: activeUsers.length,
     duplicateUsernames: duplicateUsernames,
     activeUsersInAdminDepartmentMissingAdminRole: adminUsersMissingRole,
+    activeUsernameAdminMissingAdminRole: adminUsernameMissingRole,
     userRoleAssignmentsToInactiveOrMissingRoles: inactiveRoleAssignments
   };
 
