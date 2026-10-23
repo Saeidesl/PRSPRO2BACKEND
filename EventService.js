@@ -1363,6 +1363,13 @@ const EventService = {
     if (!event || String(event.TenantID) !== String(user.TenantID)) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
     }
+    var canManageIntegration = AccessControlService.isAdmin(user) ||
+      PermissionService.hasPermission(user.ID, 'EVENT_EDIT', user) ||
+      PermissionService.hasPermission(user.ID, 'PROCUREMENT_MANAGE', user);
+    if (!canManageIntegration && String(event.CreatedBy || '') !== String(user.ID)) {
+      throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED,
+        'فقط ثبت‌کننده رویداد یا کاربر دارای مجوز ویرایش رویداد/مدیریت تدارکات می‌تواند اتصال را دوباره اجرا کند.');
+    }
     if (event.ProjectID) {
       var project = ProjectRepository.findById(event.ProjectID);
       if (!project || String(project.TenantID) !== String(user.TenantID) ||

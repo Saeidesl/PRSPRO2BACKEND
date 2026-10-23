@@ -69,3 +69,19 @@ Scope: source-code review of project material planning, procurement, event integ
 
 ## Readiness rule
 A successful source review or unit-test run alone does not establish production readiness. Final acceptance requires passing automated checks, reviewed diffs, matching deployed revision, working spreadsheet schema, and a successful live end-to-end smoke test.
+
+
+## Execution log — 2026-10-23
+
+### Implemented and merged
+- Phase 1: source audit, non-destructive migration review, and acceptance criteria documented in this file.
+- Phase 2: project cards now expose a responsive material planning modal to list/create/revise versioned material specifications, capture consumption per unit, wastage, early-order policy, and optional manual early quantity; explicit estimated-need calculation and calculation history are available.
+- Phase 3: existing confirmed-quantity event mapping and event-void reconciliation were verified in source. The frontend now offers a retry action when the post-save material integration fails. A follow-up authorization fix permits the event creator to retry their own event while retaining manager permissions for broader retry access.
+- Phase 4: added regression tests for specification revision reconciliation and cumulative purchase allocation/surplus.
+- Phase 5: material planning UI is responsive on mobile and desktop and reports success/error states. Existing procurement reporting and calculation history are retained.
+- Phase 6: frontend syntax/assets checks and backend unit/syntax checks passed in GitHub Actions. Backend Apps Script sync and existing Web App deployment update completed successfully after merge. GitHub Pages build/deployment completed successfully.
+
+### Remaining release acceptance
+- A real authenticated end-to-end smoke test against the deployed app is still required: create/edit a project material specification, generate an estimate, register a configured confirmed-quantity event, verify the confirmed need, create a purchase order, receive part of it, and void a source event to verify NEEDS_REVIEW handling.
+- This environment could not directly access the deployed Apps Script Web App or sign in to the live UI, so do not interpret CI/deployment success as proof of successful live data entry. Verify with a test project and a non-production/test user before relying on production data.
+- The older pull requests superseded by the merged implementation should not be merged; the merged final PRs are the source of truth.
