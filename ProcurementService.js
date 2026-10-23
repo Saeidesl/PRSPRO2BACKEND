@@ -4,7 +4,12 @@
  */
 const ProcurementService = {
   _user_: function(params) {
-    return AccessControlService.getCurrentUser(params || {});
+    var user = AccessControlService.getCurrentUser(params || {});
+    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
+        typeof MaterialPlanningService._ensureSchema_ === 'function') {
+      MaterialPlanningService._ensureSchema_();
+    }
+    return user;
   },
 
   _active_: function(status) {
