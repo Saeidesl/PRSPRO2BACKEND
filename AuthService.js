@@ -49,6 +49,7 @@ const AuthService = {
 
     const departmentCode =
       AccessControlService.getDepartmentCode(user);
+    const profile = this.getProfile_(user);
 
     return Response.success(
       {
@@ -62,6 +63,8 @@ const AuthService = {
           Username: user.Username,
           DepartmentID: user.DepartmentID,
           DepartmentCode: departmentCode,
+          DepartmentName: profile.DepartmentName,
+          RoleNames: profile.RoleNames,
           IsAdmin: AccessControlService.isAdmin(user),
           Status: user.Status
         }
@@ -119,6 +122,7 @@ const AuthService = {
 
     const departmentCode =
       AccessControlService.getDepartmentCode(user);
+    const profile = this.getProfile_(user);
 
     return Response.success(
       {
@@ -128,10 +132,39 @@ const AuthService = {
         Username: user.Username,
         DepartmentID: user.DepartmentID,
         DepartmentCode: departmentCode,
+        DepartmentName: profile.DepartmentName,
+        RoleNames: profile.RoleNames,
         IsAdmin: AccessControlService.isAdmin(user),
         Status: user.Status
       }
     );
+  },
+
+  getProfile_: function(user) {
+    const tenantId = String(user.TenantID || '');
+    let departmentName = '';
+    if (user.DepartmentID) {
+      const department = DepartmentRepository.findById(user.DepartmentID);
+      if (department && String(department.TenantID) === tenantId &&
+          String(department.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE) {
+        departmentName = String(department.Name || department.DepartmentName || '');
+      }
+    }
+
+    const assignedRoleIds = {};
+    UserRoleRepository.getAll().forEach(function(item) {
+      if (String(item.UserID) === String(user.ID) && String(item.TenantID) === tenantId) {
+        assignedRoleIds[String(item.RoleID)] = true;
+      }
+    });
+    const roleNames = RoleRepository.getAll().filter(function(role) {
+      return String(role.TenantID) === tenantId && assignedRoleIds[String(role.ID)] === true &&
+        String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE;
+    }).map(function(role) {
+      return String(role.Name || '').trim();
+    }).filter(Boolean);
+
+    return { DepartmentName: departmentName, RoleNames: roleNames };
   },
 
   getToken_: function(params) {
