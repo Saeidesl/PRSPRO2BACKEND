@@ -119,6 +119,14 @@ const Router = {
         return EventService.listByProject(projectId, params);
       }
 
+      if (parts[3] === 'material-specifications') {
+        return MaterialPlanningService.listSpecifications(projectId, params);
+      }
+
+      if (parts[3] === 'material-calculations') {
+        return MaterialPlanningService.listCalculationHistory(projectId, params);
+      }
+
       if (parts[3] === 'details') {
         AccessControlService.require(params, 'EVENT_VIEW');
         if (parts[4] === 'page') {
@@ -426,6 +434,12 @@ const Router = {
       return ProcurementService.createReceipt(body, params);
     }
 
+    const materialSpecCreateMatch = path.match(/^\/projects\/([^/]+)\/material-specifications$/);
+    if (materialSpecCreateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return MaterialPlanningService.createSpecification(materialSpecCreateMatch[1], body, params);
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_CREATE');
       return ProjectService.create(body, params);
@@ -589,6 +603,12 @@ const Router = {
       }
 
       return DepartmentService.update(departmentId, body, params);
+    }
+
+    const materialSpecUpdateMatch = path.match(/^\/material-specifications\/([^/]+)$/);
+    if (materialSpecUpdateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
     }
 
     if (path.indexOf('/projects/') === 0) {
