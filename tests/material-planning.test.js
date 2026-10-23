@@ -14,7 +14,7 @@ function loadService() {
     },
     ProjectRepository: {
       findById: (id) => String(id) === 'P1'
-        ? { ID: 'P1', TenantID: 'T1' } : null
+        ? { ID: 'P1', TenantID: 'T1', Quantity: 100 } : null
     },
     ProjectService: { _isProjectAvailableToUser_: () => true },
     EventRepository: { findById: (id) => String(id) === 'EV1' || String(id) === 'EV2'
@@ -119,6 +119,37 @@ test('calculation history is idempotent and records quantity variance', () => {
   assert.equal(changed.VarianceQuantity, 90);
 });
 
+
+
+test('creates early-order estimates only for eligible specifications and replays safely', () => {
+  const { service, sheets } = loadService();
+  service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5,
+    WastagePercent: 5, EarlyOrderPolicy: 'ESTIMATE_ALLOWED'
+  }, {});
+  service.createSpecification('P1', {
+    ItemName: 'دکمه', Unit: 'عدد', ConsumptionPerUnit: 4,
+    EarlyOrderPolicy: 'DISABLED'
+  }, {});
+  const first = service.createEstimatedNeeds('P1', {}).data;
+  assert.equal(first.items.length, 1);
+  assert.equal(first.items[0].NeedType, 'ESTIMATED');
+  assert.equal(first.items[0].RequestedQuantity, 157.5);
+  const replay = service.createEstimatedNeeds('P1', {}).data;
+  assert.equal(replay.items.length, 1);
+  assert.equal(replay.items[0].IdempotentReplay, true);
+  assert.equal(sheets['18_MaterialNeeds'].length, 1);
+});
+
+test('manual early-order policy uses the configured manual quantity', () => {
+  const { service } = loadService();
+  service.createSpecification('P1', {
+    ItemName: 'زیپ', Unit: 'عدد', ConsumptionPerUnit: 1,
+    EarlyOrderPolicy: 'MANUAL_ALLOWED', EarlyOrderQuantity: 75
+  }, {});
+  const result = service.createEstimatedNeeds('P1', {}).data;
+  assert.equal(result.items[0].RequestedQuantity, 75);
+});
 
 test('confirmed quantity event creates material needs and safely replays', () => {
   const { service, sheets } = loadService();
