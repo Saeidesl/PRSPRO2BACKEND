@@ -20,6 +20,13 @@ const ProcurementService = {
     return 'MAT-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
   },
 
+  _needKey_: function(need, projectId) {
+    if (need && need.MaterialSpecKey) {
+      return 'SPEC|' + String(projectId || need.ProjectID || '') + '|' + String(need.MaterialSpecKey);
+    }
+    return 'NEED|' + String(need && need.ID || '');
+  },
+
   _now_: function() {
     return new Date().toISOString();
   },
@@ -152,12 +159,16 @@ const ProcurementService = {
     var existingAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
       return !!countableExistingItemIds[String(allocation.PurchaseOrderItemID || '')];
     });
+    var existingNeedById = Object.create(null);
+    existingNeeds.forEach(function(need) { existingNeedById[String(need.ID)] = need; });
     var orderedByNeedBeforeOrder = {};
     existingAllocations.forEach(function(allocation) {
       var needId = String(allocation.MaterialNeedID || '');
-      if (needId) orderedByNeedBeforeOrder[needId] =
-        (orderedByNeedBeforeOrder[needId] || 0) + (Number(allocation.AllocatedQuantity) || 0);
-    });
+      var linkedNeed = existingNeedById[needId];
+      var key = linkedNeed ? this._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
+      if (needId) orderedByNeedBeforeOrder[key] =
+        (orderedByNeedBeforeOrder[key] || 0) + (Number(allocation.AllocatedQuantity) || 0);
+    }, this);
     var allocationsByExistingItem = {};
     existingAllocations.forEach(function(allocation) {
       var itemId = String(allocation.PurchaseOrderItemID || '');
@@ -168,9 +179,11 @@ const ProcurementService = {
       if (!countableExistingItemIds[itemId] || allocationsByExistingItem[itemId]) return;
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
+        var linkedNeed = existingNeedById[needId];
+        var key = linkedNeed ? this._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
         var legacySurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
           ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
-        orderedByNeedBeforeOrder[needId] = (orderedByNeedBeforeOrder[needId] || 0) +
+        orderedByNeedBeforeOrder[key] = (orderedByNeedBeforeOrder[key] || 0) +
           Math.max(0, (Number(item.OrderedQuantity) || 0) - legacySurplus);
       }
     });
@@ -205,7 +218,8 @@ const ProcurementService = {
       if (!allocations.length && project) {
         if (need) {
           var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
-          var alreadyAllocated = Math.max(0, orderedByNeedBeforeOrder[String(need.ID)] || 0);
+          var needAllocationKey = self._needKey_(need, project.ID);
+          var alreadyAllocated = Math.max(0, orderedByNeedBeforeOrder[needAllocationKey] || 0);
           var remainingNeed = Math.max(0, requested - alreadyAllocated);
           requestedNeedAllocation = Math.min(quantity, remainingNeed);
           surplusQuantity = Math.max(0, quantity - requestedNeedAllocation);
@@ -215,7 +229,7 @@ const ProcurementService = {
               MaterialNeedID: needId,
               AllocatedQuantity: requestedNeedAllocation
             }];
-            orderedByNeedBeforeOrder[String(need.ID)] =
+            orderedByNeedBeforeOrder[needAllocationKey] =
               alreadyAllocated + requestedNeedAllocation;
           }
         } else {
