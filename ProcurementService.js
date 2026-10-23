@@ -691,6 +691,8 @@ const ProcurementService = {
       }
     });
     var itemById = {};
+    var needById = Object.create(null);
+    needs.forEach(function(need) { needById[String(need.ID)] = need; });
     var allocationsByItem = {};
     var orderedByNeed = {};
     var receivedByNeed = {};
@@ -704,7 +706,9 @@ const ProcurementService = {
       if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
       allocationsByItem[itemId].push(allocation);
       var needId = String(allocation.MaterialNeedID || '');
-      if (needId && countableItemIds[itemId]) orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
+      var linkedNeed = needById[needId];
+      var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
+      if (needId && countableItemIds[itemId]) orderedByNeed[effectiveKey] = (orderedByNeed[effectiveKey] || 0) +
         (Number(allocation.AllocatedQuantity) || 0);
     });
     items.forEach(function(item) {
@@ -712,9 +716,11 @@ const ProcurementService = {
       if (!countableItemIds[itemId] || (allocationsByItem[itemId] || []).length) return;
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
+        var linkedNeed = needById[needId];
+        var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
         var legacyOrNewSurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
           ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
-        orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
+        orderedByNeed[effectiveKey] = (orderedByNeed[effectiveKey] || 0) +
           Math.max(0, (Number(item.OrderedQuantity) || 0) - legacyOrNewSurplus);
       }
     });
@@ -735,18 +741,22 @@ const ProcurementService = {
         linkedAllocations.forEach(function(allocation) {
           var needId = String(allocation.MaterialNeedID || '');
           if (!needId) return;
+          var linkedNeed = needById[needId];
+          var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
           var share = allocatedTotal > 0
             ? receivedForNeeds * (Number(allocation.AllocatedQuantity) || 0) / allocatedTotal
             : 0;
-          receivedByNeed[needId] = (receivedByNeed[needId] || 0) + share;
+          receivedByNeed[effectiveKey] = (receivedByNeed[effectiveKey] || 0) + share;
         });
       } else {
         var needId = String(item.MaterialNeedID || '');
         if (needId) {
+          var linkedNeed = needById[needId];
+          var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
           var surplusForUnallocatedItem = item.SurplusQuantity === undefined || item.SurplusQuantity === null
             ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
           var quantityForNeed = Math.max(0, (Number(item.OrderedQuantity) || 0) - surplusForUnallocatedItem);
-          receivedByNeed[needId] = (receivedByNeed[needId] || 0) +
+          receivedByNeed[effectiveKey] = (receivedByNeed[effectiveKey] || 0) +
             Math.min(itemReceived, quantityForNeed);
         }
       }
