@@ -284,6 +284,11 @@ const EventService = {
 
       if (eventType) {
         result.EventTypeName = eventType.Name || eventType.Code || '';
+        result.IsWorkCompletion = eventType.IsWorkCompletion === true ||
+          String(eventType.IsWorkCompletion).toLowerCase() === 'true' ||
+          String(eventType.IsWorkCompletion) === '1';
+      } else {
+        result.IsWorkCompletion = false;
       }
 
       result.CreatorName = creator
@@ -330,6 +335,9 @@ const EventService = {
       String(eventType.TenantID) === String(tenantId)
     ) {
       result.EventTypeName = eventType.Name || eventType.Code || '';
+      result.IsWorkCompletion = eventType.IsWorkCompletion === true ||
+        String(eventType.IsWorkCompletion).toLowerCase() === 'true' ||
+        String(eventType.IsWorkCompletion) === '1';
     }
 
     const creator = event.CreatedBy
