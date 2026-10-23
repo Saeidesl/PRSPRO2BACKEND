@@ -445,6 +445,12 @@ const Router = {
       return ProcurementService.createReceipt(body, params);
     }
 
+    const materialEstimateMatch = path.match(/^\/projects\/([^/]+)\/material-estimates$/);
+    if (materialEstimateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return MaterialPlanningService.createEstimatedNeeds(materialEstimateMatch[1], params);
+    }
+
     const materialSpecCreateMatch = path.match(/^\/projects\/([^/]+)\/material-specifications$/);
     if (materialSpecCreateMatch) {
       AccessControlService.require(params, 'PROJECT_EDIT');
