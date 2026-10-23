@@ -25,7 +25,7 @@ This is a source-code audit of the `main` branches. It does not prove that the c
 
 1. **Baseline gap addressed on the implementation branch:** versioned per-project material specifications now capture consumption per unit, wastage and early-order policy; legacy needs remain untouched. A need currently stores a scalar `RequestedQuantity`, not a normalized per-unit consumption rate, calculation basis, wastage rule, or specification revision.
 2. **Baseline gap partially addressed on the implementation branch:** an explicitly configured event type and dynamic quantity field can trigger confirmed-needs recalculation; there is no separate approval workflow in the current app, so registering the configured event is the authorization/confirmation boundary. Event dynamic fields and variant quantities exist, but do not alone guarantee this workflow.
-3. **Residual risk:** EventService still persists the production event before the integration applies. The new confirmed-needs action is idempotent and has a retry endpoint, but this is recoverable consistency rather than a true cross-sheet transaction. EventService persists the event and then applies procurement integration; integration errors are audited, but the original event can remain saved. Retries need idempotency to avoid duplicate material needs/receipts.
+3. **Residual risk:** EventService still persists the production event before the integration applies. The new confirmed-needs action is idempotent, has a retry endpoint, and flags affected needs for review when their source event is voided, but this is recoverable consistency rather than a true cross-sheet transaction. EventService persists the event and then applies procurement integration; integration errors are audited, but the original event can remain saved. Retries need idempotency to avoid duplicate material needs/receipts.
 4. **The order creation path validates the payload before writes, but Google Sheets does not provide a multi-sheet transaction.** A write failure after the order header is inserted can leave partial order data; recovery/compensation and idempotency require explicit handling.
 5. **Partially addressed:** order/receipt writes use script locks; confirmed and estimated material calculations now use a script lock. Live contention behavior still needs end-to-end verification.
 6. **The database declaration uses both `18_MaterialNeeds` and `18_ProjectStatuses`.** Names differ, so this is not itself a collision, but the duplicated numeric prefix is confusing and should only be changed through a non-destructive migration. Never rebuild/delete sheets in production to renumber them.
@@ -69,7 +69,7 @@ This is a source-code audit of the `main` branches. It does not prove that the c
 - [x] Configure the authoritative event type and confirmed quantity field.
 - [x] Validate quantity, project visibility and event permissions; the app has no separate approval subsystem.
 - [x] Recalculate needs idempotently and audit failures.
-- [x] Preserve event history and add a retry endpoint for confirmed-needs integration.
+- [x] Preserve event history, add a retry endpoint for confirmed-needs integration, and flag affected needs for review when the source event is voided.
 - [x] Add event integration tests.
 
 ### Phase 4 — Procurement calculation and consistency
@@ -88,11 +88,11 @@ This is a source-code audit of the `main` branches. It does not prove that the c
 
 ### Phase 6 — Release validation
 - [x] Run backend unit tests and syntax checks on the latest validated implementation commit.
-- [x] Run frontend syntax and local-asset/CSS checks on the implementation branch.
-- [ ] Verify migration on a copy/staging spreadsheet before production.
-- [ ] Verify deployed Apps Script version and API URL.
+- [x] Run frontend syntax and local-asset/CSS checks on the latest validated implementation commit.
+- [ ] Verify migration on a copy/staging spreadsheet before production. No staging spreadsheet or authorized test-user session is exposed to this work session.
+- [ ] Verify deployed Apps Script version and API URL; the repository CI does not deploy the branch and no authenticated live deployment status is available here.
 - [ ] Run end-to-end acceptance scenarios with authorized test users.
-- [ ] Verify no regressions in workflow, events, projects, procurement and reports.
+- [ ] Verify no regressions in workflow, events, projects, procurement and reports using a live/staging environment.
 - [ ] Publish a precise release report. Do not call the system ready for use until live/staging acceptance has passed.
 
 ## Release blockers
