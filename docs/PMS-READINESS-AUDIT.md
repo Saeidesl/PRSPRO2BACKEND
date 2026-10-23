@@ -14,25 +14,25 @@ This is a source-code audit of the `main` branches. It does not prove that the c
 - Workflow step-to-department assignments have a dedicated sheet/repository/service path.
 - Procurement has separate material needs, purchase orders, order lines, allocations, and receipts.
 - Procurement service supports multi-line orders, need/project allocations, partial receipts, remaining quantities, request-level caching through the sheets repository, a combined workspace endpoint, dashboard and reports.
-- Event type procurement configuration currently supports `NONE`, `CREATE_NEED`, and `RECORD_RECEIPT` actions with dynamic-field mappings.
+- Event type procurement configuration supports `NONE`, `CREATE_NEED`, `RECORD_RECEIPT`, and (on the implementation branch) `RECALCULATE_CONFIRMED_NEEDS` with dynamic-field mappings.
 - EventService includes procurement projections in project timelines and records explicit audit information if the post-event procurement integration fails.
 - Project reports include project events and project-scoped procurement data.
 - Router contains permission checks for procurement reads/writes and workflow/event management.
 - CI workflows exist for frontend JavaScript/CSS checks and backend Node tests/source syntax checks.
-- Existing automated backend test coverage found in repository tree is limited to `tests/report-service.test.js`.
+- The original `main` branch test coverage was limited to `tests/report-service.test.js`; implementation-branch tests now cover material specifications, estimate/confirmed calculations, event mapping, procurement idempotency and schema contracts.
 
 ## Confirmed gaps and risks
 
-1. **No complete material-consumption specification model is present in the reviewed project/procurement model.** A need currently stores a scalar `RequestedQuantity`, not a normalized per-unit consumption rate, calculation basis, wastage rule, or specification revision.
-2. **No explicit canonical contract was found for an approved cutting/completion event to set the authoritative confirmed production quantity and trigger a versioned needs recalculation.** Event dynamic fields and variant quantities exist, but do not alone guarantee this workflow.
-3. **Event and procurement integration are not atomic.** EventService persists the event and then applies procurement integration; integration errors are audited, but the original event can remain saved. Retries need idempotency to avoid duplicate material needs/receipts.
+1. **Baseline gap addressed on the implementation branch:** versioned per-project material specifications now capture consumption per unit, wastage and early-order policy; legacy needs remain untouched. A need currently stores a scalar `RequestedQuantity`, not a normalized per-unit consumption rate, calculation basis, wastage rule, or specification revision.
+2. **Baseline gap partially addressed on the implementation branch:** an explicitly configured event type and dynamic quantity field can trigger confirmed-needs recalculation; there is no separate approval workflow in the current app, so registering the configured event is the authorization/confirmation boundary. Event dynamic fields and variant quantities exist, but do not alone guarantee this workflow.
+3. **Residual risk:** EventService still persists the production event before the integration applies. The new confirmed-needs action is idempotent and has a retry endpoint, but this is recoverable consistency rather than a true cross-sheet transaction. EventService persists the event and then applies procurement integration; integration errors are audited, but the original event can remain saved. Retries need idempotency to avoid duplicate material needs/receipts.
 4. **The order creation path validates the payload before writes, but Google Sheets does not provide a multi-sheet transaction.** A write failure after the order header is inserted can leave partial order data; recovery/compensation and idempotency require explicit handling.
-5. **Concurrency protection is currently visible on order creation, but must be verified for all paths that change the same material balance**, including receipts, need recalculation, cancellations and integration retries.
+5. **Partially addressed:** order/receipt writes use script locks; confirmed and estimated material calculations now use a script lock. Live contention behavior still needs end-to-end verification.
 6. **The database declaration uses both `18_MaterialNeeds` and `18_ProjectStatuses`.** Names differ, so this is not itself a collision, but the duplicated numeric prefix is confusing and should only be changed through a non-destructive migration. Never rebuild/delete sheets in production to renumber them.
 7. **A received quantity is not the same as usable warehouse stock.** The current procurement model records receipts but does not constitute a complete inventory ledger with stock movements, reservations, issues/consumption, returns and stock valuation.
-8. **Procurement integration settings are limited to need creation and receipt recording.** There is no first-class per-material policy for early ordering based on estimate versus ordering against confirmed needs.
-9. **Need recalculation must not mutate historical orders/receipts silently.** A versioned calculation ledger and variance records are needed when confirmed quantity/specification changes.
-10. **Backend automated tests are too narrow for release readiness.** Current checked-in tests focus on project-report tenant/visibility scoping; procurement arithmetic, concurrency, idempotency, authorization, migration and frontend integration need tests.
+8. **Baseline gap addressed on the implementation branch:** per-material early-order policy supports disabled, estimated-quantity and manual-quantity modes. There is no first-class per-material policy for early ordering based on estimate versus ordering against confirmed needs.
+9. **Partially addressed:** calculations are append-only with revision, basis, source event, prior quantity and variance; older material needs are superseded rather than deleting order/receipt history. A versioned calculation ledger and variance records are needed when confirmed quantity/specification changes.
+10. **Improved but not complete:** backend tests now cover material planning, event mapping, procurement idempotency and schema contracts; authorized-user end-to-end tests and real Sheets behavior remain outstanding. Current checked-in tests focus on project-report tenant/visibility scoping; procurement arithmetic, concurrency, idempotency, authorization, migration and frontend integration need tests.
 11. **Repository CI is not equivalent to live deployment validation.** Backend workflow checks syntax and Node tests; the Apps Script sync workflow requires repository secrets and deploys only under its configured trigger/guard. This audit cannot verify secret availability, the live Script ID, or the deployed version.
 12. **Frontend is a static HTML/CSS/JS app.** Existing UI modules must continue to use the current API/permission conventions; a new feature must not bypass backend authorization or break mobile layouts.
 
@@ -55,39 +55,40 @@ This is a source-code audit of the `main` branches. It does not prove that the c
 - [x] Inspect workflow, event, project, procurement, report, router, database schema and CI configuration.
 - [x] Record current capabilities, gaps, data-safety risks and release boundary.
 - [x] Establish acceptance criteria for later phases.
-- [ ] Capture and run baseline CI results from GitHub Actions and confirm live Apps Script version. This requires available GitHub Actions/environment access and is not proven by source inspection alone.
+- [x] Capture baseline GitHub Actions results and run CI on the implementation branches.
+- [ ] Confirm the currently deployed Apps Script version and live spreadsheet headers; repository access alone does not expose that state.
 
 ### Phase 2 — Data model and non-destructive migration
-- [ ] Add versioned project material specifications.
-- [ ] Add durable, idempotent material-need calculation/revision records.
-- [ ] Add schema migration that preserves existing rows and validates expected headers.
-- [ ] Keep legacy needs/orders/receipts readable and mark their calculation basis as legacy/unknown rather than inventing consumption rates.
-- [ ] Add migration tests.
+- [x] Add versioned project material specifications.
+- [x] Add durable, idempotent material-need calculation/revision records.
+- [x] Add additive schema migration that preserves existing rows and validates expected headers.
+- [x] Keep legacy needs/orders/receipts readable; no historical consumption rates are invented.
+- [x] Add schema contract tests.
 
 ### Phase 3 — Confirmed quantity event integration
-- [ ] Configure the authoritative event type and confirmed quantity field.
-- [ ] Validate quantity and permission/approval requirements.
-- [ ] Recalculate needs idempotently and audit failures.
-- [ ] Preserve event history and support safe retry/reconciliation.
-- [ ] Add event integration tests.
+- [x] Configure the authoritative event type and confirmed quantity field.
+- [x] Validate quantity, project visibility and event permissions; the app has no separate approval subsystem.
+- [x] Recalculate needs idempotently and audit failures.
+- [x] Preserve event history and add a retry endpoint for confirmed-needs integration.
+- [x] Add event integration tests.
 
 ### Phase 4 — Procurement calculation and consistency
-- [ ] Implement estimate vs confirmed need and early-order policy.
-- [ ] Calculate ordered/received/outstanding/shortage without double counting.
-- [ ] Preserve history on changed quantities, cancelled orders and revised specifications.
-- [ ] Protect concurrent writes and partial multi-sheet writes.
-- [ ] Add procurement arithmetic, concurrency/idempotency and authorization tests.
+- [x] Implement estimate vs confirmed need and early-order policy.
+- [x] Aggregate early-order allocations into confirmed needs by material specification key and distinguish ordered/received/outstanding quantities.
+- [x] Preserve calculation history and supersede old need/specification revisions without deleting order/receipt history.
+- [x] Serialize order, receipt and material-calculation writes; partial multi-sheet order failures are marked `NEEDS_REVIEW`.
+- [x] Add procurement idempotency, calculation, lock and tenant-visibility tests; broader live concurrency testing remains a release gate.
 
 ### Phase 5 — Frontend and reporting
-- [ ] Add project material specification UI.
-- [ ] Show estimated/confirmed requirement, early-order policy, order/receipt/shortage and revision history.
-- [ ] Keep responsive mobile/desktop layout and existing design system.
-- [ ] Update procurement and project reports.
-- [ ] Add frontend smoke/syntax/accessibility checks.
+- [x] Add project material specification UI.
+- [x] Show estimate policy, per-unit consumption, wastage and calculation history; procurement workspace continues to show order/receipt/shortage balances.
+- [x] Use existing responsive form controls and project-card patterns.
+- [x] Update project reports with need/order/receipt balances and calculation history.
+- [x] Run frontend syntax and local-asset/CSS checks.
 
 ### Phase 6 — Release validation
-- [ ] Run all backend tests and syntax checks.
-- [ ] Run all frontend checks.
+- [x] Run backend unit tests and syntax checks on the latest validated implementation commit.
+- [x] Run frontend syntax and local-asset/CSS checks on the implementation branch.
 - [ ] Verify migration on a copy/staging spreadsheet before production.
 - [ ] Verify deployed Apps Script version and API URL.
 - [ ] Run end-to-end acceptance scenarios with authorized test users.
