@@ -1335,7 +1335,7 @@ const EventService = {
           : 'رویداد با موفقیت باطل شد.'
       }
     );
-  }
+  },
 
   retryProcurementIntegration: function(eventId, params) {
     var user = AccessControlService.getCurrentUser(params || {});
