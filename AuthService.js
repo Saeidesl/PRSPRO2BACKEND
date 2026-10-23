@@ -15,14 +15,19 @@ const AuthService = {
     const username = String(body.username).trim();
     const password = String(body.password);
 
-    const user = UserRepository.findByUsername(username);
+    const matchingUsers = typeof UserRepository.findAllByUsername === 'function'
+      ? UserRepository.findAllByUsername(username)
+      : [UserRepository.findByUsername(username)].filter(Boolean);
 
-    if (!user) {
+    // Usernames can repeat across tenants. Without a tenant selector, fail closed.
+    if (matchingUsers.length !== 1) {
       throw ErrorHandler.create(
         Constants.ERROR.UNAUTHORIZED,
         'نام کاربری یا رمز عبور صحیح نیست.'
       );
     }
+
+    const user = matchingUsers[0];
 
     if (String(user.Status) !== Constants.STATUS.ACTIVE) {
       throw ErrorHandler.create(
