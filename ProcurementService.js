@@ -511,6 +511,11 @@ const ProcurementService = {
         });
       }, this);
 
+      if (!normalizedEntries.length) {
+        return Response.success(replayedReceipts.map(function(receipt) {
+          return Object.assign({ IdempotentReplay: true }, receipt);
+        }));
+      }
       var now = this._now_();
       var created = normalizedEntries.map(function(entry) {
         return {
