@@ -207,6 +207,9 @@ const ProcurementService = {
         if (!need || String(need.TenantID) !== String(user.TenantID)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با قلم سفارش معتبر نیست.');
         }
+        if (['NEEDS_REVIEW', 'SUPERSEDED', 'CANCELLED', 'DELETED'].indexOf(String(need.Status || 'ACTIVE').toUpperCase()) !== -1) {
+          throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'این نیاز باید پیش از سفارش جدید بازبینی یا به‌روزرسانی شود.');
+        }
         if (need.ProjectID && (!project || String(need.ProjectID) !== String(project.ID))) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نیاز پروژه‌ای را نمی‌توان در سفارش عمومی یا سفارش پروژه‌ای دیگر ثبت کرد.');
         }
@@ -811,9 +814,10 @@ const ProcurementService = {
       copy.ReceivedQuantity = received;
       copy.RemainingToOrderQuantity = Math.max(0, requested - Math.max(ordered, received));
       copy.RemainingDeliveryQuantity = Math.max(0, ordered - received);
-      copy.ProcurementStatus = received >= requested ? 'RECEIVED'
+      copy.ProcurementStatus = String(need.Status || '').toUpperCase() === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW'
+        : (received >= requested ? 'RECEIVED'
         : (ordered >= requested ? (received > 0 ? 'PARTIALLY_RECEIVED' : 'ORDERED')
-        : (ordered > 0 ? 'PARTIALLY_ORDERED' : (received > 0 ? 'PARTIALLY_RECEIVED' : 'NEEDS_PURCHASE')));
+        : (ordered > 0 ? 'PARTIALLY_ORDERED' : (received > 0 ? 'PARTIALLY_RECEIVED' : 'NEEDS_PURCHASE'))));
       return copy;
     }));
   },
