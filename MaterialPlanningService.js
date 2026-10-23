@@ -247,7 +247,7 @@ const MaterialPlanningService = {
       EntityType: 'MATERIAL_NEED_CALCULATION', EntityID: record.ID, NewData: record
     });
     return Response.success(record);
-  }
+  },
 
   recalculateProjectNeeds: function(projectId, sourceEventId, confirmedQuantity, sourceEventVersion, params) {
     var user = this._user_(params);
