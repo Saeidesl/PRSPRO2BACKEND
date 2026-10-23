@@ -12,6 +12,7 @@ function loadService() {
     AccessControlService: {
       getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' })
     },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => true }) },
     ProjectRepository: {
       findById: (id) => String(id) === 'P1'
         ? { ID: 'P1', TenantID: 'T1', Quantity: 100 } : null
