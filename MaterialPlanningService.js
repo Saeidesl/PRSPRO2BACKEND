@@ -300,6 +300,17 @@ const MaterialPlanningService = {
           }));
         }
       }
+      var estimatedNeed = needs.find(function(need) {
+        return String(need.MaterialSpecKey || '') === String(spec.SpecKey || spec.ID) &&
+          String(need.NeedType || '').toUpperCase() === 'ESTIMATED' &&
+          String(need.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      });
+      if (estimatedNeed) {
+        GoogleSheetsRepository.updateById('18_MaterialNeeds', estimatedNeed.ID, Object.assign({}, estimatedNeed, {
+          Status: 'SUPERSEDED', UpdatedAt: self._now_(),
+          Notes: String(estimatedNeed.Notes || '') + ' | نیاز قطعی ثبت شد'
+        }));
+      }
       var previousQuantity = existingNeed ? Number(existingNeed.RequestedQuantity) || 0 : 0;
       var key = [String(user.TenantID), String(projectId), String(sourceEventId),
         String(spec.SpecKey || spec.ID), String(spec.Revision || 1), String(quantity)].join('|');
@@ -383,6 +394,17 @@ const MaterialPlanningService = {
         String(spec.Revision || 1), String(suggestedQuantity), String(manualQuantity === null ? '' : manualQuantity)].join('|');
       var prior = needs.find(function(need) {
         return String(need.CalculationKey || '') === key && String(need.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
+      });
+      needs.filter(function(need) {
+        return String(need.MaterialSpecKey || '') === String(spec.SpecKey || spec.ID) &&
+          String(need.NeedType || '').toUpperCase() === 'ESTIMATED' &&
+          String(need.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+          String(need.CalculationKey || '') !== key;
+      }).forEach(function(oldEstimate) {
+        GoogleSheetsRepository.updateById('18_MaterialNeeds', oldEstimate.ID, Object.assign({}, oldEstimate, {
+          Status: 'SUPERSEDED', UpdatedAt: self._now_(),
+          Notes: String(oldEstimate.Notes || '') + ' | برآورد جدید جایگزین شد'
+        }));
       });
       if (prior) {
         results.push(Object.assign({ IdempotentReplay: true }, prior));
