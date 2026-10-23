@@ -180,7 +180,7 @@ const ProcurementService = {
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
         var linkedNeed = existingNeedById[needId];
-        var key = linkedNeed ? this._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
+        var key = linkedNeed ? self._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
         var legacySurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
           ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
         orderedByNeedBeforeOrder[key] = (orderedByNeedBeforeOrder[key] || 0) +
@@ -690,6 +690,7 @@ const ProcurementService = {
         countableItemIds[String(item.ID)] = true;
       }
     });
+    var self = this;
     var itemById = {};
     var needById = Object.create(null);
     needs.forEach(function(need) { needById[String(need.ID)] = need; });
@@ -707,7 +708,7 @@ const ProcurementService = {
       allocationsByItem[itemId].push(allocation);
       var needId = String(allocation.MaterialNeedID || '');
       var linkedNeed = needById[needId];
-      var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
+      var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
       if (needId && countableItemIds[itemId]) orderedByNeed[effectiveKey] = (orderedByNeed[effectiveKey] || 0) +
         (Number(allocation.AllocatedQuantity) || 0);
     });
@@ -717,7 +718,7 @@ const ProcurementService = {
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
         var linkedNeed = needById[needId];
-        var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
+        var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
         var legacyOrNewSurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
           ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
         orderedByNeed[effectiveKey] = (orderedByNeed[effectiveKey] || 0) +
@@ -742,7 +743,7 @@ const ProcurementService = {
           var needId = String(allocation.MaterialNeedID || '');
           if (!needId) return;
           var linkedNeed = needById[needId];
-          var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
+          var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
           var share = allocatedTotal > 0
             ? receivedForNeeds * (Number(allocation.AllocatedQuantity) || 0) / allocatedTotal
             : 0;
@@ -752,7 +753,7 @@ const ProcurementService = {
         var needId = String(item.MaterialNeedID || '');
         if (needId) {
           var linkedNeed = needById[needId];
-          var effectiveKey = linkedNeed ? this._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
+          var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
           var surplusForUnallocatedItem = item.SurplusQuantity === undefined || item.SurplusQuantity === null
             ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
           var quantityForNeed = Math.max(0, (Number(item.OrderedQuantity) || 0) - surplusForUnallocatedItem);
@@ -778,7 +779,7 @@ const ProcurementService = {
     }, this).map(function(need) {
       var copy = Object.assign({}, need);
       var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
-      var needKey = this._needKey_(need, need.ProjectID);
+      var needKey = self._needKey_(need, need.ProjectID);
       var rawOrdered = Math.max(0, orderedByNeed[needKey] || 0);
       var ordered = Math.min(requested, rawOrdered);
       var received = Math.min(requested, Math.max(0, receivedByNeed[needKey] || 0));
