@@ -131,6 +131,12 @@ const UserRoleService = {
 
     }
 
+    if (String(role.Status || Constants.STATUS.ACTIVE) !== Constants.STATUS.ACTIVE) {
+      throw ErrorHandler.create(
+        Constants.ERROR.INVALID_STATUS,
+        'اختصاص نقش غیرفعال به کاربر مجاز نیست.'
+      );
+    }
 
     if (
       String(role.TenantID) !==
