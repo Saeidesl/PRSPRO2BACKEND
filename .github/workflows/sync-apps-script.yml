@@ -122,3 +122,18 @@ jobs:
 
       - name: Push validated source to Apps Script
         run: clasp push --force
+
+      # Pushing source updates the Apps Script project, but a versioned Web App
+      # deployment must also be redeployed to serve the new code at its existing URL.
+      # Configure APPS_SCRIPT_DEPLOYMENT_ID as a repository Actions secret.
+      - name: Update existing Web App deployment
+        env:
+          DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYMENT_ID" ]; then
+            echo "::warning::Source was pushed, but APPS_SCRIPT_DEPLOYMENT_ID is not configured; the existing Web App deployment was not updated."
+            exit 0
+          fi
+          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "Automated deployment ${GITHUB_SHA:0:7}"
