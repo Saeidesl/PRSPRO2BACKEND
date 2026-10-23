@@ -939,6 +939,10 @@ const ProcurementService = {
       copy.ProjectTitle = project ? project.Title : '';
       return copy;
     });
+    var calculations = GoogleSheetsRepository.getAll('25_MaterialNeedCalculations').filter(function(row) {
+      return String(row.TenantID || '') === String(user.TenantID || '') &&
+        !!projectById[String(row.ProjectID || '')];
+    });
 
     orders = orders.map(function(order) {
       var copy = Object.assign({}, order);
@@ -967,7 +971,8 @@ const ProcurementService = {
         return projectById[String(project.ID)];
       }),
       needs: needs,
-      orders: orders
+      orders: orders,
+      calculations: calculations
     });
   },
 
