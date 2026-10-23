@@ -325,6 +325,7 @@ const MaterialPlanningService = {
   },
 
   recalculateProjectNeeds: function(projectId, sourceEventId, confirmedQuantity, sourceEventVersion, params) {
+    this._ensureSchema_();
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'محاسبه نیازهای ملزومات دیگری در حال انجام است؛ دوباره تلاش کنید.');
@@ -450,6 +451,7 @@ const MaterialPlanningService = {
 
 
   createEstimatedNeeds: function(projectId, params) {
+    this._ensureSchema_();
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'محاسبه نیازهای ملزومات دیگری در حال انجام است؛ دوباره تلاش کنید.');
@@ -542,6 +544,7 @@ const MaterialPlanningService = {
 
 
   markEventVoided: function(eventId, params) {
+    this._ensureSchema_();
     var user = this._user_(params);
     Validator.required(eventId, 'شناسه رویداد');
     var lock = LockService.getScriptLock();
