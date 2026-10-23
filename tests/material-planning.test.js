@@ -6,13 +6,13 @@ const path = require('node:path');
 const vm = require('node:vm');
 const test = require('node:test');
 
-function loadService() {
+function loadService(lockAvailable = true) {
   const sheets = Object.create(null);
   const context = {
     AccessControlService: {
       getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' })
     },
-    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => true }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => lockAvailable, releaseLock: () => true }) },
     ProjectRepository: {
       findById: (id) => String(id) === 'P1'
         ? { ID: 'P1', TenantID: 'T1', Quantity: 100 } : null
@@ -169,6 +169,13 @@ test('confirmed quantity event creates material needs and safely replays', () =>
   assert.equal(revised.items[0].RequestedQuantity, 1350);
   assert.equal(sheets['18_MaterialNeeds'].length, 1);
   assert.equal(sheets['25_MaterialNeedCalculations'].length, 2);
+});
+
+
+test('does not run duplicate material calculations when the script lock is unavailable', () => {
+  const { service } = loadService(false);
+  assert.throws(() => service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {}), /محاسبه نیازهای ملزومات دیگری در حال انجام است/);
+  assert.throws(() => service.createEstimatedNeeds('P1', {}), /محاسبه نیازهای ملزومات دیگری در حال انجام است/);
 });
 
 test('rejects cross-tenant or invisible projects', () => {
