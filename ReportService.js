@@ -60,6 +60,10 @@ const ReportService = {
       const procurementPayload = this._unwrapResponse_(ProcurementService.reports(params || {})) || {};
       const allNeeds = Array.isArray(procurementPayload.needs) ? procurementPayload.needs : [];
       const allOrders = Array.isArray(procurementPayload.orders) ? procurementPayload.orders : [];
+      const allCalculations = Array.isArray(procurementPayload.calculations) ? procurementPayload.calculations : [];
+      procurement.calculations = allCalculations.filter(function(row) {
+        return String(row.ProjectID || '') === String(projectId);
+      });
       procurement.needs = allNeeds.filter(function(need) {
         return String(need.ProjectID || '') === String(projectId);
       });
