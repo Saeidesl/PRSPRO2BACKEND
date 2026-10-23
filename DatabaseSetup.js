@@ -119,7 +119,7 @@ const APP_CONFIG = {
 
     MATERIAL_NEEDS: {
       name: '18_MaterialNeeds',
-      headers: ['ID','TenantID','ProjectID','SourceEventID','ItemName','ItemCode','Unit','RequestedQuantity','NeededBy','Status','Notes','CreatedBy','CreatedAt','UpdatedAt','MaterialSpecID','SpecificationRevision','CalculationID','BasisQuantity','NeedType','CalculationKey']
+      headers: ['ID','TenantID','ProjectID','SourceEventID','ItemName','ItemCode','Unit','RequestedQuantity','NeededBy','Status','Notes','CreatedBy','CreatedAt','UpdatedAt','MaterialSpecID','MaterialSpecKey','SpecificationRevision','CalculationID','BasisQuantity','NeedType','CalculationKey']
     },
 
     PROJECT_STATUSES: {
