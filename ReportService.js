@@ -54,7 +54,7 @@ const ReportService = {
       return status !== 'VOID' && status !== 'CANCELLED' && status !== 'CANCELED';
     });
 
-    let procurement = { needs: [], orders: [] };
+    let procurement = { needs: [], orders: [], calculations: [] };
     if (typeof ProcurementService !== 'undefined' &&
         ProcurementService && typeof ProcurementService.reports === 'function') {
       const procurementPayload = this._unwrapResponse_(ProcurementService.reports(params || {})) || {};
