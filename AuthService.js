@@ -62,7 +62,7 @@ const AuthService = {
           Username: user.Username,
           DepartmentID: user.DepartmentID,
           DepartmentCode: departmentCode,
-          IsAdmin: departmentCode === 'ADMIN',
+          IsAdmin: AccessControlService.isAdmin(user),
           Status: user.Status
         }
       },
@@ -128,7 +128,7 @@ const AuthService = {
         Username: user.Username,
         DepartmentID: user.DepartmentID,
         DepartmentCode: departmentCode,
-        IsAdmin: departmentCode === 'ADMIN',
+        IsAdmin: AccessControlService.isAdmin(user),
         Status: user.Status
       }
     );
