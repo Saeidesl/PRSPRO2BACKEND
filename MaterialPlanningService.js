@@ -496,4 +496,49 @@ const MaterialPlanningService = {
     return Response.success({ ProjectID: String(projectId), BasisQuantity: suggestedQuantity, items: results });
   },
 
+
+  markEventVoided: function(eventId, params) {
+    var user = this._user_(params);
+    Validator.required(eventId, 'شناسه رویداد');
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'ثبت وضعیت نیازهای متاثر از ابطال رویداد با عملیات دیگری تداخل دارد.');
+    }
+    try {
+      var calculations = GoogleSheetsRepository.getAll(this.SHEETS.CALCULATIONS).filter(function(row) {
+        return String(row.TenantID) === String(user.TenantID) &&
+          String(row.SourceEventID || '') === String(eventId) &&
+          String(row.Status || '').toUpperCase() !== 'SOURCE_EVENT_VOIDED';
+      });
+      var affected = Object.create(null);
+      calculations.forEach(function(row) {
+        GoogleSheetsRepository.updateById(this.SHEETS.CALCULATIONS, row.ID, Object.assign({}, row, {
+          Status: 'SOURCE_EVENT_VOIDED'
+        }));
+        if (row.MaterialNeedID) affected[String(row.MaterialNeedID)] = true;
+      }, this);
+      var needs = GoogleSheetsRepository.getAll('18_MaterialNeeds').filter(function(need) {
+        return String(need.TenantID) === String(user.TenantID) &&
+          String(need.SourceEventID || '') === String(eventId) &&
+          String(need.NeedType || '').toUpperCase() === 'CONFIRMED' &&
+          String(need.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      });
+      needs.forEach(function(need) {
+        GoogleSheetsRepository.updateById('18_MaterialNeeds', need.ID, Object.assign({}, need, {
+          Status: 'NEEDS_REVIEW',
+          UpdatedAt: this._now_(),
+          Notes: String(need.Notes || '') + ' | رویداد مبنا باطل شده؛ نیاز باید با رویداد معتبر جدید بازبینی شود'
+        }));
+      }, this);
+      AuditService.log({
+        TenantID: user.TenantID, UserID: user.ID, Action: 'SOURCE_EVENT_VOIDED',
+        EntityType: 'PROJECT_MATERIAL_NEEDS', EntityID: String(eventId),
+        NewData: { AffectedCalculationCount: calculations.length, AffectedNeedCount: needs.length }
+      });
+      return Response.success({ EventID: String(eventId), AffectedCalculationCount: calculations.length, AffectedNeedCount: needs.length });
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
 };
