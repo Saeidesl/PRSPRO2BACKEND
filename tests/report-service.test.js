@@ -27,6 +27,10 @@ function loadReportService(overrides) {
       orders: [
         { ID: 'O1', ProjectID: 'P1', Status: 'ORDERED', Items: [{ ID: 'I1', ProjectID: 'P1', ItemName: 'Fabric' }] },
         { ID: 'O2', ProjectID: 'P3', Status: 'ORDERED', Items: [{ ID: 'I2', ProjectID: 'P3', ItemName: 'Other fabric' }] }
+      ],
+      calculations: [
+        { ID: 'C1', ProjectID: 'P1', MaterialSpecName: 'Fabric', CalculatedQuantity: 100 },
+        { ID: 'C2', ProjectID: 'P3', MaterialSpecName: 'Other fabric', CalculatedQuantity: 200 }
       ]
     }
   }, overrides || {});
@@ -80,6 +84,7 @@ test('projectReport excludes void/cancelled events and scopes procurement to the
   assert.deepEqual(Array.from(result.data.events, (event) => event.ID), ['E1']);
   assert.deepEqual(Array.from(result.data.procurement.needs, (need) => need.ID), ['N1']);
   assert.deepEqual(Array.from(result.data.procurement.orders, (order) => order.ID), ['O1']);
+  assert.deepEqual(Array.from(result.data.procurement.calculations, (row) => row.ID), ['C1']);
 });
 
 test('projectReport does not expose projects from another tenant', () => {

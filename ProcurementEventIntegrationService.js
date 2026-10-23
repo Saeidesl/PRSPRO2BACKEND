@@ -46,13 +46,14 @@ const ProcurementEventIntegrationService = {
     }
     body = body || {};
     var action = String(body.Action || 'NONE').toUpperCase();
-    if (['NONE', 'CREATE_NEED', 'RECORD_RECEIPT'].indexOf(action) < 0) {
+    if (['NONE', 'CREATE_NEED', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(action) < 0) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین معتبر نیست.');
     }
     var map = this._map_(body.FieldMap || body.FieldMapJSON);
     var required = action === 'CREATE_NEED'
       ? ['ItemName', 'Unit', 'RequestedQuantity']
-      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] : []);
+      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] :
+        (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []));
     required.forEach(function(key) {
       if (!map[key] || typeof map[key] !== 'string') {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نگاشت فیلد الزامی است: ' + key);
@@ -107,7 +108,8 @@ const ProcurementEventIntegrationService = {
     var action = String(row.Action).toUpperCase();
     var required = action === 'CREATE_NEED'
       ? ['ItemName', 'Unit', 'RequestedQuantity']
-      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] : []);
+      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] :
+        (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []));
     required.forEach(function(key) {
       var value = read(key);
       if (String(value === undefined || value === null ? '' : value).trim() === '') {
@@ -115,10 +117,21 @@ const ProcurementEventIntegrationService = {
           'برای اجرای عملیات تأمین، مقدار فیلد مربوط به ' + key + ' الزامی است.');
       }
     });
-    var quantityKey = action === 'CREATE_NEED' ? 'RequestedQuantity' : 'QuantityReceived';
+    var quantityKey = action === 'CREATE_NEED' ? 'RequestedQuantity' :
+      (action === 'RECALCULATE_CONFIRMED_NEEDS' ? 'ConfirmedQuantity' : 'QuantityReceived');
     var quantity = Number(read(quantityKey));
     if (!isFinite(quantity) || quantity <= 0) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تأمین باید عددی بزرگ‌تر از صفر باشد.');
+    }
+    if (action === 'RECALCULATE_CONFIRMED_NEEDS') {
+      if (!projectId) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'محاسبه نیاز قطعی فقط برای رویداد مرتبط با پروژه مجاز است.');
+      }
+      var confirmedProject = ProjectRepository.findById(projectId);
+      if (!confirmedProject || String(confirmedProject.TenantID) !== String(user.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(confirmedProject, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه برای محاسبه نیاز قطعی معتبر نیست.');
+      }
     }
     if (action === 'CREATE_NEED') {
       var mappedProjectId = projectId || read('ProjectID');
@@ -185,6 +198,15 @@ const ProcurementEventIntegrationService = {
         RequestedQuantity: read('RequestedQuantity'),
         NeededBy: read('NeededBy'), Notes: read('Notes')
       }, params);
+    }
+    if (String(row.Action).toUpperCase() === 'RECALCULATE_CONFIRMED_NEEDS') {
+      if (!event.ProjectID) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد مبنای تعداد قطعی باید به پروژه متصل باشد.');
+      }
+      return MaterialPlanningService.recalculateProjectNeeds(
+        event.ProjectID, event.ID, read('ConfirmedQuantity'),
+        event.EventTypeVersion || eventType.Version || '', params
+      );
     }
     if (String(row.Action).toUpperCase() === 'RECORD_RECEIPT') {
       return ProcurementService.createReceipt({

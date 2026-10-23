@@ -20,6 +20,13 @@ const ProcurementService = {
     return 'MAT-' + Utilities.getUuid().replace(/-/g, '').substring(0, 10).toUpperCase();
   },
 
+  _needKey_: function(need, projectId) {
+    if (need && need.MaterialSpecKey) {
+      return 'SPEC|' + String(projectId || need.ProjectID || '') + '|' + String(need.MaterialSpecKey);
+    }
+    return 'NEED|' + String(need && need.ID || '');
+  },
+
   _now_: function() {
     return new Date().toISOString();
   },
@@ -69,6 +76,16 @@ const ProcurementService = {
     var quantity = this._number_(body.RequestedQuantity, 'مقدار موردنیاز', false);
     this._validateProject_(body.ProjectID, user.TenantID, user);
     this._validateEvent_(body.SourceEventID, user.TenantID, user);
+    if (body.SourceEventID) {
+      var replayNeed = ProcurementRepository.getNeeds(user.TenantID).find(function(need) {
+        return String(need.SourceEventID || '') === String(body.SourceEventID) &&
+          String(need.ProjectID || '') === String(body.ProjectID || '') &&
+          String(need.ItemName || '').trim() === String(body.ItemName).trim() &&
+          String(need.Unit || '').trim() === String(body.Unit).trim() &&
+          String(need.Status || '').toUpperCase() !== 'DELETED';
+      });
+      if (replayNeed) return Response.success(Object.assign({ IdempotentReplay: true }, replayNeed));
+    }
 
     var now = this._now_();
     var record = {
@@ -107,6 +124,18 @@ const ProcurementService = {
   _createOrderUnlocked_: function(body, params) {
     body = body || {};
     var user = this._user_(params);
+    var idempotencyKey = String(body.IdempotencyKey || '').trim();
+    if (idempotencyKey) {
+      var replayOrder = ProcurementRepository.getOrders(user.TenantID).find(function(existing) {
+        return String(existing.IdempotencyKey || '') === idempotencyKey;
+      });
+      if (replayOrder) {
+        var replayItems = ProcurementRepository.getItems(user.TenantID).filter(function(item) {
+          return String(item.PurchaseOrderID) === String(replayOrder.ID);
+        });
+        return Response.success({ Order: replayOrder, Items: replayItems, IdempotentReplay: true });
+      }
+    }
     if (!Array.isArray(body.Items) || !body.Items.length) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سفارش باید دست‌کم یک قلم داشته باشد.');
     }
@@ -114,13 +143,32 @@ const ProcurementService = {
     var self = this;
     var existingNeeds = ProcurementRepository.getNeeds(user.TenantID);
     var existingItems = ProcurementRepository.getItems(user.TenantID);
-    var existingAllocations = ProcurementRepository.getAllocations(user.TenantID);
+    var existingOrders = ProcurementRepository.getOrders(user.TenantID);
+    var existingOrderById = Object.create(null);
+    existingOrders.forEach(function(existingOrder) {
+      existingOrderById[String(existingOrder.ID)] = existingOrder;
+    });
+    var countableExistingItemIds = Object.create(null);
+    existingItems.forEach(function(existingItem) {
+      var parent = existingOrderById[String(existingItem.PurchaseOrderID || '')];
+      var status = String(parent && parent.Status || '').toUpperCase();
+      if (parent && ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(status) === -1) {
+        countableExistingItemIds[String(existingItem.ID)] = true;
+      }
+    });
+    var existingAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
+      return !!countableExistingItemIds[String(allocation.PurchaseOrderItemID || '')];
+    });
+    var existingNeedById = Object.create(null);
+    existingNeeds.forEach(function(need) { existingNeedById[String(need.ID)] = need; });
     var orderedByNeedBeforeOrder = {};
     existingAllocations.forEach(function(allocation) {
       var needId = String(allocation.MaterialNeedID || '');
-      if (needId) orderedByNeedBeforeOrder[needId] =
-        (orderedByNeedBeforeOrder[needId] || 0) + (Number(allocation.AllocatedQuantity) || 0);
-    });
+      var linkedNeed = existingNeedById[needId];
+      var key = linkedNeed ? this._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
+      if (needId) orderedByNeedBeforeOrder[key] =
+        (orderedByNeedBeforeOrder[key] || 0) + (Number(allocation.AllocatedQuantity) || 0);
+    }, this);
     var allocationsByExistingItem = {};
     existingAllocations.forEach(function(allocation) {
       var itemId = String(allocation.PurchaseOrderItemID || '');
@@ -128,12 +176,14 @@ const ProcurementService = {
     });
     existingItems.forEach(function(item) {
       var itemId = String(item.ID || '');
-      if (allocationsByExistingItem[itemId]) return;
+      if (!countableExistingItemIds[itemId] || allocationsByExistingItem[itemId]) return;
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
+        var linkedNeed = existingNeedById[needId];
+        var key = linkedNeed ? self._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
         var legacySurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
           ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
-        orderedByNeedBeforeOrder[needId] = (orderedByNeedBeforeOrder[needId] || 0) +
+        orderedByNeedBeforeOrder[key] = (orderedByNeedBeforeOrder[key] || 0) +
           Math.max(0, (Number(item.OrderedQuantity) || 0) - legacySurplus);
       }
     });
@@ -157,6 +207,9 @@ const ProcurementService = {
         if (!need || String(need.TenantID) !== String(user.TenantID)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نیاز مرتبط با قلم سفارش معتبر نیست.');
         }
+        if (['NEEDS_REVIEW', 'SUPERSEDED', 'CANCELLED', 'DELETED'].indexOf(String(need.Status || 'ACTIVE').toUpperCase()) !== -1) {
+          throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'این نیاز باید پیش از سفارش جدید بازبینی یا به‌روزرسانی شود.');
+        }
         if (need.ProjectID && (!project || String(need.ProjectID) !== String(project.ID))) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نیاز پروژه‌ای را نمی‌توان در سفارش عمومی یا سفارش پروژه‌ای دیگر ثبت کرد.');
         }
@@ -168,7 +221,8 @@ const ProcurementService = {
       if (!allocations.length && project) {
         if (need) {
           var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
-          var alreadyAllocated = Math.max(0, orderedByNeedBeforeOrder[String(need.ID)] || 0);
+          var needAllocationKey = self._needKey_(need, project.ID);
+          var alreadyAllocated = Math.max(0, orderedByNeedBeforeOrder[needAllocationKey] || 0);
           var remainingNeed = Math.max(0, requested - alreadyAllocated);
           requestedNeedAllocation = Math.min(quantity, remainingNeed);
           surplusQuantity = Math.max(0, quantity - requestedNeedAllocation);
@@ -178,7 +232,7 @@ const ProcurementService = {
               MaterialNeedID: needId,
               AllocatedQuantity: requestedNeedAllocation
             }];
-            orderedByNeedBeforeOrder[String(need.ID)] =
+            orderedByNeedBeforeOrder[needAllocationKey] =
               alreadyAllocated + requestedNeedAllocation;
           }
         } else {
@@ -256,7 +310,8 @@ const ProcurementService = {
       Notes: String(body.Notes || ''),
       CreatedBy: user.ID,
       CreatedAt: now,
-      UpdatedAt: now
+      UpdatedAt: now,
+      IdempotencyKey: idempotencyKey
     };
 
     // Google Sheets has no multi-sheet transaction. Validate the full payload before writing.
@@ -311,11 +366,20 @@ const ProcurementService = {
   },
 
   createReceipt: function(body, params) {
+    body = body || {};
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت دریافت دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
     }
     try {
+      var user = this._user_(params);
+      var idempotencyKey = String(body.IdempotencyKey || '').trim();
+      if (idempotencyKey) {
+        var replayReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
+          return String(existing.IdempotencyKey || '') === idempotencyKey;
+        });
+        if (replayReceipt) return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+      }
       return this._createReceiptUnlocked_(body, params);
     } finally {
       lock.releaseLock();
@@ -343,6 +407,12 @@ const ProcurementService = {
       var plannedByItemProject = {};
       var normalizedEntries = [];
       var existingReceipts = ProcurementRepository.getReceipts(user.TenantID);
+      var existingReceiptByKey = Object.create(null);
+      existingReceipts.forEach(function(receipt) {
+        if (receipt.IdempotencyKey) existingReceiptByKey[String(receipt.IdempotencyKey)] = receipt;
+      });
+      var replayedReceipts = [];
+      var requestKeysInBatch = Object.create(null);
       var allAllocations = ProcurementRepository.getAllocations(user.TenantID);
 
       existingReceipts.forEach(function(receipt) {
@@ -361,6 +431,17 @@ const ProcurementService = {
       });
 
       entries.forEach(function(entry) {
+        if (entry && entry.IdempotencyKey) {
+          var requestKey = String(entry.IdempotencyKey).trim();
+          if (existingReceiptByKey[requestKey]) {
+            replayedReceipts.push(existingReceiptByKey[requestKey]);
+            return;
+          }
+          if (requestKeysInBatch[requestKey]) {
+            throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'کلید تکراری در درخواست دریافت وجود دارد.');
+          }
+          requestKeysInBatch[requestKey] = true;
+        }
         if (!entry || !entry.PurchaseOrderItemID) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'قلم یکی از دریافت‌ها مشخص نشده است.');
         }
@@ -433,6 +514,11 @@ const ProcurementService = {
         });
       }, this);
 
+      if (!normalizedEntries.length) {
+        return Response.success(replayedReceipts.map(function(receipt) {
+          return Object.assign({ IdempotentReplay: true }, receipt);
+        }));
+      }
       var now = this._now_();
       var created = normalizedEntries.map(function(entry) {
         return {
@@ -446,7 +532,8 @@ const ProcurementService = {
           SourceEventID: entry.body.SourceEventID || '',
           Notes: String(entry.body.Notes || ''),
           ReceivedBy: user.ID,
-          CreatedAt: now
+          CreatedAt: now,
+          IdempotencyKey: String(entry.body.IdempotencyKey || '')
         };
       }, this);
 
@@ -498,7 +585,7 @@ const ProcurementService = {
           NewData: receipt
         });
       });
-      return Response.success(created);
+      return Response.success(created.concat(replayedReceipts));
     } finally {
       lock.releaseLock();
     }
@@ -507,6 +594,14 @@ const ProcurementService = {
   _createReceiptUnlocked_: function(body, params) {
     body = body || {};
     var user = this._user_(params);
+    if (body.SourceEventID) {
+      var eventReceiptReplay = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
+        return String(existing.SourceEventID || '') === String(body.SourceEventID) &&
+          String(existing.PurchaseOrderItemID || '') === String(body.PurchaseOrderItemID || '') &&
+          String(existing.Status || '').toUpperCase() !== 'VOID';
+      });
+      if (eventReceiptReplay) return Response.success(Object.assign({ IdempotentReplay: true }, eventReceiptReplay));
+    }
     Validator.required(body.PurchaseOrderItemID, 'قلم سفارش');
     var quantity = this._number_(body.QuantityReceived, 'مقدار تحویل', false);
     var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, body.PurchaseOrderItemID);
@@ -573,7 +668,8 @@ const ProcurementService = {
       SourceEventID: body.SourceEventID || '',
       Notes: String(body.Notes || ''),
       ReceivedBy: user.ID,
-      CreatedAt: now
+      CreatedAt: now,
+      IdempotencyKey: String(body.IdempotencyKey || '')
     };
     this._validateEvent_(receipt.SourceEventID, user.TenantID, user);
     GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.RECEIPTS, receipt);
@@ -607,9 +703,23 @@ const ProcurementService = {
     var user = this._user_(params);
     var needs = ProcurementRepository.getNeeds(user.TenantID);
     var items = ProcurementRepository.getItems(user.TenantID);
+    var orders = ProcurementRepository.getOrders(user.TenantID);
     var allocations = ProcurementRepository.getAllocations(user.TenantID);
     var receipts = ProcurementRepository.getReceipts(user.TenantID);
+    var orderById = Object.create(null);
+    orders.forEach(function(order) { orderById[String(order.ID)] = order; });
+    var countableItemIds = Object.create(null);
+    items.forEach(function(item) {
+      var parent = orderById[String(item.PurchaseOrderID || '')];
+      var status = String(parent && parent.Status || '').toUpperCase();
+      if (parent && ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(status) === -1) {
+        countableItemIds[String(item.ID)] = true;
+      }
+    });
+    var self = this;
     var itemById = {};
+    var needById = Object.create(null);
+    needs.forEach(function(need) { needById[String(need.ID)] = need; });
     var allocationsByItem = {};
     var orderedByNeed = {};
     var receivedByNeed = {};
@@ -623,17 +733,21 @@ const ProcurementService = {
       if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
       allocationsByItem[itemId].push(allocation);
       var needId = String(allocation.MaterialNeedID || '');
-      if (needId) orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
+      var linkedNeed = needById[needId];
+      var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
+      if (needId && countableItemIds[itemId]) orderedByNeed[effectiveKey] = (orderedByNeed[effectiveKey] || 0) +
         (Number(allocation.AllocatedQuantity) || 0);
     });
     items.forEach(function(item) {
       var itemId = String(item.ID);
-      if ((allocationsByItem[itemId] || []).length) return;
+      if (!countableItemIds[itemId] || (allocationsByItem[itemId] || []).length) return;
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
+        var linkedNeed = needById[needId];
+        var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
         var legacyOrNewSurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
           ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
-        orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
+        orderedByNeed[effectiveKey] = (orderedByNeed[effectiveKey] || 0) +
           Math.max(0, (Number(item.OrderedQuantity) || 0) - legacyOrNewSurplus);
       }
     });
@@ -654,37 +768,56 @@ const ProcurementService = {
         linkedAllocations.forEach(function(allocation) {
           var needId = String(allocation.MaterialNeedID || '');
           if (!needId) return;
+          var linkedNeed = needById[needId];
+          var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, allocation.ProjectID || linkedNeed.ProjectID) : ('NEED|' + needId);
           var share = allocatedTotal > 0
             ? receivedForNeeds * (Number(allocation.AllocatedQuantity) || 0) / allocatedTotal
             : 0;
-          receivedByNeed[needId] = (receivedByNeed[needId] || 0) + share;
+          receivedByNeed[effectiveKey] = (receivedByNeed[effectiveKey] || 0) + share;
         });
       } else {
         var needId = String(item.MaterialNeedID || '');
         if (needId) {
+          var linkedNeed = needById[needId];
+          var effectiveKey = linkedNeed ? self._needKey_(linkedNeed, linkedNeed.ProjectID || item.ProjectID) : ('NEED|' + needId);
           var surplusForUnallocatedItem = item.SurplusQuantity === undefined || item.SurplusQuantity === null
             ? 0 : Math.max(0, Number(item.SurplusQuantity) || 0);
           var quantityForNeed = Math.max(0, (Number(item.OrderedQuantity) || 0) - surplusForUnallocatedItem);
-          receivedByNeed[needId] = (receivedByNeed[needId] || 0) +
+          receivedByNeed[effectiveKey] = (receivedByNeed[effectiveKey] || 0) +
             Math.min(itemReceived, quantityForNeed);
         }
       }
     });
 
+    var confirmedSpecKeys = Object.create(null);
+    needs.forEach(function(need) {
+      if (String(need.NeedType || '').toUpperCase() === 'CONFIRMED' &&
+          String(need.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' && need.MaterialSpecKey) {
+        confirmedSpecKeys[String(need.ProjectID) + '|' + String(need.MaterialSpecKey)] = true;
+      }
+    });
     return Response.success(needs.filter(function(need) {
-      return this._isProjectVisible_(need.ProjectID, user);
+      var specKey = String(need.ProjectID || '') + '|' + String(need.MaterialSpecKey || '');
+      var status = String(need.Status || 'ACTIVE').toUpperCase();
+      var superseded = status === 'SUPERSEDED' ||
+        (String(need.NeedType || '').toUpperCase() === 'ESTIMATED' && confirmedSpecKeys[specKey]);
+      return !superseded && this._isProjectVisible_(need.ProjectID, user);
     }, this).map(function(need) {
       var copy = Object.assign({}, need);
       var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
-      var ordered = Math.min(requested, Math.max(0, orderedByNeed[String(need.ID)] || 0));
-      var received = Math.min(ordered, Math.max(0, receivedByNeed[String(need.ID)] || 0));
+      var needKey = self._needKey_(need, need.ProjectID);
+      var rawOrdered = Math.max(0, orderedByNeed[needKey] || 0);
+      var ordered = Math.min(requested, rawOrdered);
+      var received = Math.min(requested, Math.max(0, receivedByNeed[needKey] || 0));
+      copy.OverOrderedQuantity = Math.max(0, rawOrdered - requested);
       copy.OrderedQuantity = ordered;
       copy.ReceivedQuantity = received;
-      copy.RemainingToOrderQuantity = Math.max(0, requested - ordered);
+      copy.RemainingToOrderQuantity = Math.max(0, requested - Math.max(ordered, received));
       copy.RemainingDeliveryQuantity = Math.max(0, ordered - received);
-      copy.ProcurementStatus = received >= requested ? 'RECEIVED'
+      copy.ProcurementStatus = String(need.Status || '').toUpperCase() === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW'
+        : (received >= requested ? 'RECEIVED'
         : (ordered >= requested ? (received > 0 ? 'PARTIALLY_RECEIVED' : 'ORDERED')
-        : (ordered > 0 ? 'PARTIALLY_ORDERED' : 'NEEDS_PURCHASE'));
+        : (ordered > 0 ? 'PARTIALLY_ORDERED' : (received > 0 ? 'PARTIALLY_RECEIVED' : 'NEEDS_PURCHASE'))));
       return copy;
     }));
   },
@@ -833,6 +966,24 @@ const ProcurementService = {
       copy.ProjectTitle = project ? project.Title : '';
       return copy;
     });
+    var materialSpecsById = Object.create(null);
+    GoogleSheetsRepository.getAll('24_ProjectMaterialSpecs').forEach(function(spec) {
+      if (String(spec.TenantID || '') === String(user.TenantID || '')) {
+        materialSpecsById[String(spec.ID)] = spec;
+      }
+    });
+    var calculations = GoogleSheetsRepository.getAll('25_MaterialNeedCalculations').filter(function(row) {
+      return String(row.TenantID || '') === String(user.TenantID || '') &&
+        !!projectById[String(row.ProjectID || '')];
+    }).map(function(row) {
+      var copy = Object.assign({}, row);
+      var spec = materialSpecsById[String(row.MaterialSpecID || '')];
+      copy.MaterialSpecName = spec ? spec.ItemName : '';
+      copy.ItemCode = spec ? spec.ItemCode : '';
+      copy.Unit = spec ? spec.Unit : '';
+      copy.SpecificationRevision = spec ? spec.Revision : '';
+      return copy;
+    });
 
     orders = orders.map(function(order) {
       var copy = Object.assign({}, order);
@@ -861,7 +1012,8 @@ const ProcurementService = {
         return projectById[String(project.ID)];
       }),
       needs: needs,
-      orders: orders
+      orders: orders,
+      calculations: calculations
     });
   },
 

@@ -106,7 +106,12 @@ const Router = {
     }
 
     if (path.indexOf('/projects/') === 0) {
-      AccessControlService.require(params, 'PROJECT_VIEW');
+      const routeParts = path.split('/');
+      if (routeParts[3] === 'material-specifications' || routeParts[3] === 'material-calculations') {
+        this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_EDIT']);
+      } else {
+        AccessControlService.require(params, 'PROJECT_VIEW');
+      }
       const parts = path.split('/');
       const projectId = parts[2];
 
@@ -117,6 +122,14 @@ const Router = {
       if (parts[3] === 'events') {
         AccessControlService.require(params, 'EVENT_VIEW');
         return EventService.listByProject(projectId, params);
+      }
+
+      if (parts[3] === 'material-specifications') {
+        return MaterialPlanningService.listSpecifications(projectId, params);
+      }
+
+      if (parts[3] === 'material-calculations') {
+        return MaterialPlanningService.listCalculationHistory(projectId, params);
       }
 
       if (parts[3] === 'details') {
@@ -406,6 +419,12 @@ const Router = {
       );
     }
 
+    const procurementRetryMatch = path.match(/^\/events\/([^/]+)\/procurement-retry$/);
+    if (procurementRetryMatch) {
+      AccessControlService.require(params, 'EVENT_EDIT');
+      return EventService.retryProcurementIntegration(procurementRetryMatch[1], params);
+    }
+
     if (path === '/procurement/needs') {
       AccessControlService.require(params, 'PROCUREMENT_MANAGE');
       return ProcurementService.createNeed(body, params);
@@ -424,6 +443,18 @@ const Router = {
     if (path === '/procurement/receipts') {
       AccessControlService.require(params, 'PROCUREMENT_MANAGE');
       return ProcurementService.createReceipt(body, params);
+    }
+
+    const materialEstimateMatch = path.match(/^\/projects\/([^/]+)\/material-estimates$/);
+    if (materialEstimateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return MaterialPlanningService.createEstimatedNeeds(materialEstimateMatch[1], params);
+    }
+
+    const materialSpecCreateMatch = path.match(/^\/projects\/([^/]+)\/material-specifications$/);
+    if (materialSpecCreateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return MaterialPlanningService.createSpecification(materialSpecCreateMatch[1], body, params);
     }
 
     if (path === '/projects') {
@@ -589,6 +620,12 @@ const Router = {
       }
 
       return DepartmentService.update(departmentId, body, params);
+    }
+
+    const materialSpecUpdateMatch = path.match(/^\/material-specifications\/([^/]+)$/);
+    if (materialSpecUpdateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
     }
 
     if (path.indexOf('/projects/') === 0) {

@@ -7,7 +7,7 @@
 
 const APP_CONFIG = {
 
-  VERSION: '1.1.3',
+  VERSION: '1.1.4',
 
   DEFAULT_TENANT: {
     NAME: 'شرکت اصلی',
@@ -119,7 +119,7 @@ const APP_CONFIG = {
 
     MATERIAL_NEEDS: {
       name: '18_MaterialNeeds',
-      headers: ['ID','TenantID','ProjectID','SourceEventID','ItemName','ItemCode','Unit','RequestedQuantity','NeededBy','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','ProjectID','SourceEventID','ItemName','ItemCode','Unit','RequestedQuantity','NeededBy','Status','Notes','CreatedBy','CreatedAt','UpdatedAt','MaterialSpecID','MaterialSpecKey','SpecificationRevision','CalculationID','BasisQuantity','NeedType','CalculationKey']
     },
 
     PROJECT_STATUSES: {
@@ -127,9 +127,19 @@ const APP_CONFIG = {
       headers: ['ID','TenantID','Code','Name','Status','CreatedAt','UpdatedAt']
     },
 
+    PROJECT_MATERIAL_SPECS: {
+      name: '24_ProjectMaterialSpecs',
+      headers: ['ID','TenantID','ProjectID','SpecKey','ItemName','ItemCode','Unit','ConsumptionPerUnit','WastagePercent','EarlyOrderPolicy','EarlyOrderQuantity','Status','Revision','Notes','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    MATERIAL_NEED_CALCULATIONS: {
+      name: '25_MaterialNeedCalculations',
+      headers: ['ID','TenantID','ProjectID','MaterialSpecID','MaterialNeedID','SourceEventID','SourceEventVersion','CalculationKey','BasisQuantity','ConsumptionPerUnit','WastagePercent','CalculatedQuantity','PreviousCalculatedQuantity','VarianceQuantity','CalculationType','Status','CreatedBy','CreatedAt']
+    },
+
     PURCHASE_ORDERS: {
       name: '19_PurchaseOrders',
-      headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt','IdempotencyKey']
     },
 
     PURCHASE_ORDER_ITEMS: {
@@ -144,7 +154,7 @@ const APP_CONFIG = {
 
     MATERIAL_RECEIPTS: {
       name: '22_MaterialReceipts',
-      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','QuantityReceived','ReceivedAt','WarehouseDepartmentID','SourceEventID','Notes','ReceivedBy','CreatedAt']
+      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','QuantityReceived','ReceivedAt','WarehouseDepartmentID','SourceEventID','Notes','ReceivedBy','CreatedAt','IdempotencyKey']
     }
   },
 
