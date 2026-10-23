@@ -279,8 +279,25 @@ const MaterialPlanningService = {
       var existingNeed = needs.find(function(need) {
         return String(need.MaterialSpecID || '') === String(spec.ID) &&
           String(need.NeedType || '').toUpperCase() === 'CONFIRMED' &&
-          String(need.Status || 'ACTIVE').toUpperCase() !== 'CANCELLED';
+          ['CANCELLED', 'SUPERSEDED', 'DELETED'].indexOf(String(need.Status || 'ACTIVE').toUpperCase()) === -1;
       }) || null;
+      if (!existingNeed) {
+        var priorSpecIds = allSpecs.filter(function(priorSpec) {
+          return String(priorSpec.SpecKey || priorSpec.ID) === String(spec.SpecKey || spec.ID) &&
+            String(priorSpec.ID) !== String(spec.ID);
+        }).map(function(priorSpec) { return String(priorSpec.ID); });
+        var priorNeed = needs.find(function(need) {
+          return priorSpecIds.indexOf(String(need.MaterialSpecID || '')) !== -1 &&
+            String(need.NeedType || '').toUpperCase() === 'CONFIRMED' &&
+            String(need.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        });
+        if (priorNeed) {
+          GoogleSheetsRepository.updateById('18_MaterialNeeds', priorNeed.ID, Object.assign({}, priorNeed, {
+            Status: 'SUPERSEDED', UpdatedAt: self._now_(),
+            Notes: String(priorNeed.Notes || '') + ' | نسخه مشخصات مصرف جایگزین شد'
+          }));
+        }
+      }
       var previousQuantity = existingNeed ? Number(existingNeed.RequestedQuantity) || 0 : 0;
       var key = [String(user.TenantID), String(projectId), String(sourceEventId),
         String(spec.SpecKey || spec.ID), String(spec.Revision || 1), String(quantity)].join('|');
