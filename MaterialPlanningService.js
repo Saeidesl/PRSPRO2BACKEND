@@ -29,25 +29,34 @@ const MaterialPlanningService = {
     // Node unit tests intentionally do not provide Apps Script globals.
     if (typeof APP_CONFIG === 'undefined' || typeof SpreadsheetApp === 'undefined' ||
         typeof ensureHeaders_ !== 'function') return false;
-    var ss = GoogleSheetsRepository.getSpreadsheet();
-    var definitions = [
-      APP_CONFIG.SHEETS.MATERIAL_NEEDS,
-      APP_CONFIG.SHEETS.PURCHASE_ORDERS,
-      APP_CONFIG.SHEETS.MATERIAL_RECEIPTS,
-      APP_CONFIG.SHEETS.PROJECT_MATERIAL_SPECS,
-      APP_CONFIG.SHEETS.MATERIAL_NEED_CALCULATIONS
-    ];
-    definitions.forEach(function(definition) {
-      if (!definition) throw ErrorHandler.create(Constants.ERROR.INTERNAL_ERROR, 'تعریف شیت موردنیاز برای برنامه‌ریزی ملزومات پیدا نشد.');
-      var sheet = ss.getSheetByName(definition.name);
-      if (!sheet) sheet = ss.insertSheet(definition.name);
-      ensureHeaders_(sheet, definition.headers);
-    });
-    GoogleSheetsRepository._sheetCache = {};
-    GoogleSheetsRepository._headerCache = {};
-    GoogleSheetsRepository.resetRequestCache();
-    this._schemaReady = true;
-    return true;
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'آماده‌سازی ساختار ملزومات با عملیات دیگری تداخل دارد؛ دوباره تلاش کنید.');
+    }
+    try {
+      if (this._schemaReady) return true;
+      var ss = GoogleSheetsRepository.getSpreadsheet();
+      var definitions = [
+        APP_CONFIG.SHEETS.MATERIAL_NEEDS,
+        APP_CONFIG.SHEETS.PURCHASE_ORDERS,
+        APP_CONFIG.SHEETS.MATERIAL_RECEIPTS,
+        APP_CONFIG.SHEETS.PROJECT_MATERIAL_SPECS,
+        APP_CONFIG.SHEETS.MATERIAL_NEED_CALCULATIONS
+      ];
+      definitions.forEach(function(definition) {
+        if (!definition) throw ErrorHandler.create(Constants.ERROR.INTERNAL_ERROR, 'تعریف شیت موردنیاز برای برنامه‌ریزی ملزومات پیدا نشد.');
+        var sheet = ss.getSheetByName(definition.name);
+        if (!sheet) sheet = ss.insertSheet(definition.name);
+        ensureHeaders_(sheet, definition.headers);
+      });
+      GoogleSheetsRepository._sheetCache = {};
+      GoogleSheetsRepository._headerCache = {};
+      GoogleSheetsRepository.resetRequestCache();
+      this._schemaReady = true;
+      return true;
+    } finally {
+      lock.releaseLock();
+    }
   },
 
   _id_: function(prefix) {
