@@ -962,9 +962,23 @@ const ProcurementService = {
       copy.ProjectTitle = project ? project.Title : '';
       return copy;
     });
+    var materialSpecsById = Object.create(null);
+    GoogleSheetsRepository.getAll('24_ProjectMaterialSpecs').forEach(function(spec) {
+      if (String(spec.TenantID || '') === String(user.TenantID || '')) {
+        materialSpecsById[String(spec.ID)] = spec;
+      }
+    });
     var calculations = GoogleSheetsRepository.getAll('25_MaterialNeedCalculations').filter(function(row) {
       return String(row.TenantID || '') === String(user.TenantID || '') &&
         !!projectById[String(row.ProjectID || '')];
+    }).map(function(row) {
+      var copy = Object.assign({}, row);
+      var spec = materialSpecsById[String(row.MaterialSpecID || '')];
+      copy.MaterialSpecName = spec ? spec.ItemName : '';
+      copy.ItemCode = spec ? spec.ItemCode : '';
+      copy.Unit = spec ? spec.Unit : '';
+      copy.SpecificationRevision = spec ? spec.Revision : '';
+      return copy;
     });
 
     orders = orders.map(function(order) {
