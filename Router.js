@@ -106,7 +106,12 @@ const Router = {
     }
 
     if (path.indexOf('/projects/') === 0) {
-      AccessControlService.require(params, 'PROJECT_VIEW');
+      const routeParts = path.split('/');
+      if (routeParts[3] === 'material-specifications' || routeParts[3] === 'material-calculations') {
+        this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_EDIT']);
+      } else {
+        AccessControlService.require(params, 'PROJECT_VIEW');
+      }
       const parts = path.split('/');
       const projectId = parts[2];
 
