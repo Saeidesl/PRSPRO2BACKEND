@@ -265,7 +265,7 @@ const Router = {
     }
 
     if (path === '/roles') {
-      AccessControlService.require(params, 'ROLE_MANAGE');
+      this.requireAny(params, ['ROLE_MANAGE', 'USER_EDIT']);
       return RoleService.list(params);
     }
 

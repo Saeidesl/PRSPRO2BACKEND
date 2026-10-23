@@ -45,7 +45,20 @@ const AccessControlService = {
   },
 
   isAdmin: function(user) {
-    return this.getDepartmentCode(user) === 'ADMIN';
+    if (!user || !user.ID || !user.TenantID) return false;
+    const userRoles = UserRoleRepository.getAll().filter(function(item) {
+      return String(item.UserID) === String(user.ID) &&
+        String(item.TenantID) === String(user.TenantID);
+    });
+    if (!userRoles.length) return false;
+    const assignedRoleIds = {};
+    userRoles.forEach(function(item) { assignedRoleIds[String(item.RoleID)] = true; });
+    return RoleRepository.getAll().some(function(role) {
+      return String(role.TenantID) === String(user.TenantID) &&
+        assignedRoleIds[String(role.ID)] === true &&
+        String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE &&
+        ['SYS_ADMIN', 'ADMIN'].indexOf(String(role.Code || '').trim().toUpperCase()) !== -1;
+    });
   },
 
   enforceRouteAccess: function(method, path, params) {

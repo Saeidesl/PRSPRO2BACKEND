@@ -15,14 +15,19 @@ const AuthService = {
     const username = String(body.username).trim();
     const password = String(body.password);
 
-    const user = UserRepository.findByUsername(username);
+    const matchingUsers = typeof UserRepository.findAllByUsername === 'function'
+      ? UserRepository.findAllByUsername(username)
+      : [UserRepository.findByUsername(username)].filter(Boolean);
 
-    if (!user) {
+    // Usernames can repeat across tenants. Without a tenant selector, fail closed.
+    if (matchingUsers.length !== 1) {
       throw ErrorHandler.create(
         Constants.ERROR.UNAUTHORIZED,
         'نام کاربری یا رمز عبور صحیح نیست.'
       );
     }
+
+    const user = matchingUsers[0];
 
     if (String(user.Status) !== Constants.STATUS.ACTIVE) {
       throw ErrorHandler.create(
@@ -44,6 +49,7 @@ const AuthService = {
 
     const departmentCode =
       AccessControlService.getDepartmentCode(user);
+    const profile = this.getProfile_(user);
 
     return Response.success(
       {
@@ -57,7 +63,9 @@ const AuthService = {
           Username: user.Username,
           DepartmentID: user.DepartmentID,
           DepartmentCode: departmentCode,
-          IsAdmin: departmentCode === 'ADMIN',
+          DepartmentName: profile.DepartmentName,
+          RoleNames: profile.RoleNames,
+          IsAdmin: AccessControlService.isAdmin(user),
           Status: user.Status
         }
       },
@@ -114,7 +122,6 @@ const AuthService = {
 
     const departmentCode =
       AccessControlService.getDepartmentCode(user);
-
     return Response.success(
       {
         ID: user.ID,
@@ -127,6 +134,33 @@ const AuthService = {
         Status: user.Status
       }
     );
+  },
+
+  getProfile_: function(user) {
+    const tenantId = String(user.TenantID || '');
+    let departmentName = '';
+    if (user.DepartmentID) {
+      const department = DepartmentRepository.findById(user.DepartmentID);
+      if (department && String(department.TenantID) === tenantId &&
+          String(department.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE) {
+        departmentName = String(department.Name || department.DepartmentName || '');
+      }
+    }
+
+    const assignedRoleIds = {};
+    UserRoleRepository.getAll().forEach(function(item) {
+      if (String(item.UserID) === String(user.ID) && String(item.TenantID) === tenantId) {
+        assignedRoleIds[String(item.RoleID)] = true;
+      }
+    });
+    const roleNames = RoleRepository.getAll().filter(function(role) {
+      return String(role.TenantID) === tenantId && assignedRoleIds[String(role.ID)] === true &&
+        String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE;
+    }).map(function(role) {
+      return String(role.Name || '').trim();
+    }).filter(Boolean);
+
+    return { DepartmentName: departmentName, RoleNames: roleNames };
   },
 
   getToken_: function(params) {

@@ -75,7 +75,8 @@ const PermissionService = {
     }
 
     const roles = RoleRepository.getAll().filter(function(role) {
-      return String(role.TenantID) === tenantId;
+      return String(role.TenantID) === tenantId &&
+        String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE;
     });
 
     const validRoleIds = {};
@@ -149,7 +150,8 @@ const PermissionService = {
     if (userRoles.length === 0) return false;
 
     const roles = RoleRepository.getAll().filter(function(role) {
-      return String(role.TenantID) === tenantId;
+      return String(role.TenantID) === tenantId &&
+        String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE;
     });
 
     const validRoleIds = {};

@@ -29,13 +29,18 @@ const UserRepository = {
 
 
   findByUsername: function(username) {
+    const normalized = String(username || '').trim().toLowerCase();
+    const matches = this.getAll().filter(function(item) {
+      return String(item.Username || '').trim().toLowerCase() === normalized;
+    });
+    return matches.length === 1 ? matches[0] : null;
+  },
 
-    return GoogleSheetsRepository.findOne(
-      this.SHEET_NAME,
-      'Username',
-      username
-    );
-
+  findAllByUsername: function(username) {
+    const normalized = String(username || '').trim().toLowerCase();
+    return this.getAll().filter(function(item) {
+      return String(item.Username || '').trim().toLowerCase() === normalized;
+    });
   },
 
 

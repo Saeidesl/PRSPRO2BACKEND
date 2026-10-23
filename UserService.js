@@ -109,10 +109,7 @@ const UserService = {
     const duplicate =
       users.some(function(item) {
 
-        return String(item.TenantID) ===
-          String(currentUser.TenantID) &&
-
-          String(item.Username).toLowerCase() ===
+        return String(item.Username || '').trim().toLowerCase() ===
           username.toLowerCase();
 
       });
@@ -121,7 +118,7 @@ const UserService = {
 
       throw ErrorHandler.create(
         Constants.ERROR.DUPLICATE,
-        'این نام کاربری قبلاً در این Tenant ثبت شده است.'
+        'این نام کاربری در سامانه قبلاً ثبت شده است.'
       );
 
     }
@@ -331,14 +328,8 @@ const UserService = {
       const duplicate =
         users.some(function(item) {
 
-          return String(item.ID) !==
-            String(id) &&
-
-            String(item.TenantID) ===
-            String(currentUser.TenantID) &&
-
-            String(item.Username).toLowerCase() ===
-            username.toLowerCase();
+          return String(item.ID) !== String(id) &&
+            String(item.Username || '').trim().toLowerCase() === username.toLowerCase();
 
         });
 
@@ -346,7 +337,7 @@ const UserService = {
 
         throw ErrorHandler.create(
           Constants.ERROR.DUPLICATE,
-          'این نام کاربری قبلاً در این Tenant ثبت شده است.'
+          'این نام کاربری در سامانه قبلاً ثبت شده است.'
         );
 
       }
