@@ -337,7 +337,7 @@ const UserService = {
 
         throw ErrorHandler.create(
           Constants.ERROR.DUPLICATE,
-          'این نام کاربری قبلاً در این Tenant ثبت شده است.'
+          'این نام کاربری در سامانه قبلاً ثبت شده است.'
         );
 
       }
