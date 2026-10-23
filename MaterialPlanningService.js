@@ -218,7 +218,9 @@ const MaterialPlanningService = {
     var basis = this._number_(data.BasisQuantity, 'تعداد مبنا', 0, null);
     var consumption = this._number_(data.ConsumptionPerUnit, 'مصرف برای هر واحد', 0, null);
     var wastage = this._number_(data.WastagePercent === undefined ? 0 : data.WastagePercent, 'درصد ضایعات', 0, 100);
-    var calculated = Math.ceil(basis * consumption * (1 + wastage / 100) * 10000) / 10000;
+    var calculated = data.CalculatedQuantityOverride !== undefined && data.CalculatedQuantityOverride !== null && String(data.CalculatedQuantityOverride).trim() !== ''
+      ? this._number_(data.CalculatedQuantityOverride, 'مقدار محاسبه‌شده', 0, null)
+      : Math.ceil(basis * consumption * (1 + wastage / 100) * 10000) / 10000;
     var previous = data.PreviousCalculatedQuantity === undefined || data.PreviousCalculatedQuantity === ''
       ? 0 : this._number_(data.PreviousCalculatedQuantity, 'نیاز قبلی', 0, null);
     var record = {
@@ -315,7 +317,7 @@ const MaterialPlanningService = {
         SourceEventID: sourceEventId, ItemName: spec.ItemName, ItemCode: spec.ItemCode,
         Unit: spec.Unit, RequestedQuantity: calculation.CalculatedQuantity, Status: 'ACTIVE',
         Notes: 'محاسبه‌شده بر اساس تعداد قطعی ' + quantity, UpdatedAt: now,
-        SpecificationRevision: spec.Revision || 1, CalculationID: calculation.ID,
+        MaterialSpecKey: String(spec.SpecKey || spec.ID), SpecificationRevision: spec.Revision || 1, CalculationID: calculation.ID,
         BasisQuantity: quantity, NeedType: 'CONFIRMED', CalculationKey: key
       }) : {
         ID: self._id_('NEED'), TenantID: user.TenantID, ProjectID: String(projectId),
@@ -323,7 +325,7 @@ const MaterialPlanningService = {
         Unit: spec.Unit, RequestedQuantity: calculation.CalculatedQuantity, NeededBy: '',
         Status: 'ACTIVE', Notes: 'محاسبه‌شده بر اساس تعداد قطعی ' + quantity,
         CreatedBy: user.ID, CreatedAt: now, UpdatedAt: now,
-        MaterialSpecID: spec.ID, SpecificationRevision: spec.Revision || 1,
+        MaterialSpecID: spec.ID, MaterialSpecKey: String(spec.SpecKey || spec.ID), SpecificationRevision: spec.Revision || 1,
         CalculationID: calculation.ID, BasisQuantity: quantity,
         NeedType: 'CONFIRMED', CalculationKey: key
       };
@@ -348,6 +350,75 @@ const MaterialPlanningService = {
     });
     return Response.success({ ProjectID: String(projectId), SourceEventID: sourceEventId,
       BasisQuantity: quantity, items: results });
+  },
+
+
+  createEstimatedNeeds: function(projectId, params) {
+    var user = this._user_(params);
+    var project = this._project_(projectId, user);
+    var suggestedQuantity = this._number_(project.Quantity, 'تعداد پیشنهادی پروژه', 0.0000001, null);
+    var allSpecs = this._specsForProject_(projectId, user.TenantID);
+    var latestByKey = Object.create(null);
+    allSpecs.forEach(function(spec) {
+      var key = String(spec.SpecKey || spec.ID);
+      if (!latestByKey[key] || (Number(spec.Revision) || 1) > (Number(latestByKey[key].Revision) || 1)) latestByKey[key] = spec;
+    });
+    var specs = Object.keys(latestByKey).map(function(key) { return latestByKey[key]; })
+      .filter(function(spec) {
+        return String(spec.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+          ['ESTIMATE_ALLOWED', 'MANUAL_ALLOWED'].indexOf(String(spec.EarlyOrderPolicy || 'DISABLED').toUpperCase()) !== -1;
+      });
+    if (!specs.length) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'هیچ ملزومی با سیاست سفارش زودهنگام فعال تعریف نشده است.');
+    var needs = GoogleSheetsRepository.getAll('18_MaterialNeeds').filter(function(need) {
+      return String(need.TenantID) === String(user.TenantID) && String(need.ProjectID) === String(projectId);
+    });
+    var results = [];
+    var self = this;
+    specs.forEach(function(spec) {
+      var policy = String(spec.EarlyOrderPolicy || '').toUpperCase();
+      var manualQuantity = policy === 'MANUAL_ALLOWED'
+        ? self._number_(spec.EarlyOrderQuantity, 'مقدار سفارش زودهنگام دستی', 0.0000001, null)
+        : null;
+      var key = ['ESTIMATE', String(user.TenantID), String(projectId), String(spec.SpecKey || spec.ID),
+        String(spec.Revision || 1), String(suggestedQuantity), String(manualQuantity === null ? '' : manualQuantity)].join('|');
+      var prior = needs.find(function(need) {
+        return String(need.CalculationKey || '') === key && String(need.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
+      });
+      if (prior) {
+        results.push(Object.assign({ IdempotentReplay: true }, prior));
+        return;
+      }
+      var calcResponse = self.recordCalculation({
+        ProjectID: projectId, MaterialSpecID: spec.ID, SourceEventID: '',
+        CalculationKey: key, BasisQuantity: suggestedQuantity,
+        ConsumptionPerUnit: spec.ConsumptionPerUnit, WastagePercent: spec.WastagePercent || 0,
+        CalculatedQuantityOverride: manualQuantity === null ? '' : manualQuantity,
+        CalculationType: policy === 'MANUAL_ALLOWED' ? 'EARLY_ORDER_MANUAL' : 'ESTIMATE'
+      }, params);
+      var calculation = calcResponse && calcResponse.data ? calcResponse.data : calcResponse;
+      var now = self._now_();
+      var record = {
+        ID: self._id_('NEED'), TenantID: user.TenantID, ProjectID: String(projectId),
+        SourceEventID: '', ItemName: spec.ItemName, ItemCode: spec.ItemCode, Unit: spec.Unit,
+        RequestedQuantity: calculation.CalculatedQuantity, NeededBy: '', Status: 'ACTIVE',
+        Notes: policy === 'MANUAL_ALLOWED' ? 'سفارش زودهنگام با مقدار دستی' : 'برآورد بر اساس تعداد پیشنهادی پروژه',
+        CreatedBy: user.ID, CreatedAt: now, UpdatedAt: now, MaterialSpecID: spec.ID,
+        MaterialSpecKey: String(spec.SpecKey || spec.ID), SpecificationRevision: spec.Revision || 1,
+        CalculationID: calculation.ID, BasisQuantity: suggestedQuantity,
+        NeedType: 'ESTIMATED', CalculationKey: key
+      };
+      GoogleSheetsRepository.insert('18_MaterialNeeds', record);
+      GoogleSheetsRepository.updateById(self.SHEETS.CALCULATIONS, calculation.ID,
+        Object.assign({}, calculation, { MaterialNeedID: record.ID }));
+      needs.push(record);
+      results.push(record);
+    });
+    AuditService.log({
+      TenantID: user.TenantID, UserID: user.ID, Action: 'CREATE_ESTIMATED_NEEDS',
+      EntityType: 'PROJECT_MATERIAL_NEEDS', EntityID: String(projectId),
+      NewData: { BasisQuantity: suggestedQuantity, Results: results }
+    });
+    return Response.success({ ProjectID: String(projectId), BasisQuantity: suggestedQuantity, items: results });
   },
 
 };
