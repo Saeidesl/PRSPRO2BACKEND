@@ -404,6 +404,12 @@ const ProcurementService = {
       var plannedByItemProject = {};
       var normalizedEntries = [];
       var existingReceipts = ProcurementRepository.getReceipts(user.TenantID);
+      var existingReceiptByKey = Object.create(null);
+      existingReceipts.forEach(function(receipt) {
+        if (receipt.IdempotencyKey) existingReceiptByKey[String(receipt.IdempotencyKey)] = receipt;
+      });
+      var replayedReceipts = [];
+      var requestKeysInBatch = Object.create(null);
       var allAllocations = ProcurementRepository.getAllocations(user.TenantID);
 
       existingReceipts.forEach(function(receipt) {
@@ -422,6 +428,17 @@ const ProcurementService = {
       });
 
       entries.forEach(function(entry) {
+        if (entry && entry.IdempotencyKey) {
+          var requestKey = String(entry.IdempotencyKey).trim();
+          if (existingReceiptByKey[requestKey]) {
+            replayedReceipts.push(existingReceiptByKey[requestKey]);
+            return;
+          }
+          if (requestKeysInBatch[requestKey]) {
+            throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'کلید تکراری در درخواست دریافت وجود دارد.');
+          }
+          requestKeysInBatch[requestKey] = true;
+        }
         if (!entry || !entry.PurchaseOrderItemID) {
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'قلم یکی از دریافت‌ها مشخص نشده است.');
         }
@@ -507,7 +524,8 @@ const ProcurementService = {
           SourceEventID: entry.body.SourceEventID || '',
           Notes: String(entry.body.Notes || ''),
           ReceivedBy: user.ID,
-          CreatedAt: now
+          CreatedAt: now,
+          IdempotencyKey: String(entry.body.IdempotencyKey || '')
         };
       }, this);
 
@@ -559,7 +577,7 @@ const ProcurementService = {
           NewData: receipt
         });
       });
-      return Response.success(created);
+      return Response.success(created.concat(replayedReceipts));
     } finally {
       lock.releaseLock();
     }
