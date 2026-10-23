@@ -198,3 +198,25 @@ test('rejects cross-tenant or invisible projects', () => {
     ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1
   }, {}), /پروژه مورد نظر پیدا نشد/);
 });
+
+
+test('revised material specifications supersede the old confirmed need without deleting history', () => {
+  const { service, sheets } = loadService();
+  const firstSpec = service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5
+  }, {}).data;
+  const firstNeed = service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {}).data.items[0];
+  const secondSpec = service.reviseSpecification(firstSpec.ID, {
+    ConsumptionPerUnit: 1.75
+  }, {}).data;
+  const secondNeed = service.recalculateProjectNeeds('P1', 'EV2', 900, '1', {}).data.items[0];
+
+  const needs = sheets['18_MaterialNeeds'];
+  assert.equal(needs.length, 2);
+  assert.equal(needs.find((need) => need.ID === firstNeed.MaterialNeedID).Status, 'SUPERSEDED');
+  assert.equal(needs.find((need) => need.ID === secondNeed.MaterialNeedID).Status, 'ACTIVE');
+  assert.equal(secondNeed.RequestedQuantity, 1575);
+  assert.equal(sheets['25_MaterialNeedCalculations'].length, 2);
+  assert.equal(sheets['25_MaterialNeedCalculations'].some((row) => row.MaterialSpecID === firstSpec.ID), true);
+  assert.equal(sheets['25_MaterialNeedCalculations'].some((row) => row.MaterialSpecID === secondSpec.ID), true);
+});
