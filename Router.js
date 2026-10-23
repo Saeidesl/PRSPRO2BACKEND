@@ -414,6 +414,12 @@ const Router = {
       );
     }
 
+    const procurementRetryMatch = path.match(/^\/events\/([^/]+)\/procurement-retry$/);
+    if (procurementRetryMatch) {
+      AccessControlService.require(params, 'EVENT_EDIT');
+      return EventService.retryProcurementIntegration(procurementRetryMatch[1], params);
+    }
+
     if (path === '/procurement/needs') {
       AccessControlService.require(params, 'PROCUREMENT_MANAGE');
       return ProcurementService.createNeed(body, params);
