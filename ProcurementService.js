@@ -136,7 +136,22 @@ const ProcurementService = {
     var self = this;
     var existingNeeds = ProcurementRepository.getNeeds(user.TenantID);
     var existingItems = ProcurementRepository.getItems(user.TenantID);
-    var existingAllocations = ProcurementRepository.getAllocations(user.TenantID);
+    var existingOrders = ProcurementRepository.getOrders(user.TenantID);
+    var existingOrderById = Object.create(null);
+    existingOrders.forEach(function(existingOrder) {
+      existingOrderById[String(existingOrder.ID)] = existingOrder;
+    });
+    var countableExistingItemIds = Object.create(null);
+    existingItems.forEach(function(existingItem) {
+      var parent = existingOrderById[String(existingItem.PurchaseOrderID || '')];
+      var status = String(parent && parent.Status || '').toUpperCase();
+      if (parent && ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(status) === -1) {
+        countableExistingItemIds[String(existingItem.ID)] = true;
+      }
+    });
+    var existingAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
+      return !!countableExistingItemIds[String(allocation.PurchaseOrderItemID || '')];
+    });
     var orderedByNeedBeforeOrder = {};
     existingAllocations.forEach(function(allocation) {
       var needId = String(allocation.MaterialNeedID || '');
@@ -150,7 +165,7 @@ const ProcurementService = {
     });
     existingItems.forEach(function(item) {
       var itemId = String(item.ID || '');
-      if (allocationsByExistingItem[itemId]) return;
+      if (!countableExistingItemIds[itemId] || allocationsByExistingItem[itemId]) return;
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
         var legacySurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
@@ -648,8 +663,19 @@ const ProcurementService = {
     var user = this._user_(params);
     var needs = ProcurementRepository.getNeeds(user.TenantID);
     var items = ProcurementRepository.getItems(user.TenantID);
+    var orders = ProcurementRepository.getOrders(user.TenantID);
     var allocations = ProcurementRepository.getAllocations(user.TenantID);
     var receipts = ProcurementRepository.getReceipts(user.TenantID);
+    var orderById = Object.create(null);
+    orders.forEach(function(order) { orderById[String(order.ID)] = order; });
+    var countableItemIds = Object.create(null);
+    items.forEach(function(item) {
+      var parent = orderById[String(item.PurchaseOrderID || '')];
+      var status = String(parent && parent.Status || '').toUpperCase();
+      if (parent && ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(status) === -1) {
+        countableItemIds[String(item.ID)] = true;
+      }
+    });
     var itemById = {};
     var allocationsByItem = {};
     var orderedByNeed = {};
@@ -664,12 +690,12 @@ const ProcurementService = {
       if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
       allocationsByItem[itemId].push(allocation);
       var needId = String(allocation.MaterialNeedID || '');
-      if (needId) orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
+      if (needId && countableItemIds[itemId]) orderedByNeed[needId] = (orderedByNeed[needId] || 0) +
         (Number(allocation.AllocatedQuantity) || 0);
     });
     items.forEach(function(item) {
       var itemId = String(item.ID);
-      if ((allocationsByItem[itemId] || []).length) return;
+      if (!countableItemIds[itemId] || (allocationsByItem[itemId] || []).length) return;
       var needId = String(item.MaterialNeedID || '');
       if (needId) {
         var legacyOrNewSurplus = item.SurplusQuantity === undefined || item.SurplusQuantity === null
@@ -718,14 +744,14 @@ const ProcurementService = {
       var copy = Object.assign({}, need);
       var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
       var ordered = Math.min(requested, Math.max(0, orderedByNeed[String(need.ID)] || 0));
-      var received = Math.min(ordered, Math.max(0, receivedByNeed[String(need.ID)] || 0));
+      var received = Math.min(requested, Math.max(0, receivedByNeed[String(need.ID)] || 0));
       copy.OrderedQuantity = ordered;
       copy.ReceivedQuantity = received;
-      copy.RemainingToOrderQuantity = Math.max(0, requested - ordered);
+      copy.RemainingToOrderQuantity = Math.max(0, requested - Math.max(ordered, received));
       copy.RemainingDeliveryQuantity = Math.max(0, ordered - received);
       copy.ProcurementStatus = received >= requested ? 'RECEIVED'
         : (ordered >= requested ? (received > 0 ? 'PARTIALLY_RECEIVED' : 'ORDERED')
-        : (ordered > 0 ? 'PARTIALLY_ORDERED' : 'NEEDS_PURCHASE'));
+        : (ordered > 0 ? 'PARTIALLY_ORDERED' : (received > 0 ? 'PARTIALLY_RECEIVED' : 'NEEDS_PURCHASE')));
       return copy;
     }));
   },
