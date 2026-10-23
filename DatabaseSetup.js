@@ -139,7 +139,7 @@ const APP_CONFIG = {
 
     PURCHASE_ORDERS: {
       name: '19_PurchaseOrders',
-      headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt','IdempotencyKey']
     },
 
     PURCHASE_ORDER_ITEMS: {
@@ -154,7 +154,7 @@ const APP_CONFIG = {
 
     MATERIAL_RECEIPTS: {
       name: '22_MaterialReceipts',
-      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','QuantityReceived','ReceivedAt','WarehouseDepartmentID','SourceEventID','Notes','ReceivedBy','CreatedAt']
+      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','QuantityReceived','ReceivedAt','WarehouseDepartmentID','SourceEventID','Notes','ReceivedBy','CreatedAt','IdempotencyKey']
     }
   },
 
