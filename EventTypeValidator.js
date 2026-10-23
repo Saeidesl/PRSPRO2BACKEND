@@ -147,7 +147,8 @@ const EventTypeValidator = {
     [
       'MovesProjectToStep',
       'AllowAttachments',
-      'AllowVoid'
+      'AllowVoid',
+      'IsWorkCompletion'
     ].forEach(function(fieldName) {
       if (data[fieldName] !== undefined &&
           data[fieldName] !== null &&

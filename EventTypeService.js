@@ -45,6 +45,7 @@ const EventTypeService = {
     result.UseProjectColors = this._toBoolean_(result.UseProjectColors);
     result.UseProjectSizes = this._toBoolean_(result.UseProjectSizes);
     result.TrackVariantQuantity = this._toBoolean_(result.TrackVariantQuantity);
+    result.IsWorkCompletion = this._toBoolean_(result.IsWorkCompletion);
 
     return result;
   },
@@ -67,7 +68,8 @@ const EventTypeService = {
       'AllowVoid',
       'UseProjectColors',
       'UseProjectSizes',
-      'TrackVariantQuantity'
+      'TrackVariantQuantity',
+      'IsWorkCompletion'
     ].forEach(function(field) {
       if (result[field] !== undefined) {
         result[field] = self._toBoolean_(result[field]);
