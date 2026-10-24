@@ -26,8 +26,9 @@ test('database schema declares durable material calculation history', () => {
 test('schema setup appends missing headers and does not delete or reorder existing data', () => {
   assert.match(source, /append only missing required headers/i);
   assert.match(source, /Never reorder, overwrite, or delete user data/i);
-  assert.match(source, /missing = headers\\.filter/);
+  assert.match(source, /missing = headers\.filter/);
 });
+
 
 test('Apps Script sync automatically deploys on main and guards manual deployment', () => {
   const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'sync-apps-script.yml');
@@ -48,14 +49,15 @@ test('event creation persists an idempotency key and serializes duplicate submis
   const eventService = fs.readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
   const schema = fs.readFileSync(path.join(__dirname, '..', 'DatabaseSetup.js'), 'utf8');
 
-  assert.match(schema, /name: '13_Events',[\\s\\S]*?IdempotencyKey[\\s\\S]*?IdempotencyStatus/);
-  assert.match(eventService, /create: function\\(event, params\\)\\s*\\{[\\s\\S]*?getUserLock\\(\\)/);
-  assert.match(eventService, /String\\(item\\.IdempotencyKey \\|\\| ''\\) === key/);
-  assert.match(eventService, /return this\\._createUnlocked_\\(Object\\.assign\\(\\{\\}, event, \\{ IdempotencyKey: key \\}\\), requestParams\\)/);
-  assert.match(eventService, /finally\\s*\\{\\s*lock\\.releaseLock\\(\\)/);
+  assert.match(schema, /name: '13_Events',[\s\S]*?IdempotencyKey[\s\S]*?IdempotencyStatus/);
+  assert.match(eventService, /create: function\(event, params\)\s*\{[\s\S]*?getUserLock\(\)/);
+  assert.match(eventService, /String\(item\.IdempotencyKey \|\| ''\) === key/);
+  assert.match(eventService, /return this\._createUnlocked_\(Object\.assign\(\{\}, event, \{ IdempotencyKey: key \}\), requestParams\)/);
+  assert.match(eventService, /finally\s*\{\s*lock\.releaseLock\(\)/);
   assert.match(eventService, /idempotentReplay: true/);
-  assert.match(eventService, /IdempotencyStatus: String\\(event\\.IdempotencyKey \\|\\| ''\\)\\.trim\\(\\) \\? 'PROCESSING' : ''/);
-  assert.match(eventService, /IdempotencyStatus \\|\\| ''\\)\\.toUpperCase\\(\\) === 'PROCESSING'/);
+  assert.match(eventService, /IdempotencyStatus: String\(event\.IdempotencyKey \|\| ''\)\.trim\(\) \? 'PROCESSING' : ''/);
+  assert.match(eventService, /IdempotencyStatus \|\| ''\)\.toUpperCase\(\) === 'PROCESSING'/);
   assert.match(eventService, /IdempotencyStatus: 'COMPLETED'/);
-  assert.match(eventService, /finalEvent\\.IdempotencyStatus \\|\\| ''\\)\\.toUpperCase\\(\\) !== 'COMPLETED'/);
+  assert.match(eventService, /finalEvent\.IdempotencyStatus \|\| ''\)\.toUpperCase\(\) !== 'COMPLETED'/);
 });
+
