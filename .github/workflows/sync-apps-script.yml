@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '*.js'
+      - 'appsscript.json'
   workflow_dispatch:
     inputs:
       phase:
