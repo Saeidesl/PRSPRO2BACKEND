@@ -30,7 +30,7 @@ test('schema setup appends missing headers and does not delete or reorder existi
 });
 
 
-test('Apps Script sync auto-deploys on main only behind the production gate', () => {
+test('Apps Script sync automatically deploys main pushes and gates manual deployment', () => {
   const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'sync-apps-script.yml');
   const workflow = fs.readFileSync(workflowPath, 'utf8');
 
@@ -42,7 +42,7 @@ test('Apps Script sync auto-deploys on main only behind the production gate', ()
   assert.match(workflow, /confirm_production_deploy == true/);
   assert.match(workflow, /default: push_only/);
   assert.match(workflow, /options:[\s\S]*push_only[\s\S]*push_and_deploy/);
-  assert.ok(workflow.includes("if: ${{ github.event_name == 'push' || inputs.phase == 'push_and_deploy' }}"));
+  assert.ok(workflow.includes("if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.confirm_production_deploy == true && (inputs.phase == 'push_only' || vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true')) }}"));
   assert.match(workflow, /Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true/);
 });
 
