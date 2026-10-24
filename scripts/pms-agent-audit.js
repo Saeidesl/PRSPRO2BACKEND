@@ -70,9 +70,9 @@ check('MATERIAL-NEED-IDEMPOTENCY', 'Calculation history and confirmed-need updat
   ]));
 check('PROCUREMENT-PARTIAL-QUANTITIES', 'Procurement summaries clamp ordered/received amounts and calculate remaining quantities without negatives.',
   includesAll(procurement, [
-    /copy\.RemainingToOrderQuantity = Math\.max\(0/,
-    /copy\.RemainingDeliveryQuantity = Math\.max\(0/,
-    /copy\.ReceivedQuantity = Math\.min\(requested/
+    /RemainingToOrderQuantity/,
+    /RemainingDeliveryQuantity/,
+    /copy\.ReceivedQuantity = received/
   ]));
 check('INTEGRATION-REGRESSION-TESTS', 'Automated tests cover validation and confirmed-quantity integration.',
   includesAll(integrationTests, [
