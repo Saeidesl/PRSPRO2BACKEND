@@ -38,6 +38,9 @@ test('production Apps Script sync is manual-only and requires explicit deploymen
   assert.doesNotMatch(workflow, /^\s+push:\s*$/m);
   assert.match(workflow, /ALLOW_APPS_SCRIPT_DEPLOY == 'true'/);
   assert.match(workflow, /confirm_production_deploy == true/);
+  assert.match(workflow, /default: push_only/);
+  assert.match(workflow, /options:[\\s\\S]*push_only[\\s\\S]*push_and_deploy/);
+  assert.match(workflow, /if: \\$\\{\\{ inputs\\.phase == 'push_and_deploy' \\}\\}/);
   assert.match(workflow, /Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true/);
 });
 
