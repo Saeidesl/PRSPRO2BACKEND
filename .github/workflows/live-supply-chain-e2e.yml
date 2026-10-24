@@ -1,0 +1,39 @@
+name: Live supply-chain E2E (test deployment)
+
+on:
+  push:
+    branches:
+      - 'test/automated-supply-chain-e2e'
+    paths:
+      - 'tests/apps-script-live-e2e.test.js'
+      - '.github/workflows/live-supply-chain-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-supply-chain-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PMS_GAS_WEB_APP_URL: ${{ secrets.PMS_GAS_WEB_APP_URL }}
+      PMS_TEST_USERNAME: ${{ secrets.PMS_TEST_USERNAME }}
+      PMS_TEST_PASSWORD: ${{ secrets.PMS_TEST_PASSWORD }}
+      PMS_E2E_ALLOW_WRITES: YES
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Require test-only credentials and deployment URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PMS_GAS_WEB_APP_URL" || { echo "::error::Missing repository secret PMS_GAS_WEB_APP_URL"; exit 1; }
+          test -n "$PMS_TEST_USERNAME" || { echo "::error::Missing repository secret PMS_TEST_USERNAME"; exit 1; }
+          test -n "$PMS_TEST_PASSWORD" || { echo "::error::Missing repository secret PMS_TEST_PASSWORD"; exit 1; }
+          [[ "$PMS_GAS_WEB_APP_URL" =~ ^https://script\.google\.com/macros/s/.+/exec([?].*)?$ ]] || { echo "::error::URL must be a Google Apps Script /exec web-app URL"; exit 1; }
+          echo "Required test configuration is present; secret values are not printed."
+      - name: Run live production-to-procurement and receipt scenario
+        run: node --test tests/apps-script-live-e2e.test.js
