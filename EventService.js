@@ -227,12 +227,20 @@ const EventService = {
     const tenantId = String(user.TenantID);
     const events = EventRepository.getAll() || [];
 
+    // Build the visible-project index once. Calling findById for every event
+    // caused repeated Google Sheets reads on projects with long timelines.
+    const projectsById = Object.create(null);
+    (ProjectRepository.getAll() || []).forEach(function(project) {
+      if (project && String(project.TenantID) === tenantId &&
+          ProjectService._isProjectAvailableToUser_(project, user)) {
+        projectsById[String(project.ID)] = project;
+      }
+    });
+
     const filtered = events.filter(function(event) {
       if (String(event.TenantID) !== tenantId) return false;
       if (!event.ProjectID) return true;
-      const project = ProjectRepository.findById(event.ProjectID);
-      return !!project && String(project.TenantID) === tenantId &&
-        ProjectService._isProjectAvailableToUser_(project, user);
+      return !!projectsById[String(event.ProjectID)];
     });
 
     // فهرست عمومی رویدادها پروژهٔ مشخصی ندارد؛
