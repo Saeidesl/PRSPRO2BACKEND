@@ -44,6 +44,10 @@ function loadService() {
       IdempotencyStatus: event.IdempotencyStatus || (String(event.IdempotencyKey || '').trim() ? 'PROCESSING' : '')
     }, event);
     events.push(created);
+    // The stub models the successful end of _createUnlocked_ after all work is done.
+    if (String(created.IdempotencyKey || '').trim() && !failCompletionUpdate) {
+      created.IdempotencyStatus = 'COMPLETED';
+    }
     return context.Response.success({
       event: created,
       project: null,
