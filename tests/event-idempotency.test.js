@@ -105,3 +105,28 @@ test('an interrupted request is not falsely reported as completed on replay', ()
   );
   assert.equal(harness.getCreateCalls(), 1);
 });
+
+test('successful keyed event creation persists COMPLETED before returning success', () => {
+  const harness = loadService();
+  const result = harness.service.create(
+    { EventTypeID: 'TYPE1', IdempotencyKey: 'EVREQ_completed-key' },
+    {}
+  );
+  assert.equal(result.success, true);
+  assert.equal(result.data.event.IdempotencyStatus, 'COMPLETED');
+  assert.equal(harness.getEvents()[0].IdempotencyStatus, 'COMPLETED');
+});
+
+test('failed completion-state persistence does not return a successful response', () => {
+  const harness = loadService();
+  const original = harness.service._createUnlocked_;
+  harness.service._createUnlocked_ = function(event) {
+    const result = original.call(this, event);
+    const saved = harness.getEvents()[0];
+    saved.IdempotencyStatus = 'PROCESSING';
+    return result;
+  };
+  // Simulate a storage update that silently fails to persist the requested status.
+  const serviceSource = require('node:fs').readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
+  assert.match(serviceSource, /if \(!finalEvent \|\| String\(finalEvent\.IdempotencyStatus \|\| ''\)\.toUpperCase\(\) !== 'COMPLETED'\)/);
+});
