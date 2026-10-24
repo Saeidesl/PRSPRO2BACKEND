@@ -768,7 +768,8 @@ const EventService = {
       throw ErrorHandler.create(Constants.ERROR.UNAUTHORIZED, 'نشست کاربر معتبر نیست.');
     }
 
-    const lock = LockService.getScriptLock();
+    // Use a user-scoped lock: procurement integration may itself acquire the script lock.
+    const lock = LockService.getUserLock();
     lock.waitLock(30000);
     try {
       const prior = (EventRepository.getAll() || []).find(function(item) {
