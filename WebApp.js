@@ -55,6 +55,14 @@ var PerformanceDiagnostics = {
 
 function resetRequestCaches_() {
   if (
+    typeof AccessControlService !== 'undefined' &&
+    AccessControlService &&
+    typeof AccessControlService.resetRequestCache === 'function'
+  ) {
+    AccessControlService.resetRequestCache();
+  }
+
+  if (
     typeof DepartmentRepository !== 'undefined' &&
     DepartmentRepository &&
     typeof DepartmentRepository.resetRequestCache === 'function'

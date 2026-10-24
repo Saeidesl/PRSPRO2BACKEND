@@ -6,8 +6,23 @@
 
 const AccessControlService = {
 
+  _requestUserCache: {},
+  _requestAdminCache: {},
+
+  resetRequestCache: function() {
+    this._requestUserCache = {};
+    this._requestAdminCache = {};
+  },
+
   getCurrentUser: function(params) {
-    const result = AuthService.me(params || {});
+    params = params || {};
+    const token = AuthService.getToken_(params);
+    const cacheKey = token ? 'token:' + token : '';
+    if (cacheKey && Object.prototype.hasOwnProperty.call(this._requestUserCache, cacheKey)) {
+      return this._requestUserCache[cacheKey];
+    }
+
+    const result = AuthService.me(params);
 
     if (
       !result ||
@@ -21,6 +36,7 @@ const AccessControlService = {
       );
     }
 
+    if (cacheKey) this._requestUserCache[cacheKey] = result.data;
     return result.data;
   },
 
@@ -46,19 +62,28 @@ const AccessControlService = {
 
   isAdmin: function(user) {
     if (!user || !user.ID || !user.TenantID) return false;
+    const cacheKey = 'user:' + String(user.TenantID) + '|' + String(user.ID);
+    if (Object.prototype.hasOwnProperty.call(this._requestAdminCache, cacheKey)) {
+      return this._requestAdminCache[cacheKey];
+    }
     const userRoles = UserRoleRepository.getAll().filter(function(item) {
       return String(item.UserID) === String(user.ID) &&
         String(item.TenantID) === String(user.TenantID);
     });
-    if (!userRoles.length) return false;
+    if (!userRoles.length) {
+      this._requestAdminCache[cacheKey] = false;
+      return false;
+    }
     const assignedRoleIds = {};
     userRoles.forEach(function(item) { assignedRoleIds[String(item.RoleID)] = true; });
-    return RoleRepository.getAll().some(function(role) {
+    const isAdmin = RoleRepository.getAll().some(function(role) {
       return String(role.TenantID) === String(user.TenantID) &&
         assignedRoleIds[String(role.ID)] === true &&
         String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE &&
         ['SYS_ADMIN', 'ADMIN'].indexOf(String(role.Code || '').trim().toUpperCase()) !== -1;
     });
+    this._requestAdminCache[cacheKey] = isAdmin;
+    return isAdmin;
   },
 
   enforceRouteAccess: function(method, path, params) {
