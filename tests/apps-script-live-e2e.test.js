@@ -119,9 +119,12 @@ test('LIVE Apps Script: project -> specs -> configured confirmed-quantity event 
     const event = eventData.event || eventData.Event || eventData;
     const eventId = id(event);
     assert.ok(eventId, 'Event ID missing: ' + JSON.stringify(eventData));
-    if (eventData.procurementIntegration) {
-      assert.equal(String(eventData.procurementIntegration.status).toUpperCase(), 'SUCCESS',
-        'Event saved but procurement integration failed: ' + JSON.stringify(eventData.procurementIntegration));
+    const integration = eventData.procurementIntegration;
+    assert.ok(integration && integration.success !== false,
+      'Event saved but procurement integration failed: ' + JSON.stringify(integration));
+    if (integration.status) {
+      assert.notEqual(String(integration.status).toUpperCase(), 'FAILED',
+        'Event saved but procurement integration failed: ' + JSON.stringify(integration));
     }
 
     const needsData = unwrap(await request('GET', '/procurement/needs', token), 'read procurement needs');
