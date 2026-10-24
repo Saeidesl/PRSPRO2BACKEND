@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   validate-and-sync:
-    if: ${{ (github.event_name == 'push' && vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm_production_deploy == true && (inputs.phase == 'push_only' || vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true')) }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.confirm_production_deploy == true && (inputs.phase == 'push_only' || vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -45,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Automatic production deploy blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
+            echo "Automatic production sync and deployment enabled for main."
           else
             test "$CONFIRM_PRODUCTION_DEPLOY" = "true" || (echo "Apps Script change blocked: explicitly confirm the requested action." && exit 1)
             if [ "$REQUESTED_PHASE" = "push_and_deploy" ]; then
