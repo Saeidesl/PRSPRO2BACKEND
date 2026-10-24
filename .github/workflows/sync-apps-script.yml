@@ -2,13 +2,12 @@ name: Sync backend to Google Apps Script
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - '**.js'
-      - 'appsscript.json'
-      - '.github/workflows/sync-apps-script.yml'
+    inputs:
+      confirm_production_deploy:
+        description: "Explicitly confirm pushing source and updating the production Web App deployment"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,11 +18,22 @@ concurrency:
 
 jobs:
   validate-and-sync:
+    if: ${{ vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true' && inputs.confirm_production_deploy == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Confirm deployment gate
+        env:
+          ALLOW_APPS_SCRIPT_DEPLOY: ${{ vars.ALLOW_APPS_SCRIPT_DEPLOY }}
+          CONFIRM_PRODUCTION_DEPLOY: ${{ inputs.confirm_production_deploy }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
+          test "$CONFIRM_PRODUCTION_DEPLOY" = "true" || (echo "Deployment blocked: manually confirm production deployment." && exit 1)
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -74,8 +84,6 @@ jobs:
           const file = path.join(process.env.HOME, '.clasprc.json');
           let parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-          // Accept the full .clasprc.json file, clasp's legacy token object,
-          // or the common token-only secret format without printing credentials.
           if (typeof parsed === 'string') parsed = JSON.parse(parsed);
           if (parsed && parsed.token && parsed.token.access_token &&
               !parsed.oauth2ClientSettings && !parsed.tokens) {
@@ -123,8 +131,6 @@ jobs:
       - name: Push validated source to Apps Script
         run: clasp push --force
 
-      # The deployment ID is the public identifier for the existing Web App
-      # deployment, not an OAuth credential. A repository secret can override it.
       - name: Update existing Web App deployment
         env:
           DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID || 'AKfycbzHlLF_UuVZu6VIbl59EyIi4ZnLeJfssrBmo0jkn4BvrCPpqYyJ5qP71WdALtyalOKv_A' }}
@@ -132,4 +138,4 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$DEPLOYMENT_ID" || (echo "Missing Web App deployment ID" && exit 1)
-          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "Automated deployment ${GITHUB_SHA:0:7}"
+          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "Manual deployment ${GITHUB_SHA:0:7}"
