@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      PMS_GAS_WEB_APP_URL: \${{ secrets.PMS_GAS_TEST_WEB_APP_URL }}
-      PMS_TEST_USERNAME: \${{ secrets.PMS_E2E_TEST_USERNAME }}
-      PMS_TEST_PASSWORD: \${{ secrets.PMS_E2E_TEST_PASSWORD }}
-      PMS_E2E_ALLOW_WRITES: \${{ vars.PMS_E2E_ALLOW_WRITES }}
+      PMS_GAS_WEB_APP_URL: ${{ secrets.PMS_GAS_TEST_WEB_APP_URL }}
+      PMS_TEST_USERNAME: ${{ secrets.PMS_E2E_TEST_USERNAME }}
+      PMS_TEST_PASSWORD: ${{ secrets.PMS_E2E_TEST_PASSWORD }}
+      PMS_E2E_ALLOW_WRITES: ${{ vars.PMS_E2E_ALLOW_WRITES }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
