@@ -26,6 +26,19 @@ const MaterialPlanningService = {
    */
   _ensureSchema_: function() {
     if (this._schemaReady) return true;
+    // Each Apps Script web request starts a fresh JS execution, so the in-memory
+    // flag alone cannot prevent repeated schema checks and script-lock contention.
+    // Bump this key suffix whenever the material-planning sheet definitions change.
+    var schemaCache = null;
+    var schemaCacheKey = 'PMS_MATERIAL_SCHEMA_READY_V1';
+    if (typeof CacheService !== 'undefined' && CacheService &&
+        typeof CacheService.getScriptCache === 'function') {
+      schemaCache = CacheService.getScriptCache();
+      if (schemaCache && schemaCache.get(schemaCacheKey) === '1') {
+        this._schemaReady = true;
+        return true;
+      }
+    }
     // Node unit tests intentionally do not provide Apps Script globals.
     if (typeof APP_CONFIG === 'undefined' || typeof SpreadsheetApp === 'undefined' ||
         typeof ensureHeaders_ !== 'function') return false;
@@ -53,6 +66,11 @@ const MaterialPlanningService = {
       GoogleSheetsRepository._headerCache = {};
       GoogleSheetsRepository.resetRequestCache();
       this._schemaReady = true;
+      if (schemaCache) {
+        // Six hours keeps routine reads away from the script lock while allowing
+        // recovery if a sheet is removed or the migration needs to be retried.
+        schemaCache.put(schemaCacheKey, '1', 21600);
+      }
       return true;
     } finally {
       lock.releaseLock();
