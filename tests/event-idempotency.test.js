@@ -13,7 +13,7 @@ function loadService() {
   let lockReleases = 0;
   const context = {
     AccessControlService: { getCurrentUser: () => currentUser },
-    EventRepository: { getAll: () => events },
+    EventRepository: { getAll: () => events, update: (id, patch) => { const found = events.find((item) => item.ID === id); if (found) Object.assign(found, patch); return found; } },
     ProjectRepository: { findById: () => null },
     ProjectService: { _isProjectAvailableToUser_: () => false },
     LockService: { getUserLock: () => ({
@@ -39,7 +39,8 @@ function loadService() {
       TenantID: currentUser.TenantID,
       CreatedBy: currentUser.ID,
       ProjectID: '',
-      Status: 'ACTIVE'
+      Status: 'ACTIVE',
+      IdempotencyStatus: event.IdempotencyStatus || ''
     }, event);
     events.push(created);
     return context.Response.success({
@@ -88,4 +89,19 @@ test('idempotency keys are scoped to tenant and creator', () => {
   assert.equal(second.data.event.ID, 'EVT_2');
   assert.equal(harness.getCreateCalls(), 2);
   assert.equal(harness.getEvents().length, 2);
+});
+
+test('an interrupted request is not falsely reported as completed on replay', () => {
+  const harness = loadService();
+  const request = { EventTypeID: 'TYPE1', IdempotencyKey: 'EVREQ_stuck-key' };
+  const first = harness.service.create(request, {});
+  const event = harness.getEvents()[0];
+  event.IdempotencyStatus = 'PROCESSING';
+
+  assert.equal(first.data.event.ID, 'EVT_1');
+  assert.throws(
+    () => harness.service.create(request, {}),
+    /تکمیل آن تأیید نشده است/
+  );
+  assert.equal(harness.getCreateCalls(), 1);
 });
