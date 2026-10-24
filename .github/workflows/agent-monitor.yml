@@ -1,0 +1,71 @@
+name: Agent monitor
+
+on:
+  schedule:
+    - cron: '15 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  issues: write
+  contents: read
+
+jobs:
+  report-recent-failures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report recent failed workflow runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              { ...context.repo, per_page: 100, created: `>=${since}` }
+            );
+            const failures = runs
+              .filter(run => run.status === 'completed' && run.conclusion === 'failure')
+              .filter(run => run.name !== 'Agent monitor')
+              .slice(0, 20);
+
+            const title = 'Automated monitor: failed workflow runs';
+            const existing = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', per_page: 100
+            });
+            const issue = existing.data.find(item => !item.pull_request && item.title === title);
+
+            if (failures.length === 0) {
+              core.info(`No failed workflow runs found since ${since}. Existing alert issues are left open for human review.`);
+              return;
+            }
+
+            const lines = failures.map(run =>
+              `- [${run.name}]([${run.html_url}]) — ${run.conclusion}; branch: \`${run.head_branch || 'unknown'}\`; commit: \`${(run.head_sha || '').slice(0, 7)}\``
+            );
+            const body = [
+              '## Automated workflow health alert',
+              '',
+              `Detected ${failures.length} failed workflow run(s) in the last 24 hours (checked at ${new Date().toISOString()}).`,
+              '',
+              ...lines,
+              '',
+              'This report is generated automatically. Inspect the linked run logs before changing code or retrying deployment. This monitor does not deploy code or modify production data.'
+            ].join('\n');
+
+            if (issue) {
+              await github.rest.issues.update({
+                ...context.repo, issue_number: issue.number, body
+              });
+              core.info(`Updated existing alert issue #${issue.number}.`);
+            } else {
+              const created = await github.rest.issues.create({
+                ...context.repo, title, body, labels: ['automation']
+              }).catch(async error => {
+                if (error.status === 422) {
+                  return github.rest.issues.create({ ...context.repo, title, body });
+                }
+                throw error;
+              });
+              core.info(`Created alert issue #${created.data.number}.`);
+            }
