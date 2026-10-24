@@ -3,8 +3,16 @@ name: Sync backend to Google Apps Script
 on:
   workflow_dispatch:
     inputs:
+      phase:
+        description: "Choose a safe rollout phase. Push source first, migrate the sheet headers, then run deploy."
+        required: true
+        type: choice
+        options:
+          - push_only
+          - push_and_deploy
+        default: push_only
       confirm_production_deploy:
-        description: "Explicitly confirm pushing source and updating the production Web App deployment"
+        description: "Explicitly confirm the requested Apps Script source/deployment action"
         required: true
         type: boolean
         default: false
@@ -33,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
-          test "$CONFIRM_PRODUCTION_DEPLOY" = "true" || (echo "Deployment blocked: manually confirm production deployment." && exit 1)
+          test "$CONFIRM_PRODUCTION_DEPLOY" = "true" || (echo "Apps Script change blocked: explicitly confirm the requested action." && exit 1)
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -132,6 +140,7 @@ jobs:
         run: clasp push --force
 
       - name: Update existing Web App deployment
+        if: ${{ inputs.phase == 'push_and_deploy' }}
         env:
           DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID || 'AKfycbzHlLF_UuVZu6VIbl59EyIi4ZnLeJfssrBmo0jkn4BvrCPpqYyJ5qP71WdALtyalOKv_A' }}
         shell: bash
