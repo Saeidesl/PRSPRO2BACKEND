@@ -133,7 +133,7 @@ test('automated supply chain: confirmed need -> linked purchase order -> partial
   const item = procurement.sheets['20_PurchaseOrderItems'][0];
   assert.ok(order, 'purchase order is persisted');
   assert.ok(item, 'purchase order item is persisted');
-  assert.equal(order.ProjectID, 'P1');
+  assert.equal(procurement.sheets['21_PurchaseAllocations'][0].ProjectID, 'P1');
   assert.equal(item.MaterialNeedID, needId);
   assert.equal(Number(item.OrderedQuantity), 80);
   assert.equal(procurement.sheets['21_PurchaseAllocations'].reduce((sum, row) =>
