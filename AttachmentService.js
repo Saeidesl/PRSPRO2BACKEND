@@ -220,6 +220,15 @@ const AttachmentService = {
       );
     }
 
+    // Event access inherits project visibility; knowing an event ID must not bypass it.
+    if (String(entityType) === 'EVENT' && entity.ProjectID) {
+      const project = ProjectRepository.findById(entity.ProjectID);
+      if (!project || String(project.TenantID) !== String(currentUser.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(project, currentUser)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رکورد مورد نظر پیدا نشد.');
+      }
+    }
+
     const attachments =
       AttachmentRepository.findByEntity(
         entityType,
@@ -231,8 +240,8 @@ const AttachmentService = {
 
         return String(attachment.TenantID) ===
           String(currentUser.TenantID) &&
-          String(attachment.Status) !==
-          Constants.STATUS.DELETED;
+          String(attachment.Status) !== Constants.STATUS.DELETED &&
+          AttachmentService._isAttachmentVisibleToUser_(attachment, currentUser);
 
       });
 
@@ -313,6 +322,15 @@ const AttachmentService = {
         Constants.ERROR.NOT_FOUND,
         'رکورد مورد نظر پیدا نشد.'
       );
+    }
+
+    // Uploads to project-linked events require access to the parent project too.
+    if (String(data.EntityType) === 'EVENT' && entity.ProjectID) {
+      const project = ProjectRepository.findById(entity.ProjectID);
+      if (!project || String(project.TenantID) !== String(currentUser.TenantID) ||
+          !ProjectService._isProjectAvailableToUser_(project, currentUser)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رکورد مورد نظر پیدا نشد.');
+      }
     }
 
     /*
