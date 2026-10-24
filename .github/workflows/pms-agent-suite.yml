@@ -6,6 +6,7 @@ on:
     paths:
       - '**.js'
       - 'tests/**'
+      - 'scripts/**'
       - 'appsscript.json'
       - 'AGENTS.md'
       - 'PMS-AGENTS.md'
