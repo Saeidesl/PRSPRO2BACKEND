@@ -58,7 +58,7 @@ function loadService(lockAvailable = true) {
   return { service: context.__service, sheets };
 }
 
-test('creates a versioned material specification with validated policy', () => {
+test('creates versioned per-unit material specifications without an early-order path', () => {
   const { service } = loadService();
   const result = service.createSpecification('P1', {
     ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5,
@@ -68,18 +68,20 @@ test('creates a versioned material specification with validated policy', () => {
   assert.equal(result.data.Revision, 1);
   assert.equal(result.data.ConsumptionPerUnit, 1.5);
   assert.equal(result.data.WastagePercent, 5);
-  assert.equal(result.data.EarlyOrderPolicy, 'ESTIMATE_ALLOWED');
+  assert.equal(result.data.EarlyOrderPolicy, 'DISABLED');
 });
 
-test('rejects invalid material consumption and invalid early-order policy', () => {
+test('rejects invalid material consumption and ignores legacy early-order settings', () => {
   const { service } = loadService();
   assert.throws(() => service.createSpecification('P1', {
     ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 0
   }, {}), /مقدار معتبر نیست/);
-  assert.throws(() => service.createSpecification('P1', {
-    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1,
-    EarlyOrderPolicy: 'ALWAYS'
-  }, {}), /سیاست سفارش زودهنگام معتبر نیست/);
+  const legacyPayload = service.createSpecification('P1', {
+    ItemName: 'زیپ', Unit: 'عدد', ConsumptionPerUnit: 1,
+    EarlyOrderPolicy: 'ALWAYS', EarlyOrderQuantity: 75
+  }, {});
+  assert.equal(legacyPayload.data.EarlyOrderPolicy, 'DISABLED');
+  assert.equal(legacyPayload.data.EarlyOrderQuantity, '');
 });
 
 test('revises specifications without losing the previous revision', () => {
@@ -121,36 +123,6 @@ test('calculation history is idempotent and records quantity variance', () => {
 });
 
 
-
-test('creates early-order estimates only for eligible specifications and replays safely', () => {
-  const { service, sheets } = loadService();
-  service.createSpecification('P1', {
-    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5,
-    WastagePercent: 5, EarlyOrderPolicy: 'ESTIMATE_ALLOWED'
-  }, {});
-  service.createSpecification('P1', {
-    ItemName: 'دکمه', Unit: 'عدد', ConsumptionPerUnit: 4,
-    EarlyOrderPolicy: 'DISABLED'
-  }, {});
-  const first = service.createEstimatedNeeds('P1', {}).data;
-  assert.equal(first.items.length, 1);
-  assert.equal(first.items[0].NeedType, 'ESTIMATED');
-  assert.equal(first.items[0].RequestedQuantity, 157.5);
-  const replay = service.createEstimatedNeeds('P1', {}).data;
-  assert.equal(replay.items.length, 1);
-  assert.equal(replay.items[0].IdempotentReplay, true);
-  assert.equal(sheets['18_MaterialNeeds'].length, 1);
-});
-
-test('manual early-order policy uses the configured manual quantity', () => {
-  const { service } = loadService();
-  service.createSpecification('P1', {
-    ItemName: 'زیپ', Unit: 'عدد', ConsumptionPerUnit: 1,
-    EarlyOrderPolicy: 'MANUAL_ALLOWED', EarlyOrderQuantity: 75
-  }, {});
-  const result = service.createEstimatedNeeds('P1', {}).data;
-  assert.equal(result.items[0].RequestedQuantity, 75);
-});
 
 test('confirmed quantity event creates material needs and safely replays', () => {
   const { service, sheets } = loadService();
@@ -195,19 +167,12 @@ test('schema preparation runs before calculation lock acquisition', () => {
     assert.equal(schemaPrepared, true);
     return { success: true, data: {} };
   };
-  service._createEstimatedNeedsUnlocked_ = () => {
-    assert.equal(schemaPrepared, true);
-    return { success: true, data: {} };
-  };
   service.recalculateProjectNeeds('P1', 'EV1', 10, '1', {});
-  schemaPrepared = false;
-  service.createEstimatedNeeds('P1', {});
 });
 
 test('does not run duplicate material calculations when the script lock is unavailable', () => {
   const { service } = loadService(false);
   assert.throws(() => service.recalculateProjectNeeds('P1', 'EV1', 840, '1', {}), /محاسبه نیازهای ملزومات دیگری در حال انجام است/);
-  assert.throws(() => service.createEstimatedNeeds('P1', {}), /محاسبه نیازهای ملزومات دیگری در حال انجام است/);
 });
 
 test('rejects cross-tenant or invisible projects', () => {
