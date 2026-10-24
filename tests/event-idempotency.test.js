@@ -41,7 +41,7 @@ function loadService() {
       CreatedBy: currentUser.ID,
       ProjectID: '',
       Status: 'ACTIVE',
-      IdempotencyStatus: event.IdempotencyStatus || ''
+      IdempotencyStatus: event.IdempotencyStatus || (String(event.IdempotencyKey || '').trim() ? 'PROCESSING' : '')
     }, event);
     events.push(created);
     return context.Response.success({
