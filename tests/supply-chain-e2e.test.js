@@ -21,8 +21,8 @@ function commonContext() {
     },
     ProjectService: { _isProjectAvailableToUser_: () => true },
     EventRepository: {
-      findById: (id) => String(id) === 'EV1'
-        ? { ID: 'EV1', TenantID: 'T1', ProjectID: 'P1', EventTypeVersion: '1' } : null
+      findById: (id) => (['EV1', 'EV2'].indexOf(String(id)) !== -1)
+        ? { ID: String(id), TenantID: 'T1', ProjectID: 'P1', EventTypeVersion: '1' } : null
     },
     Validator: {
       required: (v, label) => {
@@ -149,7 +149,7 @@ test('automated supply chain: confirmed need -> linked purchase order -> partial
   assert.equal(procurement.sheets['19_PurchaseOrders'][0].Status, 'PARTIALLY_RECEIVED');
 
   procurement.service.createReceipt({
-    PurchaseOrderItemID: item.ID, QuantityReceived: 50, ProjectID: 'P1', SourceEventID: 'EV1'
+    PurchaseOrderItemID: item.ID, QuantityReceived: 50, ProjectID: 'P1', SourceEventID: 'EV2'
   }, {});
   receipts = procurement.sheets['22_MaterialReceipts'];
   assert.equal(receipts.reduce((sum, row) => sum + Number(row.QuantityReceived || 0), 0), 80);
