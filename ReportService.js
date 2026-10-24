@@ -131,6 +131,12 @@ const ReportService = {
 
         });
 
+    // Build a tenant-visible project index once. The old events filter scanned
+    // the complete project list for every event, which scaled as O(projects × events).
+    const visibleProjectIds = Object.create(null);
+    projects.forEach(function(project) {
+      visibleProjectIds[String(project.ID)] = true;
+    });
 
     const events =
       ReportRepository.getEvents()
@@ -138,11 +144,22 @@ const ReportService = {
 
           if (String(event.TenantID) !== String(tenantId)) return false;
           if (!event.ProjectID) return true;
-          return projects.some(function(project) {
-            return String(project.ID) === String(event.ProjectID);
-          });
+          return Object.prototype.hasOwnProperty.call(
+            visibleProjectIds,
+            String(event.ProjectID)
+          );
 
         });
+
+    // Group events once so project activity does not rescan the full event list
+    // for each project. This keeps dashboard aggregation linear in the input size.
+    const eventsByProject = Object.create(null);
+    events.forEach(function(event) {
+      if (!event.ProjectID) return;
+      const projectId = String(event.ProjectID);
+      if (!eventsByProject[projectId]) eventsByProject[projectId] = [];
+      eventsByProject[projectId].push(event);
+    });
 
 
     const attachments =
@@ -265,29 +282,19 @@ const ReportService = {
     const projectActivity =
       projects.map(function(project) {
 
-        const projectEvents =
-          events.filter(function(event) {
-
-            return String(event.ProjectID) ===
-              String(project.ID) &&
-              String(event.Status) !==
-              Constants.STATUS.VOID;
-
-          });
-
+        const projectEvents = eventsByProject[String(project.ID)] || [];
 
         let lastActivity =
           project.UpdatedAt ||
           project.CreatedAt ||
           null;
 
-
         projectEvents.forEach(function(event) {
+          if (String(event.Status) === Constants.STATUS.VOID) return;
 
           const eventDate =
             event.OccurredAt ||
             event.CreatedAt;
-
 
           if (
             eventDate &&
@@ -297,12 +304,8 @@ const ReportService = {
               new Date(lastActivity).getTime()
             )
           ) {
-
-            lastActivity =
-              eventDate;
-
+            lastActivity = eventDate;
           }
-
         });
 
 
