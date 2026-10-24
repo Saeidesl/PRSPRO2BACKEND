@@ -73,47 +73,6 @@ const ProcurementService = {
     return event;
   },
 
-  createNeed: function(body, params) {
-    body = body || {};
-    var user = this._user_(params);
-    Validator.required(body.ItemName, 'نام ملزوم');
-    Validator.required(body.Unit, 'واحد اندازه‌گیری');
-    var quantity = this._number_(body.RequestedQuantity, 'مقدار موردنیاز', false);
-    this._validateProject_(body.ProjectID, user.TenantID, user);
-    this._validateEvent_(body.SourceEventID, user.TenantID, user);
-    if (body.SourceEventID) {
-      var replayNeed = ProcurementRepository.getNeeds(user.TenantID).find(function(need) {
-        return String(need.SourceEventID || '') === String(body.SourceEventID) &&
-          String(need.ProjectID || '') === String(body.ProjectID || '') &&
-          String(need.ItemName || '').trim() === String(body.ItemName).trim() &&
-          String(need.Unit || '').trim() === String(body.Unit).trim() &&
-          String(need.Status || '').toUpperCase() !== 'DELETED';
-      });
-      if (replayNeed) return Response.success(Object.assign({ IdempotentReplay: true }, replayNeed));
-    }
-
-    var now = this._now_();
-    var record = {
-      ID: this._id_('NEED'),
-      TenantID: user.TenantID,
-      ProjectID: body.ProjectID || '',
-      SourceEventID: body.SourceEventID || '',
-      ItemName: String(body.ItemName).trim(),
-      ItemCode: this._itemCode_(),
-      Unit: String(body.Unit).trim(),
-      RequestedQuantity: quantity,
-      NeededBy: body.NeededBy || '',
-      Status: 'ACTIVE',
-      Notes: String(body.Notes || ''),
-      CreatedBy: user.ID,
-      CreatedAt: now,
-      UpdatedAt: now
-    };
-    GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.NEEDS, record);
-    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'MATERIAL_NEED',EntityID:record.ID,NewData:record});
-    return Response.success(record);
-  },
-
   createOrder: function(body, params) {
     if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
         typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
