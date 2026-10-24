@@ -778,6 +778,12 @@ const EventService = {
           String(item.IdempotencyKey || '') === key;
       });
       if (prior) {
+        if (String(prior.IdempotencyStatus || '').toUpperCase() === 'PROCESSING') {
+          throw ErrorHandler.create(
+            Constants.ERROR.VALIDATION_ERROR,
+            'این درخواست قبلاً شروع شده اما تکمیل آن تأیید نشده است؛ از ثبت مجدد خودداری شد و بررسی رویداد موجود لازم است.'
+          );
+        }
         let project = null;
         if (prior.ProjectID) {
           project = ProjectRepository.findById(prior.ProjectID);
@@ -1042,6 +1048,7 @@ const EventService = {
       ID: 'EVT_' + Utilities.getUuid().replace(/-/g, ''),
       TenantID: user.TenantID,
       IdempotencyKey: String(event.IdempotencyKey || '').trim(),
+      IdempotencyStatus: String(event.IdempotencyKey || '').trim() ? 'PROCESSING' : '',
       ProjectID: project ? project.ID : '',
       EventTypeID: eventType.ID,
       EventTypeVersion: eventType.Version || 1,
@@ -1166,9 +1173,17 @@ const EventService = {
       });
     }
 
+    // Mark the idempotent request complete only after event data, integrations,
+    // project changes, and audit writes have finished successfully. If this update
+    // fails, a retry is blocked as PROCESSING rather than falsely reported as success.
+    let finalEvent = created;
+    if (String(created.IdempotencyKey || '').trim()) {
+      finalEvent = EventRepository.update(created.ID, { IdempotencyStatus: 'COMPLETED' }) || created;
+    }
+
     return Response.success(
       {
-        event: created,
+        event: finalEvent,
         project: updatedProject,
         workflowMoved: workflowMoved,
         currentStepID: updatedProject ? updatedProject.CurrentStepID : '',
