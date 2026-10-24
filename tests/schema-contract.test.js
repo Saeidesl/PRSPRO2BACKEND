@@ -28,3 +28,15 @@ test('schema setup appends missing headers and does not delete or reorder existi
   assert.match(source, /Never reorder, overwrite, or delete user data/i);
   assert.match(source, /missing = headers\.filter/);
 });
+
+
+test('production Apps Script sync is manual-only and requires explicit deployment approval', () => {
+  const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'sync-apps-script.yml');
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /^\s+push:\s*$/m);
+  assert.match(workflow, /ALLOW_APPS_SCRIPT_DEPLOY == 'true'/);
+  assert.match(workflow, /confirm_production_deploy == true/);
+  assert.match(workflow, /Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true/);
+});
