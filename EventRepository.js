@@ -102,6 +102,13 @@ const EventRepository = {
 
   update: function(id, data) {
 
+    // Older deployed spreadsheets may not yet contain the idempotency status column.
+    // Append it safely before updating so the completion marker is never silently dropped.
+    if (data && Object.prototype.hasOwnProperty.call(data, 'IdempotencyStatus') &&
+        typeof GoogleSheetsRepository.ensureColumn === 'function') {
+      GoogleSheetsRepository.ensureColumn(this.SHEET_NAME, 'IdempotencyStatus');
+    }
+
     return GoogleSheetsRepository.updateById(
       this.SHEET_NAME,
       id,
