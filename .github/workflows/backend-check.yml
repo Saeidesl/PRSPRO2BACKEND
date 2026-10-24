@@ -5,13 +5,18 @@ on:
     branches: [main]
     paths:
       - '**.js'
+      - 'tests/**'
       - 'appsscript.json'
+      - 'AGENTS.md'
       - '.github/workflows/backend-check.yml'
+      - '.github/workflows/agent-monitor.yml'
   pull_request:
     paths:
       - '**.js'
       - 'appsscript.json'
+      - 'AGENTS.md'
       - '.github/workflows/backend-check.yml'
+      - '.github/workflows/agent-monitor.yml'
   workflow_dispatch:
 
 permissions:
