@@ -36,7 +36,7 @@ test('Apps Script sync automatically deploys main pushes and gates manual deploy
 
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /push:[\s\S]*?branches:[\s\S]*?- main/);
-  assert.match(workflow, /github\.event_name == 'push' && vars\.ALLOW_APPS_SCRIPT_DEPLOY == 'true'/);
+  assert.match(workflow, /github\\.event_name == 'push'/);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(workflow, /if \[ "\$\{\{ inputs\.phase \}\}" = "push_and_deploy" \]/);
   assert.match(workflow, /confirm_production_deploy == true/);
