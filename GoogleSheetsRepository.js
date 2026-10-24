@@ -6,18 +6,20 @@ const GoogleSheetsRepository = {
   _requestRecordCache: {},
   _requestListCache: {},
   _requestFindCache: {},
+  _requestColumnIndexCache: {},
 
   resetRequestCache: function() {
     this._requestRecordCache = {};
     this._requestListCache = {};
     this._requestFindCache = {};
+    this._requestColumnIndexCache = {};
   },
 
   _invalidateSheetRecordCache: function(sheetName) {
     var prefix = String(sheetName) + '|';
     delete this._requestListCache[String(sheetName)];
 
-    [this._requestRecordCache, this._requestListCache, this._requestFindCache].forEach(function(cache) {
+    [this._requestRecordCache, this._requestListCache, this._requestFindCache, this._requestColumnIndexCache].forEach(function(cache) {
       Object.keys(cache).forEach(function(key) {
         if (key.indexOf(prefix) === 0) delete cache[key];
       });
@@ -83,34 +85,44 @@ const GoogleSheetsRepository = {
       return this._requestFindCache[cacheKey];
     }
 
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2 || headers.length === 0) {
-      if (normalizedSheetName) this._requestFindCache[cacheKey] = -1;
-      return -1;
-    }
-
+    const columnCacheKey = normalizedSheetName + '|' + String(fieldName);
     const columnIndex = headers.indexOf(fieldName);
     if (columnIndex === -1) {
       if (normalizedSheetName) this._requestFindCache[cacheKey] = -1;
       return -1;
     }
 
-    const values = sheet.getRange(
-      2, columnIndex + 1, lastRow - 1, 1
-    ).getValues();
+    let columnIndexCache = this._requestColumnIndexCache[columnCacheKey];
+    if (!columnIndexCache) {
+      const lastRow = sheet.getLastRow();
+      const values = lastRow < 2
+        ? []
+        : sheet.getRange(2, columnIndex + 1, lastRow - 1, 1).getValues();
+      const rowByValue = Object.create(null);
 
-    const target = String(value);
+      // Preserve the original behavior: if values are duplicated, return
+      // the first matching row. Prefix keys to avoid object-prototype names.
+      for (let i = 0; i < values.length; i++) {
+        const valueKey = '$' + String(values[i][0]);
+        if (!Object.prototype.hasOwnProperty.call(rowByValue, valueKey)) {
+          rowByValue[valueKey] = i + 2;
+        }
+      }
 
-    for (let i = 0; i < values.length; i++) {
-      if (String(values[i][0]) === target) {
-        const rowNumber = i + 2;
-        if (normalizedSheetName) this._requestFindCache[cacheKey] = rowNumber;
-        return rowNumber;
+      columnIndexCache = { rowByValue: rowByValue };
+      if (normalizedSheetName) {
+        this._requestColumnIndexCache[columnCacheKey] = columnIndexCache;
       }
     }
 
-    if (normalizedSheetName) this._requestFindCache[cacheKey] = -1;
-    return -1;
+    const targetKey = '$' + String(value);
+    const rowNumber = Object.prototype.hasOwnProperty.call(
+      columnIndexCache.rowByValue,
+      targetKey
+    ) ? columnIndexCache.rowByValue[targetKey] : -1;
+
+    if (normalizedSheetName) this._requestFindCache[cacheKey] = rowNumber;
+    return rowNumber;
   },
 
   getSpreadsheet: function() {
