@@ -28,7 +28,7 @@ function loadService() {
     },
     Response: { success: (data, meta) => ({ success: true, data, meta: meta || {} }) },
     ErrorHandler: { create: (_code, message) => new Error(message) },
-    Constants: { ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR', UNAUTHORIZED: 'UNAUTHORIZED', NOT_FOUND: 'NOT_FOUND' } },
+    Constants: { ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR', UNAUTHORIZED: 'UNAUTHORIZED', NOT_FOUND: 'NOT_FOUND', INTERNAL_ERROR: 'INTERNAL_ERROR' } },
     Date, Object, String, Array, JSON
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
@@ -44,9 +44,15 @@ function loadService() {
       IdempotencyStatus: event.IdempotencyStatus || (String(event.IdempotencyKey || '').trim() ? 'PROCESSING' : '')
     }, event);
     events.push(created);
-    // The stub models the successful end of _createUnlocked_ after all work is done.
-    if (String(created.IdempotencyKey || '').trim() && !failCompletionUpdate) {
-      created.IdempotencyStatus = 'COMPLETED';
+    // Model the completion-state write performed after all event side effects.
+    if (String(created.IdempotencyKey || '').trim()) {
+      const finalEvent = context.EventRepository.update(created.ID, { IdempotencyStatus: 'COMPLETED' });
+      if (!finalEvent || String(finalEvent.IdempotencyStatus || '').toUpperCase() !== 'COMPLETED') {
+        throw context.ErrorHandler.create(
+          context.Constants.ERROR.INTERNAL_ERROR,
+          'رویداد ثبت شده اما تأیید نهایی آن ذخیره نشد؛ از ارسال مجدد درخواست خودداری کنید و رویداد موجود را بررسی کنید.'
+        );
+      }
     }
     return context.Response.success({
       event: created,
