@@ -45,11 +45,17 @@ const ProcurementService = {
     return number;
   },
 
-  _isProjectVisible_: function(projectId, user) {
+  _isProjectVisible_: function(projectId, user, visibilityCache) {
     if (!projectId) return true;
+    var key = String(projectId);
+    if (visibilityCache && Object.prototype.hasOwnProperty.call(visibilityCache, key)) {
+      return visibilityCache[key];
+    }
     var project = ProjectRepository.findById(projectId);
-    return !!project && String(project.TenantID) === String(user.TenantID) &&
+    var visible = !!project && String(project.TenantID) === String(user.TenantID) &&
       ProjectService._isProjectAvailableToUser_(project, user);
+    if (visibilityCache) visibilityCache[key] = visible;
+    return visible;
   },
 
   _validateProject_: function(projectId, tenantId, user) {
@@ -669,8 +675,11 @@ const ProcurementService = {
     return Response.success(receipt);
   },
 
-  listNeeds: function(params) {
-    var user = this._user_(params);
+  listNeeds: function(params, sharedContext) {
+    var context = sharedContext || {};
+    var user = context.user || this._user_(params);
+    context.user = user;
+    var visibilityCache = context.projectVisibilityCache || (context.projectVisibilityCache = Object.create(null));
     var needs = ProcurementRepository.getNeeds(user.TenantID);
     var items = ProcurementRepository.getItems(user.TenantID);
     var orders = ProcurementRepository.getOrders(user.TenantID);
@@ -771,7 +780,7 @@ const ProcurementService = {
       var status = String(need.Status || 'ACTIVE').toUpperCase();
       var superseded = status === 'SUPERSEDED' ||
         (String(need.NeedType || '').toUpperCase() === 'ESTIMATED' && confirmedSpecKeys[specKey]);
-      return !superseded && this._isProjectVisible_(need.ProjectID, user);
+      return !superseded && this._isProjectVisible_(need.ProjectID, user, visibilityCache);
     }, this).map(function(need) {
       var copy = Object.assign({}, need);
       var requested = Math.max(0, Number(need.RequestedQuantity) || 0);
@@ -792,8 +801,11 @@ const ProcurementService = {
     }));
   },
 
-  listOrders: function(params) {
-    var user = this._user_(params);
+  listOrders: function(params, sharedContext) {
+    var context = sharedContext || {};
+    var user = context.user || this._user_(params);
+    context.user = user;
+    var visibilityCache = context.projectVisibilityCache || (context.projectVisibilityCache = Object.create(null));
     var orders = ProcurementRepository.getOrders(user.TenantID);
     var items = ProcurementRepository.getItems(user.TenantID);
     var receipts = ProcurementRepository.getReceipts(user.TenantID);
@@ -884,7 +896,7 @@ const ProcurementService = {
     // prevent leaking hidden project labels, item quantities, or receipt details.
     var visibleOrders = mappedOrders.filter(function(order) {
       var ids = Array.isArray(order.ProjectIDs) ? order.ProjectIDs : [];
-      return ids.every(function(id) { return this._isProjectVisible_(id, user); }, this);
+      return ids.every(function(id) { return this._isProjectVisible_(id, user, visibilityCache); }, this);
     }, this);
     return Response.success(visibleOrders);
   },
@@ -894,9 +906,10 @@ const ProcurementService = {
    * so the frontend can render the main screen with one backend round-trip.
    */
   workspace: function(params) {
-    var dashboardResponse = this.dashboard(params);
-    var needsResponse = this.listNeeds(params);
-    var ordersResponse = this.listOrders(params);
+    var sharedContext = { projectVisibilityCache: Object.create(null) };
+    var ordersResponse = this.listOrders(params, sharedContext);
+    var needsResponse = this.listNeeds(params, sharedContext);
+    var dashboardResponse = this.dashboard(params, ordersResponse, sharedContext);
     return Response.success({
       summary: dashboardResponse && dashboardResponse.data ? dashboardResponse.data.summary : {},
       needs: needsResponse && Array.isArray(needsResponse.data) ? needsResponse.data : [],
@@ -987,8 +1000,11 @@ const ProcurementService = {
     });
   },
 
-  dashboard: function(params) {
-    var user = this._user_(params);
+  dashboard: function(params, preparedOrdersResponse, sharedContext) {
+    var context = sharedContext || {};
+    var user = context.user || this._user_(params);
+    context.user = user;
+    var visibilityCache = context.projectVisibilityCache || (context.projectVisibilityCache = Object.create(null));
     var needs = ProcurementRepository.getNeeds(user.TenantID);
     var allOrders = ProcurementRepository.getOrders(user.TenantID);
     var allItems = ProcurementRepository.getItems(user.TenantID);
@@ -997,9 +1013,9 @@ const ProcurementService = {
     // Reuse the same visibility rules as the procurement workspace before
     // computing aggregate counts, so hidden-project records cannot affect totals.
     needs = needs.filter(function(need) {
-      return this._isProjectVisible_(need.ProjectID, user);
+      return this._isProjectVisible_(need.ProjectID, user, visibilityCache);
     }, this);
-    var visibleOrdersResponse = this.listOrders(params);
+    var visibleOrdersResponse = preparedOrdersResponse || this.listOrders(params, context);
     var visibleOrders = visibleOrdersResponse && Array.isArray(visibleOrdersResponse.data)
       ? visibleOrdersResponse.data : [];
     var visibleOrderIds = Object.create(null);

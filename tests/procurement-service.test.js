@@ -9,10 +9,14 @@ const test = require('node:test');
 function loadProcurementService() {
   const sheets = Object.create(null);
   let uuid = 0;
+  let projectLookupCount = 0;
   const context = {
     AccessControlService: { getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' }) },
     ProjectRepository: {
-      findById: (id) => String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : null
+      findById: (id) => {
+        projectLookupCount++;
+        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : null;
+      }
     },
     ProjectService: { _isProjectAvailableToUser_: () => true },
     EventRepository: {
@@ -49,7 +53,7 @@ function loadProcurementService() {
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementService.js'), 'utf8');
   vm.runInNewContext(source + '\nthis.__service = ProcurementService;', context);
-  return { service: context.__service, sheets };
+  return { service: context.__service, sheets, getProjectLookupCount: () => projectLookupCount };
 }
 
 test('legacy estimated needs and confirmed needs share an allocation key for existing procurement records', () => {
@@ -81,4 +85,31 @@ test('caps cumulative allocations at the need quantity and records the remainder
   assert.equal(secondItem.SurplusQuantity, 10);
   const allocations = sheets['21_PurchaseAllocations'].filter((row) => row.MaterialNeedID === need.ID);
   assert.equal(allocations.reduce((sum, row) => sum + row.AllocatedQuantity, 0), 100);
+});
+test('procurement workspace reuses order mapping, user context, and project visibility checks', () => {
+  const { service, sheets, getProjectLookupCount } = loadProcurementService();
+  sheets['18_MaterialNeeds'] = [{
+    ID: 'N_WORKSPACE_1', TenantID: 'T1', ProjectID: 'P1',
+    RequestedQuantity: 10, Status: 'ACTIVE', NeedType: 'CONFIRMED', MaterialSpecKey: 'SPEC_WORKSPACE'
+  }];
+
+  const originalUser = service._user_;
+  const originalListOrders = service.listOrders;
+  let userCalls = 0;
+  let listOrdersCalls = 0;
+  service._user_ = function(params) {
+    userCalls++;
+    return originalUser.call(this, params);
+  };
+  service.listOrders = function(params, sharedContext) {
+    listOrdersCalls++;
+    return originalListOrders.call(this, params, sharedContext);
+  };
+
+  const result = service.workspace({});
+  assert.equal(result.success, true);
+  assert.equal(result.data.needs.length, 1);
+  assert.equal(listOrdersCalls, 1, 'workspace and dashboard should share the same mapped order response');
+  assert.equal(userCalls, 1, 'workspace should resolve and prepare the user/schema context once');
+  assert.equal(getProjectLookupCount(), 1, 'project visibility should be checked once per project within the workspace request');
 });
