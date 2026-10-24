@@ -11,9 +11,10 @@ function loadService() {
   let currentUser = { ID: 'U1', TenantID: 'T1' };
   let createCalls = 0;
   let lockReleases = 0;
+  let failCompletionUpdate = false;
   const context = {
     AccessControlService: { getCurrentUser: () => currentUser },
-    EventRepository: { getAll: () => events, update: (id, patch) => { const found = events.find((item) => item.ID === id); if (found) Object.assign(found, patch); return found; } },
+    EventRepository: { getAll: () => events, update: (id, patch) => { const found = events.find((item) => item.ID === id); if (found && !failCompletionUpdate) Object.assign(found, patch); return found; } },
     ProjectRepository: { findById: () => null },
     ProjectService: { _isProjectAvailableToUser_: () => false },
     LockService: { getUserLock: () => ({
@@ -58,7 +59,8 @@ function loadService() {
     setUser: (user) => { currentUser = user; },
     getEvents: () => events,
     getCreateCalls: () => createCalls,
-    getLockReleases: () => lockReleases
+    getLockReleases: () => lockReleases,
+    failCompletionUpdate: (value) => { failCompletionUpdate = value; }
   };
 }
 
@@ -119,14 +121,14 @@ test('successful keyed event creation persists COMPLETED before returning succes
 
 test('failed completion-state persistence does not return a successful response', () => {
   const harness = loadService();
-  const original = harness.service._createUnlocked_;
-  harness.service._createUnlocked_ = function(event) {
-    const result = original.call(this, event);
-    const saved = harness.getEvents()[0];
-    saved.IdempotencyStatus = 'PROCESSING';
-    return result;
-  };
-  // Simulate a storage update that silently fails to persist the requested status.
-  const serviceSource = require('node:fs').readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
-  assert.match(serviceSource, /if \(!finalEvent \|\| String\(finalEvent\.IdempotencyStatus \|\| ''\)\.toUpperCase\(\) !== 'COMPLETED'\)/);
+  harness.failCompletionUpdate(true);
+  assert.throws(
+    () => harness.service.create(
+      { EventTypeID: 'TYPE1', IdempotencyKey: 'EVREQ_failed-completion' },
+      {}
+    ),
+    /تأیید نهایی آن ذخیره نشد/
+  );
+  assert.equal(harness.getCreateCalls(), 1);
+  assert.equal(harness.getEvents()[0].IdempotencyStatus, 'PROCESSING');
 });
