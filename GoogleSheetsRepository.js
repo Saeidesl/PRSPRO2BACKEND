@@ -184,6 +184,35 @@ const GoogleSheetsRepository = {
     }
   },
 
+  // Safely append a required schema column without changing existing column order or data.
+  // This is used for forward-compatible writes when an older installation missed a newer header.
+  ensureColumn: function(sheetName, columnName) {
+    const sheet = this.getSheet(sheetName);
+    let headers = this.getHeaders(sheetName);
+
+    if (headers.indexOf(columnName) !== -1) return headers;
+
+    const lastColumn = sheet.getLastColumn();
+    const currentHeaders = lastColumn > 0
+      ? sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0]
+          .map(function(value) { return String(value || '').trim(); })
+      : [];
+
+    if (currentHeaders.indexOf(columnName) !== -1) {
+      delete this._headerCache[sheetName];
+      return this.getHeaders(sheetName);
+    }
+
+    if (sheet.getMaxColumns && sheet.getMaxColumns() < lastColumn + 1) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), lastColumn + 1 - sheet.getMaxColumns());
+    }
+
+    sheet.getRange(1, lastColumn + 1).setValue(columnName);
+    delete this._headerCache[sheetName];
+    this._invalidateSheetRecordCache(sheetName);
+    return this.getHeaders(sheetName);
+  },
+
   getHeaders: function(sheetName) {
     const startTime = Date.now();
 
