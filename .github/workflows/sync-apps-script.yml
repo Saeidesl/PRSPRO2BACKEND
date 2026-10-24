@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   validate-and-sync:
-    if: ${{ vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true' && inputs.confirm_production_deploy == true }}
+    if: ${{ inputs.confirm_production_deploy == true && (inputs.phase == 'push_only' || vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -40,8 +40,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
           test "$CONFIRM_PRODUCTION_DEPLOY" = "true" || (echo "Apps Script change blocked: explicitly confirm the requested action." && exit 1)
+          if [ "${{ inputs.phase }}" = "push_and_deploy" ]; then
+            test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
