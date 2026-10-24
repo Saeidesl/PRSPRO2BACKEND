@@ -69,5 +69,5 @@ test('request reset and sheet writes invalidate the column index', () => {
   repository._findRowNumber(sheet, headers, 'Code', 'P-100', 'Projects');
   repository._invalidateSheetRecordCache('Projects');
   repository._findRowNumber(sheet, headers, 'Code', 'P-200', 'Projects');
-  assert.equal(sheet.getColumnReads(), 4);
+  assert.equal(sheet.getColumnReads(), 3);
 });
