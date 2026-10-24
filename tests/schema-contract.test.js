@@ -55,7 +55,7 @@ test('event creation persists an idempotency key and serializes duplicate submis
   assert.match(eventService, /return this\._createUnlocked_\(Object\.assign\(\{\}, event, \{ IdempotencyKey: key \}\), requestParams\)/);
   assert.match(eventService, /finally\s*\{\s*lock\.releaseLock\(\)/);
   assert.match(eventService, /idempotentReplay: true/);
-  assert.match(eventService, /IdempotencyStatus: 'PROCESSING'/);
+  assert.match(eventService, /IdempotencyStatus: String\(event\.IdempotencyKey \|\| ''\)\.trim\(\) \? 'PROCESSING' : ''/);
   assert.match(eventService, /IdempotencyStatus \|\| ''\)\.toUpperCase\(\) === 'PROCESSING'/);
   assert.match(eventService, /IdempotencyStatus: 'COMPLETED'/);
   assert.match(eventService, /finalEvent\.IdempotencyStatus \|\| ''\)\.toUpperCase\(\) !== 'COMPLETED'/);
