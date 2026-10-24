@@ -41,7 +41,7 @@ jobs:
             }
 
             const lines = failures.map(run =>
-              `- [${run.name}]([${run.html_url}]) — ${run.conclusion}; branch: \`${run.head_branch || 'unknown'}\`; commit: \`${(run.head_sha || '').slice(0, 7)}\``
+              `- [${run.name}](${run.html_url}) — ${run.conclusion}; branch: \\`${run.head_branch || 'unknown'}\\`; commit: \\`${(run.head_sha || '').slice(0, 7)}\\``
             );
             const body = [
               '## Automated workflow health alert',
@@ -51,7 +51,7 @@ jobs:
               ...lines,
               '',
               'This report is generated automatically. Inspect the linked run logs before changing code or retrying deployment. This monitor does not deploy code or modify production data.'
-            ].join('\n');
+            ].join('\\n');
 
             if (issue) {
               await github.rest.issues.update({
