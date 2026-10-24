@@ -425,11 +425,6 @@ const Router = {
       return EventService.retryProcurementIntegration(procurementRetryMatch[1], params);
     }
 
-    if (path === '/procurement/needs') {
-      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
-      return ProcurementService.createNeed(body, params);
-    }
-
     if (path === '/procurement/orders') {
       AccessControlService.require(params, 'PROCUREMENT_MANAGE');
       return ProcurementService.createOrder(body, params);
@@ -445,16 +440,21 @@ const Router = {
       return ProcurementService.createReceipt(body, params);
     }
 
-    const materialEstimateMatch = path.match(/^\/projects\/([^/]+)\/material-estimates$/);
-    if (materialEstimateMatch) {
-      AccessControlService.require(params, 'PROJECT_EDIT');
-      return MaterialPlanningService.createEstimatedNeeds(materialEstimateMatch[1], params);
-    }
-
     const materialSpecCreateMatch = path.match(/^\/projects\/([^/]+)\/material-specifications$/);
     if (materialSpecCreateMatch) {
-      AccessControlService.require(params, 'PROJECT_EDIT');
-      return MaterialPlanningService.createSpecification(materialSpecCreateMatch[1], body, params);
+      const projectId = materialSpecCreateMatch[1];
+      try {
+        AccessControlService.require(params, 'PROJECT_EDIT');
+      } catch (permissionError) {
+        const user = AccessControlService.getCurrentUser(params || {});
+        const project = ProjectRepository.findById(projectId);
+        if (!project || String(project.TenantID) !== String(user.TenantID) ||
+            String(project.CreatedBy || '') !== String(user.ID || '')) {
+          throw permissionError;
+        }
+        AccessControlService.require(params, 'PROJECT_CREATE');
+      }
+      return MaterialPlanningService.createSpecification(projectId, body, params);
     }
 
     if (path === '/projects') {
