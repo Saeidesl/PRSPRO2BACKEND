@@ -1178,7 +1178,13 @@ const EventService = {
     // fails, a retry is blocked as PROCESSING rather than falsely reported as success.
     let finalEvent = created;
     if (String(created.IdempotencyKey || '').trim()) {
-      finalEvent = EventRepository.update(created.ID, { IdempotencyStatus: 'COMPLETED' }) || created;
+      finalEvent = EventRepository.update(created.ID, { IdempotencyStatus: 'COMPLETED' });
+      if (!finalEvent || String(finalEvent.IdempotencyStatus || '').toUpperCase() !== 'COMPLETED') {
+        throw ErrorHandler.create(
+          Constants.ERROR.INTERNAL_ERROR,
+          'رویداد ثبت شده اما تأیید نهایی آن ذخیره نشد؛ از ارسال مجدد درخواست خودداری کنید و رویداد موجود را بررسی کنید.'
+        );
+      }
     }
 
     return Response.success(
