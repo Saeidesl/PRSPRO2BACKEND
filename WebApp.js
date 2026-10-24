@@ -74,6 +74,7 @@ function resetRequestCaches_() {
 function webAppDoGet(e) {
   var startedAt = Date.now();
   var timing = {};
+  var includeDiagnostics = false;
 
   PerformanceDiagnostics.reset();
   resetRequestCaches_();
@@ -95,13 +96,25 @@ function webAppDoGet(e) {
     var result = Router.get(request.path, request.params);
     timing.routerMs = Date.now() - t;
 
+    // Detailed GET diagnostics are opt-in and admin-only. Normal responses
+    // remain unchanged and do not expose sheet names or internal timings.
+    includeDiagnostics = shouldIncludeGetDiagnostics_(request.params);
     timing.totalMs = Date.now() - startedAt;
-    return buildHttpResponse_(result, timing, false);
+    return buildHttpResponse_(result, timing, includeDiagnostics);
 
   } catch (error) {
     timing.totalMs = Date.now() - startedAt;
     return buildErrorResponse_(error, timing, false);
   }
+}
+
+function shouldIncludeGetDiagnostics_(params) {
+  params = params || {};
+  var requested = String(params._diagnostics || params.diagnostics || '') === '1';
+  if (!requested) return false;
+
+  var user = AccessControlService.getCurrentUser(params);
+  return AccessControlService.isAdmin(user) === true;
 }
 
 function webAppDoPost(e) {
