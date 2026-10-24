@@ -7,19 +7,23 @@ on:
       - '**.js'
       - 'tests/**'
       - 'scripts/**'
+      - 'scripts/**'
       - 'appsscript.json'
       - 'AGENTS.md'
       - 'PMS-AGENTS.md'
       - '.github/workflows/pms-agent-suite.yml'
+      - '.github/workflows/sync-apps-script.yml'
   push:
     branches: [main]
     paths:
       - '**.js'
       - 'tests/**'
+      - 'scripts/**'
       - 'appsscript.json'
       - 'AGENTS.md'
       - 'PMS-AGENTS.md'
       - '.github/workflows/pms-agent-suite.yml'
+      - '.github/workflows/sync-apps-script.yml'
   workflow_dispatch:
 
 permissions:
