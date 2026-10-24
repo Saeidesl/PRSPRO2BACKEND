@@ -45,7 +45,7 @@ const PermissionService = {
   },
 
   /**
-   * دریافت تمام مجوزهای کاربر با خواندن گروهی اطلاعات
+   * دریافت مجوزهای کاربر با خواندن گروهی اطلاعات
    */
   getUserPermissions: function(userId, userRecord) {
     Validator.required(userId, 'UserID');
@@ -180,8 +180,10 @@ const PermissionService = {
     return false;
   },
 
-  requirePermission: function(userId, permissionCode) {
-    const allowed = this.hasPermission(userId, permissionCode);
+  requirePermission: function(userId, permissionCode, userRecord) {
+    // Reuse the already-authenticated user supplied by AccessControlService.
+    // hasPermission still verifies that the supplied record belongs to userId.
+    const allowed = this.hasPermission(userId, permissionCode, userRecord);
 
     if (!allowed) {
       throw ErrorHandler.create(
