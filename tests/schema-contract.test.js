@@ -47,7 +47,7 @@ test('event creation persists an idempotency key and serializes duplicate submis
   const schema = fs.readFileSync(path.join(__dirname, '..', 'DatabaseSetup.js'), 'utf8');
 
   assert.match(schema, /name: '13_Events',[\s\S]*?IdempotencyKey/);
-  assert.match(eventService, /create: function\(event, params\)\s*\{[\s\S]*?getScriptLock\(\)/);
+  assert.match(eventService, /create: function\(event, params\)\s*\{[\s\S]*?getUserLock\(\)/);
   assert.match(eventService, /String\(item\.IdempotencyKey \|\| ''\) === key/);
   assert.match(eventService, /return this\._createUnlocked_\(Object\.assign\(\{\}, event, \{ IdempotencyKey: key \}\), requestParams\)/);
   assert.match(eventService, /finally\s*\{\s*lock\.releaseLock\(\)/);
