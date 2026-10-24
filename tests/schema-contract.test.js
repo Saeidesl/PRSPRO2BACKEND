@@ -43,7 +43,7 @@ test('Apps Script sync automatically deploys on main and guards manual deploymen
   assert.ok(workflow.includes("if: ${{ github.event_name == 'push' || inputs.phase == 'push_and_deploy' }}"));
   assert.ok(workflow.includes('Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true'));
   assert.ok(workflow.includes('Automatic production sync and deployment enabled for main'));
-  assert.match(workflow, /paths:\n\s+- '\\*\\.js'\n\s+- 'appsscript\\.json'/);
+  assert.match(workflow, /paths:\n\s+- '\*\.js'\n\s+- 'appsscript\.json'/);
 });
 
 test('event creation persists an idempotency key and serializes duplicate submissions', () => {
