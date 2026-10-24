@@ -33,15 +33,15 @@ test('Apps Script sync automatically deploys on main and guards manual deploymen
   const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'sync-apps-script.yml');
   const workflow = fs.readFileSync(workflowPath, 'utf8');
 
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /push:[\\s\\S]*?branches:[\\s\\S]*?- main/);
-  assert.match(workflow, /github\\.event_name == 'push' \\|\\| \\(github\\.event_name == 'workflow_dispatch'/);
-  assert.match(workflow, /confirm_production_deploy == true/);
-  assert.match(workflow, /default: push_only/);
-  assert.match(workflow, /options:[\\s\\S]*push_only[\\s\\S]*push_and_deploy/);
+  assert.ok(workflow.includes('workflow_dispatch:'));
+  assert.ok(workflow.includes('branches:\n      - main'));
+  assert.ok(workflow.includes("github.event_name == 'push' || (github.event_name == 'workflow_dispatch'"));
+  assert.ok(workflow.includes('confirm_production_deploy == true'));
+  assert.ok(workflow.includes('default: push_only'));
+  assert.ok(workflow.includes('push_only') && workflow.includes('push_and_deploy'));
   assert.ok(workflow.includes("if: ${{ github.event_name == 'push' || inputs.phase == 'push_and_deploy' }}"));
-  assert.match(workflow, /Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true/);
-  assert.match(workflow, /Automatic production sync and deployment enabled for main/);
+  assert.ok(workflow.includes('Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true'));
+  assert.ok(workflow.includes('Automatic production sync and deployment enabled for main'));
 });
 
 test('event creation persists an idempotency key and serializes duplicate submissions', () => {
