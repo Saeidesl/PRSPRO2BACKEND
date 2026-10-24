@@ -1,0 +1,34 @@
+name: Apps Script live supply-chain E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PMS_GAS_WEB_APP_URL: \${{ secrets.PMS_GAS_TEST_WEB_APP_URL }}
+      PMS_TEST_USERNAME: \${{ secrets.PMS_E2E_TEST_USERNAME }}
+      PMS_TEST_PASSWORD: \${{ secrets.PMS_E2E_TEST_PASSWORD }}
+      PMS_E2E_ALLOW_WRITES: \${{ vars.PMS_E2E_ALLOW_WRITES }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify test-only deployment and explicit write approval
+        run: |
+          test -n "$PMS_GAS_WEB_APP_URL" || { echo "::error::Missing secret PMS_GAS_TEST_WEB_APP_URL"; exit 1; }
+          test -n "$PMS_TEST_USERNAME" || { echo "::error::Missing secret PMS_E2E_TEST_USERNAME"; exit 1; }
+          test -n "$PMS_TEST_PASSWORD" || { echo "::error::Missing secret PMS_E2E_TEST_PASSWORD"; exit 1; }
+          test "$PMS_E2E_ALLOW_WRITES" = "YES" || { echo "::error::Set repository variable PMS_E2E_ALLOW_WRITES=YES only after confirming the URL points to an isolated TEST deployment/database."; exit 1; }
+          case "$PMS_GAS_WEB_APP_URL" in
+            https://script.google.com/macros/s/*/exec*) ;;
+            *) echo "::error::PMS_GAS_TEST_WEB_APP_URL must be an Apps Script /exec URL."; exit 1 ;;
+          esac
+      - name: Run live Apps Script end-to-end test
+        run: node --test tests/apps-script-live-e2e.test.js
