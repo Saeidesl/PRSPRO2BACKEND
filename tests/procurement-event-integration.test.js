@@ -33,7 +33,7 @@ function loadIntegration() {
         return { success: true, data: { BasisQuantity: args[2] } };
       }
     },
-    ProcurementService: { createNeed: () => null, createReceipt: () => null },
+    ProcurementService: { createReceipt: () => null },
     Validator: { required: (value, label) => {
       if (value === undefined || value === null || String(value).trim() === '') throw new Error('required: ' + label);
     }},
