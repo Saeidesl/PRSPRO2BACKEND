@@ -10,6 +10,8 @@ on:
       - 'AGENTS.md'
       - '.github/workflows/backend-check.yml'
       - '.github/workflows/agent-monitor.yml'
+      - '.github/workflows/sync-apps-script.yml'
+      - '.github/workflows/sync-apps-script.yml'
   pull_request:
     paths:
       - '**.js'
@@ -17,6 +19,7 @@ on:
       - 'AGENTS.md'
       - '.github/workflows/backend-check.yml'
       - '.github/workflows/agent-monitor.yml'
+      - '.github/workflows/sync-apps-script.yml'
   workflow_dispatch:
 
 permissions:
