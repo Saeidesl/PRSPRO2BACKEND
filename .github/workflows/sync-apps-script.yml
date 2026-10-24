@@ -1,10 +1,13 @@
-name: Sync backend to Google Apps Script
+name: Sync and deploy backend to Google Apps Script
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       phase:
-        description: "Choose a safe rollout phase. Push source first, migrate the sheet headers, then run deploy."
+        description: "Manual mode: push source only, or explicitly deploy after migration checks."
         required: true
         type: choice
         options:
@@ -26,7 +29,7 @@ concurrency:
 
 jobs:
   validate-and-sync:
-    if: ${{ inputs.confirm_production_deploy == true && (inputs.phase == 'push_only' || vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true') }}
+    if: ${{ (github.event_name == 'push' && vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true') || (github.event_name == 'workflow_dispatch' && inputs.confirm_production_deploy == true && (inputs.phase == 'push_only' || vars.ALLOW_APPS_SCRIPT_DEPLOY == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -37,12 +40,17 @@ jobs:
         env:
           ALLOW_APPS_SCRIPT_DEPLOY: ${{ vars.ALLOW_APPS_SCRIPT_DEPLOY }}
           CONFIRM_PRODUCTION_DEPLOY: ${{ inputs.confirm_production_deploy }}
+          REQUESTED_PHASE: ${{ inputs.phase }}
         shell: bash
         run: |
           set -euo pipefail
-          test "$CONFIRM_PRODUCTION_DEPLOY" = "true" || (echo "Apps Script change blocked: explicitly confirm the requested action." && exit 1)
-          if [ "${{ inputs.phase }}" = "push_and_deploy" ]; then
-            test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Automatic production deploy blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
+          else
+            test "$CONFIRM_PRODUCTION_DEPLOY" = "true" || (echo "Apps Script change blocked: explicitly confirm the requested action." && exit 1)
+            if [ "$REQUESTED_PHASE" = "push_and_deploy" ]; then
+              test "$ALLOW_APPS_SCRIPT_DEPLOY" = "true" || (echo "Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true." && exit 1)
+            fi
           fi
 
       - name: Set up Node.js
@@ -142,11 +150,11 @@ jobs:
         run: clasp push --force
 
       - name: Update existing Web App deployment
-        if: ${{ inputs.phase == 'push_and_deploy' }}
+        if: ${{ github.event_name == 'push' || inputs.phase == 'push_and_deploy' }}
         env:
           DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID || 'AKfycbzHlLF_UuVZu6VIbl59EyIi4ZnLeJfssrBmo0jkn4BvrCPpqYyJ5qP71WdALtyalOKv_A' }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$DEPLOYMENT_ID" || (echo "Missing Web App deployment ID" && exit 1)
-          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "Manual deployment ${GITHUB_SHA:0:7}"
+          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "Automated/manual deployment ${GITHUB_SHA:0:7}"
