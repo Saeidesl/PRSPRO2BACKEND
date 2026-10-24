@@ -40,3 +40,17 @@ test('production Apps Script sync is manual-only and requires explicit deploymen
   assert.match(workflow, /confirm_production_deploy == true/);
   assert.match(workflow, /Deployment blocked: repository variable ALLOW_APPS_SCRIPT_DEPLOY must be true/);
 });
+
+
+test('event creation persists an idempotency key and serializes duplicate submissions', () => {
+  const eventService = fs.readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
+  const schema = fs.readFileSync(path.join(__dirname, '..', 'DatabaseSetup.js'), 'utf8');
+
+  assert.match(schema, /name: '13_Events',[\s\S]*?IdempotencyKey/);
+  assert.match(eventService, /create: function\(event, params\)\s*\{[\s\S]*?getScriptLock\(\)/);
+  assert.match(eventService, /String\(item\.IdempotencyKey \|\| ''\) === key/);
+  assert.match(eventService, /return this\._createUnlocked_\(Object\.assign\(\{\}, event, \{ IdempotencyKey: key \}\), requestParams\)/);
+  assert.match(eventService, /finally\s*\{\s*lock\.releaseLock\(\)/);
+  assert.match(eventService, /idempotentReplay: true/);
+});
+
