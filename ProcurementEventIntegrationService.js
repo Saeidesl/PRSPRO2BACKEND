@@ -46,14 +46,13 @@ const ProcurementEventIntegrationService = {
     }
     body = body || {};
     var action = String(body.Action || 'NONE').toUpperCase();
-    if (['NONE', 'CREATE_NEED', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(action) < 0) {
+    if (['NONE', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(action) < 0) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین معتبر نیست.');
     }
     var map = this._map_(body.FieldMap || body.FieldMapJSON);
-    var required = action === 'CREATE_NEED'
-      ? ['ItemName', 'Unit', 'RequestedQuantity']
-      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] :
-        (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []));
+    var required = action === 'RECORD_RECEIPT'
+      ? ['PurchaseOrderItemID', 'QuantityReceived']
+      : (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []);
     required.forEach(function(key) {
       if (!map[key] || typeof map[key] !== 'string') {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نگاشت فیلد الزامی است: ' + key);
@@ -106,10 +105,12 @@ const ProcurementEventIntegrationService = {
         ? dynamicData[code] : '';
     }
     var action = String(row.Action).toUpperCase();
-    var required = action === 'CREATE_NEED'
-      ? ['ItemName', 'Unit', 'RequestedQuantity']
-      : (action === 'RECORD_RECEIPT' ? ['PurchaseOrderItemID', 'QuantityReceived'] :
-        (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []));
+    if (['NONE', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(action) < 0) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم قدیمی عملیات تأمین معتبر نیست؛ نوع رویداد را بازتنظیم کنید.');
+    }
+    var required = action === 'RECORD_RECEIPT'
+      ? ['PurchaseOrderItemID', 'QuantityReceived']
+      : (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []);
     required.forEach(function(key) {
       var value = read(key);
       if (String(value === undefined || value === null ? '' : value).trim() === '') {
@@ -117,8 +118,7 @@ const ProcurementEventIntegrationService = {
           'برای اجرای عملیات تأمین، مقدار فیلد مربوط به ' + key + ' الزامی است.');
       }
     });
-    var quantityKey = action === 'CREATE_NEED' ? 'RequestedQuantity' :
-      (action === 'RECALCULATE_CONFIRMED_NEEDS' ? 'ConfirmedQuantity' : 'QuantityReceived');
+    var quantityKey = action === 'RECALCULATE_CONFIRMED_NEEDS' ? 'ConfirmedQuantity' : 'QuantityReceived';
     var quantity = Number(read(quantityKey));
     if (!isFinite(quantity) || quantity <= 0) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تأمین باید عددی بزرگ‌تر از صفر باشد.');
@@ -133,16 +133,6 @@ const ProcurementEventIntegrationService = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه برای محاسبه نیاز قطعی معتبر نیست.');
       }
     }
-    if (action === 'CREATE_NEED') {
-      var mappedProjectId = projectId || read('ProjectID');
-      if (mappedProjectId) {
-        var project = ProjectRepository.findById(mappedProjectId);
-        if (!project || String(project.TenantID) !== String(user.TenantID)) {
-          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه نگاشت‌شده برای نیاز ملزومات معتبر نیست.');
-        }
-      }
-    }
-
     // Validate receipt references and remaining quantity before the production
     // event is persisted. This prevents predictable integration failures from
     // leaving an event that looks successful without a matching receipt.
@@ -190,14 +180,8 @@ const ProcurementEventIntegrationService = {
       return code && dynamicData[code] !== undefined && dynamicData[code] !== null
         ? dynamicData[code] : '';
     }
-    if (String(row.Action).toUpperCase() === 'CREATE_NEED') {
-      return ProcurementService.createNeed({
-        ProjectID: event.ProjectID || read('ProjectID') || '',
-        SourceEventID: event.ID, ItemName: read('ItemName'),
-        ItemCode: read('ItemCode'), Unit: read('Unit'),
-        RequestedQuantity: read('RequestedQuantity'),
-        NeededBy: read('NeededBy'), Notes: read('Notes')
-      }, params);
+    if (['NONE', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(String(row.Action).toUpperCase()) < 0) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم قدیمی عملیات تأمین معتبر نیست؛ نوع رویداد را بازتنظیم کنید.');
     }
     if (String(row.Action).toUpperCase() === 'RECALCULATE_CONFIRMED_NEEDS') {
       if (!event.ProjectID) {
