@@ -49,11 +49,15 @@ test('event creation persists an idempotency key and serializes duplicate submis
   const eventService = fs.readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
   const schema = fs.readFileSync(path.join(__dirname, '..', 'DatabaseSetup.js'), 'utf8');
 
-  assert.match(schema, /name: '13_Events',[\s\S]*?IdempotencyKey/);
+  assert.match(schema, /name: '13_Events',[\s\S]*?IdempotencyKey[\s\S]*?IdempotencyStatus/);
   assert.match(eventService, /create: function\(event, params\)\s*\{[\s\S]*?getUserLock\(\)/);
   assert.match(eventService, /String\(item\.IdempotencyKey \|\| ''\) === key/);
   assert.match(eventService, /return this\._createUnlocked_\(Object\.assign\(\{\}, event, \{ IdempotencyKey: key \}\), requestParams\)/);
   assert.match(eventService, /finally\s*\{\s*lock\.releaseLock\(\)/);
   assert.match(eventService, /idempotentReplay: true/);
+  assert.match(eventService, /IdempotencyStatus: 'PROCESSING'/);
+  assert.match(eventService, /IdempotencyStatus \|\| ''\)\.toUpperCase\(\) === 'PROCESSING'/);
+  assert.match(eventService, /IdempotencyStatus: 'COMPLETED'/);
+  assert.match(eventService, /finalEvent\.IdempotencyStatus \|\| ''\)\.toUpperCase\(\) !== 'COMPLETED'/);
 });
 
