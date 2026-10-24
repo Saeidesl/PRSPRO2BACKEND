@@ -752,8 +752,57 @@ const EventService = {
     });
   },
 
-  // ثبت رویداد
+  // ثبت رویداد با جلوگیری از ایجاد تکراری هنگام تکرار درخواست شبکه
   create: function(event, params) {
+    Validator.object(event, 'event');
+    const requestParams = params || {};
+    const user = AccessControlService.getCurrentUser(requestParams);
+    const key = String(event.IdempotencyKey || '').trim();
+
+    // Clients predating idempotency keys retain the original behavior.
+    if (!key) return this._createUnlocked_(event, requestParams);
+    if (key.length > 120) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه یکتای درخواست بیش از حد طولانی است.');
+    }
+    if (!user || !user.TenantID || !user.ID) {
+      throw ErrorHandler.create(Constants.ERROR.UNAUTHORIZED, 'نشست کاربر معتبر نیست.');
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    try {
+      const prior = (EventRepository.getAll() || []).find(function(item) {
+        return String(item.TenantID) === String(user.TenantID) &&
+          String(item.CreatedBy) === String(user.ID) &&
+          String(item.IdempotencyKey || '') === key;
+      });
+      if (prior) {
+        let project = null;
+        if (prior.ProjectID) {
+          project = ProjectRepository.findById(prior.ProjectID);
+          if (!project || String(project.TenantID) !== String(user.TenantID) ||
+              !ProjectService._isProjectAvailableToUser_(project, user)) {
+            throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
+          }
+        }
+        return Response.success({
+          event: prior,
+          project: project,
+          workflowMoved: false,
+          currentStepID: project ? project.CurrentStepID : '',
+          projectStatus: project ? project.Status : '',
+          availableDepartmentIDs: project ? this._parseArray_(project.AvailableDepartmentIDs) : [],
+          procurementIntegration: { status: 'ALREADY_PROCESSED' },
+          idempotentReplay: true
+        }, { message: 'این درخواست قبلاً ثبت شده است؛ از ایجاد رویداد تکراری جلوگیری شد.' });
+      }
+      return this._createUnlocked_(Object.assign({}, event, { IdempotencyKey: key }), requestParams);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  _createUnlocked_: function(event, params) {
     Validator.object(event, 'event');
 
     const requestParams = params || {};
@@ -991,6 +1040,7 @@ const EventService = {
     const newEvent = {
       ID: 'EVT_' + Utilities.getUuid().replace(/-/g, ''),
       TenantID: user.TenantID,
+      IdempotencyKey: String(event.IdempotencyKey || '').trim(),
       ProjectID: project ? project.ID : '',
       EventTypeID: eventType.ID,
       EventTypeVersion: eventType.Version || 1,
