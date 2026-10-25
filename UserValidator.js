@@ -36,16 +36,21 @@ const UserValidator = {
     );
 
 
-    if (
-      user.Password !== undefined &&
-      user.Password !== null
-    ) {
+    Validator.required(
+      user.Password,
+      'رمز عبور'
+    );
 
-      Validator.string(
-        user.Password,
-        'رمز عبور'
+    Validator.string(
+      user.Password,
+      'رمز عبور'
+    );
+
+    if (user.Password.length < 8) {
+      throw ErrorHandler.create(
+        Constants.ERROR.VALIDATION_ERROR,
+        'رمز عبور باید حداقل ۸ کاراکتر باشد.'
       );
-
     }
 
 
@@ -132,12 +137,22 @@ const UserValidator = {
       data.Password !== undefined &&
       data.Password !== null
     ) {
+      Validator.required(
+        data.Password,
+        'رمز عبور'
+      );
 
       Validator.string(
         data.Password,
         'رمز عبور'
       );
 
+      if (data.Password.length < 8) {
+        throw ErrorHandler.create(
+          Constants.ERROR.VALIDATION_ERROR,
+          'رمز عبور باید حداقل ۸ کاراکتر باشد.'
+        );
+      }
     }
 
 
