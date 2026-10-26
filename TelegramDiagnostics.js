@@ -20,39 +20,53 @@ function diagnoseTelegramConnection() {
     console.log(JSON.stringify(report, null, 2));
     return report;
   }
-  // Check whether the deployed /exec endpoint can be reached without exposing its URL.
-  try {
-    const endpointResponse = UrlFetchApp.fetch(webAppUrl, {
-      method: 'get',
-      followRedirects: true,
+  // Inspect the endpoint without following redirects so Google sign-in redirects are visible.
+  function inspectEndpoint_(method, payload) {
+    const url = webAppUrl + (webAppUrl.indexOf('?') >= 0 ? '&' : '?') +
+      'telegramSecret=' + encodeURIComponent(String(props.getProperty('TELEGRAM_WEBHOOK_SECRET') || ''));
+    const options = {
+      method: method,
+      followRedirects: false,
       muteHttpExceptions: true
-    });
-    report.publicEndpointHttpStatus = endpointResponse.getResponseCode();
+    };
+    if (method === 'post') {
+      options.contentType = 'application/json';
+      options.payload = JSON.stringify(payload || { update_id: 0 });
+    }
+    const response = UrlFetchApp.fetch(url, options);
+    const headers = response.getAllHeaders ? response.getAllHeaders() : {};
+    const location = String(headers.Location || headers.location || '');
+    const body = String(response.getContentText() || '').slice(0, 500);
+    return {
+      status: response.getResponseCode(),
+      redirectType: /accounts\\.google|ServiceLogin|signin/i.test(location)
+        ? 'GOOGLE_SIGN_IN_REDIRECT'
+        : (location ? 'OTHER_REDIRECT' : 'NO_REDIRECT'),
+      contentType: String(headers['Content-Type'] || headers['content-type'] || ''),
+      bodyType: /"ok"\\s*:\\s*true/.test(body)
+        ? 'WEBHOOK_HANDLER_OK'
+        : /"ok"\\s*:\\s*false/.test(body)
+          ? 'WEBHOOK_HANDLER_REJECTED'
+          : /accounts\\.google|ServiceLogin|Sign in/i.test(body)
+            ? 'GOOGLE_AUTH_PAGE'
+            : 'NON_JSON_OR_OTHER_RESPONSE'
+    };
+  }
+  try {
+    const getCheck = inspectEndpoint_('get');
+    report.publicEndpointHttpStatus = getCheck.status;
+    report.getRedirectType = getCheck.redirectType;
+    report.getContentType = getCheck.contentType;
   } catch (error) {
     report.publicEndpointHttpStatus = 'FETCH_FAILED';
     report.endpointError = String(error && error.message || error);
   }
-  // Exercise the same anonymous POST path Telegram uses, with a harmless empty update.
-  // Only report the status and a coarse response classification; never log the URL or secrets.
   try {
-    const testUrl = webAppUrl + (webAppUrl.indexOf('?') >= 0 ? '&' : '?') +
-      'telegramSecret=' + encodeURIComponent(String(props.getProperty('TELEGRAM_WEBHOOK_SECRET') || ''));
-    const postResponse = UrlFetchApp.fetch(testUrl, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({ update_id: 0 }),
-      followRedirects: true,
-      muteHttpExceptions: true
-    });
-    report.selfPostHttpStatus = postResponse.getResponseCode();
-    const postBody = String(postResponse.getContentText() || '').slice(0, 500);
-    report.selfPostResponseType = /"ok"\\s*:\\s*true/.test(postBody)
-      ? 'WEBHOOK_HANDLER_OK'
-      : /"ok"\\s*:\\s*false/.test(postBody)
-        ? 'WEBHOOK_HANDLER_REJECTED'
-        : /accounts\\.google|ServiceLogin|Sign in/i.test(postBody)
-          ? 'GOOGLE_AUTH_PAGE'
-          : 'NON_JSON_OR_OTHER_RESPONSE';
+    const postCheck = inspectEndpoint_('post', { update_id: 0 });
+    report.selfPostHttpStatus = postCheck.status;
+    report.selfPostRedirectType = postCheck.redirectType;
+    report.selfPostContentType = postCheck.contentType;
+    report.selfPostResponseType = postCheck.bodyType;
   } catch (error) {
     report.selfPostHttpStatus = 'FETCH_FAILED';
     report.selfPostResponseType = 'FETCH_EXCEPTION';
