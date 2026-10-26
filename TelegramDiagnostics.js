@@ -32,6 +32,31 @@ function diagnoseTelegramConnection() {
     report.publicEndpointHttpStatus = 'FETCH_FAILED';
     report.endpointError = String(error && error.message || error);
   }
+  // Exercise the same anonymous POST path Telegram uses, with a harmless empty update.
+  // Only report the status and a coarse response classification; never log the URL or secrets.
+  try {
+    const testUrl = webAppUrl + (webAppUrl.indexOf('?') >= 0 ? '&' : '?') +
+      'telegramSecret=' + encodeURIComponent(String(props.getProperty('TELEGRAM_WEBHOOK_SECRET') || ''));
+    const postResponse = UrlFetchApp.fetch(testUrl, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ update_id: 0 }),
+      followRedirects: true,
+      muteHttpExceptions: true
+    });
+    report.selfPostHttpStatus = postResponse.getResponseCode();
+    const postBody = String(postResponse.getContentText() || '').slice(0, 500);
+    report.selfPostResponseType = /"ok"\\s*:\\s*true/.test(postBody)
+      ? 'WEBHOOK_HANDLER_OK'
+      : /"ok"\\s*:\\s*false/.test(postBody)
+        ? 'WEBHOOK_HANDLER_REJECTED'
+        : /accounts\\.google|ServiceLogin|Sign in/i.test(postBody)
+          ? 'GOOGLE_AUTH_PAGE'
+          : 'NON_JSON_OR_OTHER_RESPONSE';
+  } catch (error) {
+    report.selfPostHttpStatus = 'FETCH_FAILED';
+    report.selfPostResponseType = 'FETCH_EXCEPTION';
+  }
   try {
     const info = TelegramBotService.getWebhookInfo();
     if (!info || !info.ok) {
