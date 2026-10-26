@@ -1187,6 +1187,24 @@ const EventService = {
       }
     }
 
+    // Notifications are best-effort: Telegram outages must never undo a saved production event.
+    if (project && typeof TelegramBotService !== 'undefined' &&
+        typeof TelegramBotService.notifyEvent === 'function') {
+      try {
+        TelegramBotService.notifyEvent(
+          finalEvent,
+          updatedProject || project,
+          eventType,
+          department,
+          performedUser,
+          user.TenantID
+        );
+      } catch (telegramError) {
+        console.warn('Telegram notification failed: ' +
+          String(telegramError && telegramError.message || telegramError));
+      }
+    }
+
     return Response.success(
       {
         event: finalEvent,
