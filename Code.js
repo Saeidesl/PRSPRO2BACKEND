@@ -10,3 +10,13 @@ function doPost(e) {
   }
   return webAppDoPost(e);
 }
+
+/** Run this global function from the Apps Script editor to configure the Telegram webhook. */
+function runTelegramWebhookSetup() {
+  return TelegramBotService.setWebhook();
+}
+
+/** Run this global function from the Apps Script editor to inspect Telegram webhook status. */
+function runTelegramWebhookInfo() {
+  return TelegramBotService.getWebhookInfo();
+}
