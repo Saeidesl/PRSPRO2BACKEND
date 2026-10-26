@@ -46,13 +46,13 @@ const TelegramBotService = {
     const chatId = String(message.chat.id);
     const text = String(message.text || '').trim();
     const firstName = String(message.from && message.from.first_name || 'دوست');
-    if (/^\\/(start|help)(@\\w+)?$/i.test(text)) {
+    if (/^\/(start|help)(@\w+)?$/i.test(text)) {
       this.sendMessage(chatId,
-        'سلام ' + firstName + '، ربات اطلاع‌رسانی سامانه مدیریت تولید آماده است.\\n' +
-        'شناسه گفت‌وگوی شما: ' + chatId + '\\n\\n' +
-        'برای دریافت اعلان‌ها، مدیر سامانه باید این شناسه را در تنظیمات امن بک‌اند و زیر Tenant مربوط ثبت کند.\\n' +
+        'سلام ' + firstName + '، ربات اطلاع‌رسانی سامانه مدیریت تولید آماده است.\n' +
+        'شناسه گفت‌وگوی شما: ' + chatId + '\n\n' +
+        'برای دریافت اعلان‌ها، مدیر سامانه باید این شناسه را در تنظیمات امن بک‌اند و زیر Tenant مربوط ثبت کند.\n' +
         'فرمان‌ها: /chatid ، /help');
-    } else if (/^\\/chatid(@\\w+)?$/i.test(text)) {
+    } else if (/^\/chatid(@\w+)?$/i.test(text)) {
       this.sendMessage(chatId, 'شناسه گفت‌وگوی شما: ' + chatId);
     } else {
       this.sendMessage(chatId, 'فرمان شناخته نشد. برای راهنما /help را بفرستید.');
