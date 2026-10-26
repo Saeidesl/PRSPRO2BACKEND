@@ -136,6 +136,26 @@ const TelegramBotService = {
     return result && result.ok ? { ok: true } : { ok: false, reason: 'TELEGRAM_REJECTED' };
   },
 
+  registerTenantChat: function(tenantId, chatId) {
+    tenantId = String(tenantId || '').trim();
+    chatId = String(chatId || '').trim();
+    if (!tenantId || !chatId || !/^-?\\d+$/.test(chatId)) {
+      throw new Error('TenantID یا شناسه گفت‌وگوی تلگرام معتبر نیست.');
+    }
+    const props = this._properties_();
+    let mapping;
+    try { mapping = JSON.parse(props.getProperty('TELEGRAM_TENANT_CHAT_IDS') || '{}'); }
+    catch (error) { throw new Error('تنظیم TELEGRAM_TENANT_CHAT_IDS معتبر نیست؛ مقدار قبلی حفظ شد.'); }
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) {
+      throw new Error('تنظیم TELEGRAM_TENANT_CHAT_IDS باید یک شیء JSON باشد.');
+    }
+    const recipients = Array.isArray(mapping[tenantId]) ? mapping[tenantId].map(String) : [];
+    if (recipients.indexOf(chatId) < 0) recipients.push(chatId);
+    mapping[tenantId] = recipients;
+    props.setProperty('TELEGRAM_TENANT_CHAT_IDS', JSON.stringify(mapping));
+    return { ok: true, tenantId: tenantId, registered: true };
+  },
+
   notifyEvent: function(event, project, eventType, department, performedUser, tenantId) {
     if (!event || !tenantId || !project) return { sent: 0, status: 'NOT_APPLICABLE' };
     if (String(project.NotifyEnabled).toLowerCase() === 'false' ||
