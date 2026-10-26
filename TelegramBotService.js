@@ -139,7 +139,7 @@ const TelegramBotService = {
   registerTenantChat: function(tenantId, chatId) {
     tenantId = String(tenantId || '').trim();
     chatId = String(chatId || '').trim();
-    if (!tenantId || !chatId || !/^-?\\d+$/.test(chatId)) {
+    if (!tenantId || !chatId || !/^-?\d+$/.test(chatId)) {
       throw new Error('TenantID یا شناسه گفت‌وگوی تلگرام معتبر نیست.');
     }
     const props = this._properties_();
