@@ -11,12 +11,21 @@ function doPost(e) {
   return webAppDoPost(e);
 }
 
-/** Run this global function from the Apps Script editor to configure the Telegram webhook. */
+/**
+ * Configure reliable Telegram polling. This replaces inbound webhooks because
+ * Google Apps Script's anonymous POST endpoint can currently return HTTP 401
+ * before doPost executes.
+ */
 function runTelegramWebhookSetup() {
-  return TelegramBotService.setWebhook();
+  return TelegramBotService.setupPolling();
 }
 
-/** Run this global function from the Apps Script editor to inspect Telegram webhook status. */
+/** Poll Telegram updates. Also invoked automatically by a one-minute trigger. */
+function runTelegramPolling() {
+  return TelegramBotService.pollUpdates();
+}
+
+/** Inspect Telegram webhook status (polling mode normally reports no webhook). */
 function runTelegramWebhookInfo() {
   return TelegramBotService.getWebhookInfo();
 }
