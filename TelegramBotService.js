@@ -28,40 +28,84 @@ const TelegramBotService = {
   handleWebhook: function(e) {
     const suppliedSecret = String(e && e.parameter && e.parameter.telegramSecret || '');
     const expectedSecret = this._getWebhookSecret_();
-    if (!expectedSecret || suppliedSecret !== expectedSecret) {
-      return this._json_({ ok: false });
-    }
-
+    if (!expectedSecret || suppliedSecret !== expectedSecret) return this._json_({ ok: false });
     let update;
     try {
       update = JSON.parse(String(e && e.postData && e.postData.contents || '{}'));
     } catch (error) {
       return this._json_({ ok: false });
     }
+    this._processUpdate_(update);
+    return this._json_({ ok: true });
+  },
 
+  // Polling mode avoids reliance on Google's anonymous inbound POST endpoint.
+  _processUpdate_: function(update) {
     const message = update && (update.message || update.edited_message);
-    if (!message || !message.chat || !message.chat.id) {
-      return this._json_({ ok: true });
-    }
-
+    if (!message || !message.chat || !message.chat.id) return { ok: true, ignored: true };
     const chatId = String(message.chat.id);
     const text = String(message.text || '').trim();
     const firstName = String(message.from && message.from.first_name || 'دوست');
-
-    // No automatic subscription: chat IDs must be explicitly allow-listed by a PMS administrator.
-    if (/^\/(start|help)(@\w+)?$/i.test(text)) {
+    if (/^\\/(start|help)(@\\w+)?$/i.test(text)) {
       this.sendMessage(chatId,
-        'سلام ' + firstName + '، ربات اطلاع‌رسانی سامانه مدیریت تولید آماده است.\n' +
-        'شناسه گفت‌وگوی شما: ' + chatId + '\n\n' +
-        'برای دریافت اعلان‌ها، مدیر سامانه باید این شناسه را در تنظیمات امن بک‌اند و زیر Tenant مربوط ثبت کند.\n' +
+        'سلام ' + firstName + '، ربات اطلاع‌رسانی سامانه مدیریت تولید آماده است.\\n' +
+        'شناسه گفت‌وگوی شما: ' + chatId + '\\n\\n' +
+        'برای دریافت اعلان‌ها، مدیر سامانه باید این شناسه را در تنظیمات امن بک‌اند و زیر Tenant مربوط ثبت کند.\\n' +
         'فرمان‌ها: /chatid ، /help');
-    } else if (/^\/chatid(@\w+)?$/i.test(text)) {
+    } else if (/^\\/chatid(@\\w+)?$/i.test(text)) {
       this.sendMessage(chatId, 'شناسه گفت‌وگوی شما: ' + chatId);
     } else {
       this.sendMessage(chatId, 'فرمان شناخته نشد. برای راهنما /help را بفرستید.');
     }
+    return { ok: true };
+  },
 
-    return this._json_({ ok: true });
+  setupPolling: function() {
+    const token = this._getToken_();
+    if (!token) throw new Error('TELEGRAM_BOT_TOKEN تنظیم نشده است.');
+    // Telegram does not allow getUpdates while a webhook is configured.
+    const deleteResponse = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/deleteWebhook', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ drop_pending_updates: false }),
+      muteHttpExceptions: true
+    });
+    const deleted = JSON.parse(deleteResponse.getContentText() || '{}');
+    if (deleteResponse.getResponseCode() < 200 || deleteResponse.getResponseCode() >= 300 || !deleted.ok) {
+      throw new Error('حذف وب‌هوک قبلی تلگرام ناموفق بود؛ اتصال ربات را بررسی کنید.');
+    }
+    ScriptApp.getProjectTriggers().forEach(function(trigger) {
+      if (trigger.getHandlerFunction() === 'runTelegramPolling') ScriptApp.deleteTrigger(trigger);
+    });
+    ScriptApp.newTrigger('runTelegramPolling').timeBased().everyMinutes(1).create();
+    return { ok: true, mode: 'polling', intervalMinutes: 1, description: 'Telegram polling configured' };
+  },
+
+  pollUpdates: function() {
+    const token = this._getToken_();
+    if (!token) throw new Error('TELEGRAM_BOT_TOKEN تنظیم نشده است.');
+    const props = this._properties_();
+    const offset = Number(props.getProperty('TELEGRAM_UPDATE_OFFSET') || 0);
+    const url = 'https://api.telegram.org/bot' + token + '/getUpdates';
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ offset: offset, timeout: 0, allowed_updates: ['message'] }),
+      muteHttpExceptions: true
+    });
+    const result = JSON.parse(response.getContentText() || '{}');
+    if (response.getResponseCode() < 200 || response.getResponseCode() >= 300 || !result.ok) {
+      console.warn('Telegram getUpdates failed with HTTP ' + response.getResponseCode());
+      return { ok: false, reason: 'TELEGRAM_API_ERROR' };
+    }
+    let nextOffset = offset;
+    (result.result || []).forEach(function(update) {
+      // Advance only after handling this update so transient failures can be retried.
+      TelegramBotService._processUpdate_(update);
+      nextOffset = Math.max(nextOffset, Number(update.update_id || 0) + 1);
+      props.setProperty('TELEGRAM_UPDATE_OFFSET', String(nextOffset));
+    });
+    return { ok: true, processed: (result.result || []).length, nextOffset: nextOffset };
   },
 
   sendMessage: function(chatId, text) {
