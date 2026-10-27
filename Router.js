@@ -52,6 +52,14 @@ const Router = {
       });
     }
 
+    if (path === '/admin/sessions') {
+      const adminUser = AccessControlService.getCurrentUser(params || {});
+      if (!AccessControlService.isAdmin(adminUser)) {
+        throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED, 'فقط مدیر سامانه می‌تواند نشست‌ها را مشاهده کند.');
+      }
+      return SessionManager.listForAdmin(adminUser, AuthService.getToken_(params));
+    }
+
     if (path === '/project-statuses') {
       AccessControlService.require(params, 'PROJECT_STATUS_MANAGE');
       return ProjectStatusService.list(params);
@@ -666,6 +674,19 @@ const Router = {
 
   delete: function(path, params) {
     path = String(path || '').trim();
+
+    const adminSessionMatch = path.match(/^\/admin\/sessions\/([^/]+)$/);
+    if (adminSessionMatch) {
+      const adminUser = AccessControlService.getCurrentUser(params || {});
+      if (!AccessControlService.isAdmin(adminUser)) {
+        throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED, 'فقط مدیر سامانه می‌تواند نشست‌ها را خاتمه دهد.');
+      }
+      return SessionManager.revokeForAdmin(
+        adminSessionMatch[1],
+        adminUser,
+        AuthService.getToken_(params)
+      );
+    }
 
     if (path.indexOf('/event-fields/') === 0) {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
