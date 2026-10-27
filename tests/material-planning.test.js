@@ -161,15 +161,12 @@ test('voiding the source event marks confirmed needs for review without deleting
 });
 
 
-test('schema preparation runs before calculation lock acquisition', () => {
+test('material planning request paths do not expose or run automatic schema migration', () => {
   const { service } = loadService();
-  let schemaPrepared = false;
-  service._ensureSchema_ = () => { schemaPrepared = true; return true; };
-  service._recalculateProjectNeedsUnlocked_ = () => {
-    assert.equal(schemaPrepared, true);
-    return { success: true, data: {} };
-  };
-  service.recalculateProjectNeeds('P1', 'EV1', 10, '1', {});
+  assert.equal(service._ensureSchema_, undefined);
+  assert.equal(service._schemaReady, undefined);
+  service._recalculateProjectNeedsUnlocked_ = () => ({ success: true, data: {} });
+  assert.equal(service.recalculateProjectNeeds('P1', 'EV1', 10, '1', {}).success, true);
 });
 
 test('does not run duplicate material calculations when the script lock is unavailable', () => {
