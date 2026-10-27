@@ -168,11 +168,14 @@ function webAppDoPost(e) {
     } else if (request.method === 'DELETE') {
       var deleteParams = Object.assign({}, request.params);
 
-      if (
-        request.body &&
-        request.body.reason !== undefined
-      ) {
+      if (request.body && request.body.reason !== undefined) {
         deleteParams.reason = request.body.reason;
+      }
+      if (request.body && request.body.confirmationCode !== undefined) {
+        deleteParams.confirmationCode = request.body.confirmationCode;
+      }
+      if (request.body && request.body.ProjectCode !== undefined) {
+        deleteParams.ProjectCode = request.body.ProjectCode;
       }
 
       result = Router.delete(request.path, deleteParams);
