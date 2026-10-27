@@ -418,7 +418,7 @@ const ProcurementService = {
         var quantity = this._number_(entry.QuantityReceived, 'مقدار تحویل', false);
         var key = String(entry.PurchaseOrderItemID);
         var item = itemsById[key] || GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, key);
-        if (!item || String(item.TenantID) !== String(user.TenantID)) {
+        if (!item || String(item.TenantID) !== String(user.TenantID) || !this._active_(item.Status)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
         }
         var orderKey = String(item.PurchaseOrderID || '');
@@ -575,7 +575,7 @@ const ProcurementService = {
     Validator.required(body.PurchaseOrderItemID, 'قلم سفارش');
     var quantity = this._number_(body.QuantityReceived, 'مقدار تحویل', false);
     var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, body.PurchaseOrderItemID);
-    if (!item || String(item.TenantID) !== String(user.TenantID)) {
+    if (!item || String(item.TenantID) !== String(user.TenantID) || !this._active_(item.Status)) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
     }
     var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
