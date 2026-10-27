@@ -14,7 +14,8 @@ const AppConfig = {
   },
 
   AUTH: {
-    SESSION_DURATION_HOURS: 12
+    // 0 means sessions remain valid until the user logs out.
+    SESSION_DURATION_HOURS: 0
   },
 
   FILES: {
