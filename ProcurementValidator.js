@@ -12,8 +12,7 @@ const ProcurementValidator = {
     UNIT: 40,
     NOTES: 2000,
     IDEMPOTENCY_KEY: 240,
-    IDENTIFIER: 128,
-    RECEIPT_BATCH_SIZE: 100
+    IDENTIFIER: 128
   },
 
   _fail_: function(message) {
@@ -73,10 +72,6 @@ const ProcurementValidator = {
     if (!Array.isArray(body.Items) || body.Items.length === 0) {
       this._fail_('سفارش باید دست‌کم یک قلم داشته باشد.');
     }
-    if (body.Items.length > this.LIMITS.RECEIPT_BATCH_SIZE) {
-      this._fail_('تعداد اقلام هر سفارش نباید بیشتر از ' + this.LIMITS.RECEIPT_BATCH_SIZE + ' باشد.');
-    }
-
     body.Items.forEach(function(item, index) {
       var label = 'قلم ' + (index + 1);
       this._object_(item, label);
@@ -120,9 +115,6 @@ const ProcurementValidator = {
     this._object_(body, 'درخواست دریافت گروهی');
     if (!Array.isArray(body.Receipts) || body.Receipts.length === 0) {
       this._fail_('برای ثبت دریافت، حداقل یک قلم لازم است.');
-    }
-    if (body.Receipts.length > this.LIMITS.RECEIPT_BATCH_SIZE) {
-      this._fail_('تعداد ردیف‌های دریافت گروهی نباید بیشتر از ' + this.LIMITS.RECEIPT_BATCH_SIZE + ' باشد.');
     }
     body.Receipts.forEach(function(entry) {
       this.validateReceipt(entry);
