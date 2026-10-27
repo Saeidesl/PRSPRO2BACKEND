@@ -10,8 +10,10 @@ function loadProcurementService() {
   const sheets = Object.create(null);
   let uuid = 0;
   let projectLookupCount = 0;
+  let schemaPreparationCalls = 0;
   const context = {
     AccessControlService: { getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' }) },
+    MaterialPlanningService: { _ensureSchema_: () => { schemaPreparationCalls++; return true; } },
     ProjectRepository: {
       findById: (id) => {
         projectLookupCount++;
@@ -56,7 +58,7 @@ function loadProcurementService() {
   const validatorSource = fs.readFileSync(path.join(__dirname, '..', 'ProcurementValidator.js'), 'utf8');
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementService.js'), 'utf8');
   vm.runInNewContext(validatorSource + '\n' + source + '\nthis.__service = ProcurementService;', context);
-  return { service: context.__service, sheets, getProjectLookupCount: () => projectLookupCount };
+  return { service: context.__service, sheets, getProjectLookupCount: () => projectLookupCount, getSchemaPreparationCalls: () => schemaPreparationCalls };
 }
 
 test('legacy estimated needs and confirmed needs share an allocation key for existing procurement records', () => {
@@ -113,7 +115,8 @@ test('procurement workspace reuses order mapping, user context, and project visi
   assert.equal(result.success, true);
   assert.equal(result.data.needs.length, 1);
   assert.equal(listOrdersCalls, 1, 'workspace and dashboard should share the same mapped order response');
-  assert.equal(userCalls, 1, 'workspace should resolve and prepare the user/schema context once');
+  assert.equal(userCalls, 1, 'workspace should resolve the user context once');
+  assert.equal(getSchemaPreparationCalls(), 0, 'workspace must not perform schema migration during a request');
   assert.equal(getProjectLookupCount(), 1, 'project visibility should be checked once per project within the workspace request');
 });
 
@@ -133,6 +136,7 @@ test('createOrder rejects a project owned by another tenant before writing an or
     Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 5 }]
   }, {}), /پروژه معتبر نیست/);
   assert.equal((sheets['19_PurchaseOrders'] || []).length, 0);
+  assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 0);
 });
 
 test('createReceipt rejects a source event owned by another tenant before writing a receipt', () => {
