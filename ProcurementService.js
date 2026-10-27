@@ -5,10 +5,6 @@
 const ProcurementService = {
   _user_: function(params) {
     var user = AccessControlService.getCurrentUser(params || {});
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') {
-      MaterialPlanningService._ensureSchema_();
-    }
     return user;
   },
 
@@ -82,8 +78,6 @@ const ProcurementService = {
   createOrder: function(body, params) {
     body = body || {};
     ProcurementValidator.validateOrder(body);
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت سفارش دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
@@ -342,8 +336,6 @@ const ProcurementService = {
   createReceipt: function(body, params) {
     body = body || {};
     ProcurementValidator.validateReceipt(body);
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت دریافت دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
@@ -366,8 +358,6 @@ const ProcurementService = {
   createReceiptsBatch: function(body, params) {
     body = body || {};
     ProcurementValidator.validateReceiptBatch(body);
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
     var entries = body.Receipts;
     if (!Array.isArray(entries) || !entries.length) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای ثبت دریافت، حداقل یک قلم لازم است.');
