@@ -8,7 +8,7 @@ const test = require('node:test');
 
 function loadService(seed) {
   const context = {
-    Constants: { STATUS: { DELETED: 'DELETED' } },
+    Constants: { STATUS: { DELETED: 'DELETED', VOID: 'VOID' } },
     GoogleSheetsRepository: {
       getAll: (name) => (seed[name] || []).map((row) => ({ ...row }))
     },
@@ -85,4 +85,12 @@ test('ignores already deleted rows and does not use ProjectID as the sole order 
   const service = loadService(seed);
   const rows = service._collect({ ID: 'P1', TenantID: 'T1' });
   assert.equal(rows.orders.some((r) => r.ID === 'O3'), false);
+});
+
+test('treats VOID events as inactive so failed project deletion can be retried safely', () => {
+  const seed = baseSeed();
+  seed['13_Events'].push({ ID: 'E4', TenantID: 'T1', ProjectID: 'P1', Status: 'VOID' });
+  const service = loadService(seed);
+  const rows = service._collect({ ID: 'P1', TenantID: 'T1' });
+  assert.deepEqual(Array.from(rows.events, (r) => r.ID), ['E1']);
 });
