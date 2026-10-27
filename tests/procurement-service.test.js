@@ -152,3 +152,17 @@ test('createReceipt rejects a source event owned by another tenant before writin
   }, {}), /رویداد منبع معتبر نیست/);
   assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
 });
+
+
+test('createReceipt rejects a soft-deleted purchase order item', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO1', TenantID: 'T1', Status: 'ACTIVE' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_DELETED', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 5, ItemName: 'زیپ', Status: 'DELETED'
+  }];
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: 'ITEM_DELETED', QuantityReceived: 1
+  }, {}), /قلم سفارش معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+});
