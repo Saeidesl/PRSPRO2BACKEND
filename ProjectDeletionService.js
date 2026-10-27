@@ -176,9 +176,25 @@ const ProjectDeletionService = {
       var self = this;
       var failed = [];
       function softDelete(sheet, list) {
+        if (!list.length) return;
+        // Several legacy child sheets (event data, order items, allocations and receipts)
+        // have no Status column. Add it before using the repository's soft-delete contract;
+        // otherwise deleteById would appear to succeed while leaving the row active.
+        try {
+          GoogleSheetsRepository.ensureColumn(sheet, 'Status');
+        } catch (schemaError) {
+          list.forEach(function(row) {
+            failed.push({ sheet: sheet, id: String(row.ID), message: 'ستون وضعیت برای حذف نرم آماده نشد: ' + String(schemaError && schemaError.message || schemaError) });
+          });
+          return;
+        }
         list.forEach(function(row) {
-          try { GoogleSheetsRepository.deleteById(sheet, row.ID); }
-          catch (error) { failed.push({ sheet: sheet, id: String(row.ID), message: String(error && error.message || error) }); }
+          try {
+            var result = GoogleSheetsRepository.deleteById(sheet, row.ID);
+            if (!result) throw new Error('رکورد برای حذف پیدا نشد یا به‌روزرسانی نشد.');
+          } catch (error) {
+            failed.push({ sheet: sheet, id: String(row.ID), message: String(error && error.message || error) });
+          }
         });
       }
       softDelete(this.SHEETS.EVENT_DATA, rows.eventData);
