@@ -52,6 +52,15 @@ const Router = {
       });
     }
 
+    var projectDeletePreviewMatch = path.match(/^\/admin\/projects\/([^/]+)\/deletion-preview$/);
+    if (projectDeletePreviewMatch) {
+      var previewAdmin = AccessControlService.getCurrentUser(params || {});
+      if (!AccessControlService.isAdmin(previewAdmin)) {
+        throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED, 'فقط مدیر سامانه می‌تواند حذف پروژه را بررسی کند.');
+      }
+      return ProjectDeletionService.preview(decodeURIComponent(projectDeletePreviewMatch[1]), params);
+    }
+
     if (path === '/admin/sessions') {
       const adminUser = AccessControlService.getCurrentUser(params || {});
       if (!AccessControlService.isAdmin(adminUser)) {
@@ -674,6 +683,19 @@ const Router = {
 
   delete: function(path, params) {
     path = String(path || '').trim();
+
+    var projectDeleteMatch = path.match(/^\/admin\/projects\/([^/]+)$/);
+    if (projectDeleteMatch) {
+      var deleteAdmin = AccessControlService.getCurrentUser(params || {});
+      if (!AccessControlService.isAdmin(deleteAdmin)) {
+        throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED, 'فقط مدیر سامانه می‌تواند پروژه را حذف کند.');
+      }
+      return ProjectDeletionService.remove(
+        decodeURIComponent(projectDeleteMatch[1]),
+        params.confirmationCode || params.ProjectCode || '',
+        params
+      );
+    }
 
     const adminSessionMatch = path.match(/^\/admin\/sessions\/([^/]+)$/);
     if (adminSessionMatch) {
