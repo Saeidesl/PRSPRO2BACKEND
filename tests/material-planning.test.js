@@ -8,6 +8,7 @@ const test = require('node:test');
 
 function loadService(lockAvailable = true) {
   const sheets = Object.create(null);
+  let auditCalls = 0;
   const context = {
     AccessControlService: {
       getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' })
@@ -49,13 +50,13 @@ function loadService(lockAvailable = true) {
     }},
     ErrorHandler: { create: (_code, message) => new Error(message) },
     Response: { success: (data) => ({ success: true, data }) },
-    AuditService: { log: () => true },
+    AuditService: { log: () => { auditCalls++; return true; } },
     Utilities: { getUuid: (() => { let n = 0; return () => 'uuid-' + (++n).toString().padStart(8, '0'); })() },
     Date, Math, Number, String, Object, Array, JSON, isFinite
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'MaterialPlanningService.js'), 'utf8');
   vm.runInNewContext(source + '\nthis.__service = MaterialPlanningService;', context);
-  return { service: context.__service, sheets };
+  return { service: context.__service, sheets, getAuditCalls: () => auditCalls };
 }
 
 test('creates versioned per-unit material specifications without an early-order path', () => {
@@ -103,6 +104,7 @@ test('revises specifications without losing the previous revision', () => {
 
 test('calculation history is idempotent and records quantity variance', () => {
   const { service, sheets } = loadService();
+  sheets['24_ProjectMaterialSpecs'] = [{ ID: 'MS1', TenantID: 'T1', ProjectID: 'P1' }];
   const payload = {
     ProjectID: 'P1', MaterialSpecID: 'MS1', SourceEventID: 'EV1',
     CalculationKey: 'T1|P1|EV1|MS1|R1', BasisQuantity: 840,
@@ -201,4 +203,59 @@ test('revised material specifications supersede the old confirmed need without d
   assert.equal(sheets['25_MaterialNeedCalculations'].length, 2);
   assert.equal(sheets['25_MaterialNeedCalculations'].some((row) => row.MaterialSpecID === firstSpec.ID), true);
   assert.equal(sheets['25_MaterialNeedCalculations'].some((row) => row.MaterialSpecID === secondSpec.ID), true);
+});
+
+
+test('recordCalculation rejects foreign, missing, or cross-project references before insert and audit', () => {
+  const { service, sheets, getAuditCalls } = loadService();
+  sheets['24_ProjectMaterialSpecs'] = [
+    { ID: 'MS_OK', TenantID: 'T1', ProjectID: 'P1' },
+    { ID: 'MS_OTHER_TENANT', TenantID: 'T2', ProjectID: 'P1' },
+    { ID: 'MS_OTHER_PROJECT', TenantID: 'T1', ProjectID: 'P2' }
+  ];
+  sheets['18_MaterialNeeds'] = [
+    { ID: 'NEED_OTHER_TENANT', TenantID: 'T2', ProjectID: 'P1' },
+    { ID: 'NEED_OTHER_PROJECT', TenantID: 'T1', ProjectID: 'P2' }
+  ];
+  const base = {
+    ProjectID: 'P1', CalculationKey: 'security-test', BasisQuantity: 10,
+    ConsumptionPerUnit: 1, MaterialSpecID: 'MS_OK'
+  };
+  const invalidPayloads = [
+    { ...base, MaterialSpecID: 'MS_OTHER_TENANT' },
+    { ...base, MaterialSpecID: 'MS_OTHER_PROJECT' },
+    { ...base, MaterialSpecID: 'MS_MISSING' },
+    { ...base, MaterialNeedID: 'NEED_OTHER_TENANT' },
+    { ...base, MaterialNeedID: 'NEED_OTHER_PROJECT' },
+    { ...base, MaterialNeedID: 'NEED_MISSING' },
+    { ...base, SourceEventID: 'EV_FOREIGN' }
+  ];
+  // Explicitly simulate a foreign-tenant source event.
+  const originalFindEvent = EventRepository.findById;
+  EventRepository.findById = (id) => id === 'EV_FOREIGN'
+    ? { ID: id, TenantID: 'T2', ProjectID: 'P1' }
+    : originalFindEvent(id);
+  for (const payload of invalidPayloads) {
+    assert.throws(() => service.recordCalculation(payload, {}), /مطابقت ندارد/);
+  }
+  assert.equal((sheets['25_MaterialNeedCalculations'] || []).length, 0);
+  assert.equal(getAuditCalls(), 0);
+});
+
+test('recordCalculation validates references even when CalculationKey is an idempotent replay', () => {
+  const { service, sheets, getAuditCalls } = loadService();
+  sheets['24_ProjectMaterialSpecs'] = [
+    { ID: 'MS_OK', TenantID: 'T1', ProjectID: 'P1' },
+    { ID: 'MS_OTHER', TenantID: 'T2', ProjectID: 'P1' }
+  ];
+  sheets['25_MaterialNeedCalculations'] = [{
+    ID: 'CALC_OLD', TenantID: 'T1', ProjectID: 'P1',
+    CalculationKey: 'same-key', MaterialSpecID: 'MS_OK'
+  }];
+  assert.throws(() => service.recordCalculation({
+    ProjectID: 'P1', MaterialSpecID: 'MS_OTHER', CalculationKey: 'same-key',
+    BasisQuantity: 10, ConsumptionPerUnit: 1
+  }, {}), /مطابقت ندارد/);
+  assert.equal(sheets['25_MaterialNeedCalculations'].length, 1);
+  assert.equal(getAuditCalls(), 0);
 });
