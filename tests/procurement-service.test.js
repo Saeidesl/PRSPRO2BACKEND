@@ -125,3 +125,26 @@ test('tenant boundary helpers reject cross-tenant project and event references',
   assert.equal(service._validateProject_('P1', 'T1', user).ID, 'P1');
   assert.equal(service._validateEvent_('EV1', 'T1', user).ID, 'EV1');
 });
+
+test('createOrder rejects a project owned by another tenant before writing an order', () => {
+  const { service, sheets } = loadProcurementService();
+  assert.throws(() => service.createOrder({
+    ProjectID: 'P2',
+    Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 5 }]
+  }, {}), /پروژه معتبر نیست/);
+  assert.equal((sheets['19_PurchaseOrders'] || []).length, 0);
+});
+
+test('createReceipt rejects a source event owned by another tenant before writing a receipt', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{
+    ID: 'PO1', TenantID: 'T1', Status: 'ACTIVE', ProjectID: '', OrderedQuantity: 5
+  }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM1', TenantID: 'T1', PurchaseOrderID: 'PO1', OrderedQuantity: 5, ItemName: 'پارچه'
+  }];
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: 'ITEM1', QuantityReceived: 1, SourceEventID: 'EV2'
+  }, {}), /رویداد منبع معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+});
