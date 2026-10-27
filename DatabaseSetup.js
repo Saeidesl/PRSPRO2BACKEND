@@ -144,12 +144,12 @@ const APP_CONFIG = {
 
     PURCHASE_ORDER_ITEMS: {
       name: '20_PurchaseOrderItems',
-      headers: ['ID','TenantID','PurchaseOrderID','MaterialNeedID','ItemName','ItemCode','Unit','OrderedQuantity','UnitPrice','Notes','CreatedAt','UpdatedAt','SurplusQuantity','SurplusCost']
+      headers: ['ID','TenantID','PurchaseOrderID','MaterialNeedID','ItemName','ItemCode','Unit','OrderedQuantity','UnitPrice','Notes','CreatedAt','UpdatedAt','SurplusQuantity','SurplusCost','Status']
     },
 
     PURCHASE_ALLOCATIONS: {
       name: '21_PurchaseAllocations',
-      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','MaterialNeedID','AllocatedQuantity','CreatedAt']
+      headers: ['ID','TenantID','PurchaseOrderItemID','ProjectID','MaterialNeedID','AllocatedQuantity','CreatedAt','Status']
     },
 
     MATERIAL_RECEIPTS: {
