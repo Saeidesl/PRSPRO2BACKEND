@@ -17,8 +17,8 @@
 
 ## فاز ۱ — بررسی معماری و وضعیت فعلی
 - [x] 1.1. بررسی ریپوزیتوری‌های فرانت‌اند و بک‌اند و مستندات موجود.
-- [ ] (IN PROGRESS) 1.2. شناسایی فایل‌ها، APIها و سرویس‌های تأمین ملزومات.
-- [ ] 1.3. بررسی ساختار Google Sheets، ستون‌ها، شناسه‌ها و قوانین اعتبارسنجی.
+- [x] 1.2. شناسایی فایل‌ها، APIها و سرویس‌های تأمین ملزومات.
+- [ ] (IN PROGRESS) 1.3. بررسی ساختار Google Sheets، ستون‌ها، شناسه‌ها و قوانین اعتبارسنجی.
 - [ ] 1.4. بررسی ارتباط تأمین با پروژه‌ها، رویدادها، واحدها و گردش تولید.
 - [ ] 1.5. شناسایی محاسبات فعلی نیاز، کسری، مقدار سفارش و تحویل.
 - [ ] 1.6. بررسی مجوزهای دسترسی، ثبت سوابق و گزارش‌های موجود.
@@ -119,6 +119,7 @@
 - این فایل در ریپوزیتوری بک‌اند به‌عنوان منبع واحد پیگیری کار نگهداری می‌شود؛ تسک‌های مرتبط با رابط کاربری در ریپوزیتوری فرانت‌اند نیز اعمال خواهند شد.
 - تسک 1.1 در تاریخ 2026-10-27 بررسی شد و کاربر نتیجه را تأیید کرد؛ ساختار هر دو ریپوزیتوری، دستورالعمل‌های AGENTS/PMS-AGENTS و مستندات ممیزی تأمین بررسی شدند. هیچ کدی در این تسک تغییر نکرد و تست خودکار یا آزمون محیط زنده اجرا نشد.
 - یافته‌های اولیه تسک 1.1: اجزای اصلی شامل MaterialPlanningService.js، ProcurementService.js، ProcurementRepository.js، ProcurementEventIntegrationService.js و رابط pages/procurement.html / js/modules/procurement.js هستند. ممیزی منبع نشان می‌دهد مسیرهای تأمین، نیازهای تخمینی/قطعی، سفارش‌ها، تخصیص‌ها و دریافت جزئی وجود دارند؛ عملکرد نسخه مستقر هنوز اثبات نشده است.
-- تغییرات TODO برای ثبت تأیید و آغاز تسک 1.2 در شاخه مستنداتی جداگانه نگهداری می‌شود؛ ادغام در main پس از بررسی PR انجام شود.
+- تسک 1.2 در تاریخ 2026-10-27 با تأیید کاربر تکمیل شد؛ فقط بررسی ایستا انجام شد و کدی تغییر نکرد یا تستی اجرا نشد. مسیرهای API تأمین در Router.js شناسایی شدند: workspace, reports, dashboard, needs, orders, order creation, receipt(s), project material specifications/calculations, event-type procurement configuration و procurement retry. سرویس‌های اصلی: ProcurementService.js، ProcurementRepository.js، MaterialPlanningService.js، ProcurementEventIntegrationService.js، EventService.js و ReportService.js؛ فرانت‌اند اصلی: js/modules/procurement.js و js/modules/material-planning.js به‌همراه اتصالات event-types.js، events.js و reports.js. کنترل‌های دسترسی در مسیرها شامل PROCUREMENT_VIEW/MANAGE، REPORT_VIEW، PROJECT_EDIT/CREATE، EVENT_TYPE_MANAGE و EVENT_EDIT هستند. آزمون‌های موجود مرتبط در tests/procurement-service.test.js، tests/material-planning.test.js و tests/procurement-event-integration.test.js دیده شدند؛ اجرای آن‌ها در این تسک انجام نشد.
+- تغییرات TODO برای ثبت تأییدها و جابه‌جایی تسک فعال در شاخه مستنداتی جداگانه نگهداری می‌شوند؛ ادغام در main پس از بررسی PR انجام شود.
 - هدف اولیه عملکرد برای عملیات اصلی کمتر از ۳ ثانیه است؛ این هدف باید با آزمون و شرایط اندازه‌گیری مشخص اعتبارسنجی شود.
 - توسعه انبارداری کامل خارج از محدوده فعلی است؛ فقط توسعه‌پذیری معماری برای آینده لحاظ می‌شود.
