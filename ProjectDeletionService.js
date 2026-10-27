@@ -18,7 +18,10 @@ const ProjectDeletionService = {
   },
 
   _same: function(a, b) { return String(a == null ? '' : a) === String(b == null ? '' : b); },
-  _active: function(row) { return String(row && row.Status || '').toUpperCase() !== String(Constants.STATUS.DELETED).toUpperCase(); },
+  _active: function(row) {
+    var status = String(row && row.Status || '').toUpperCase();
+    return status !== String(Constants.STATUS.DELETED).toUpperCase() && status !== String(Constants.STATUS.VOID).toUpperCase();
+  },
   _rows: function(sheet) {
     // Never turn a schema/read failure into an empty dependency list.
     return GoogleSheetsRepository.getAll(sheet) || [];
@@ -175,7 +178,7 @@ const ProjectDeletionService = {
       var rows = this._collect(project);
       var self = this;
       var failed = [];
-      function softDelete(sheet, list) {
+      function softDelete(sheet, list, statusMarker) {
         if (!list.length) return;
         // Several legacy child sheets (event data, order items, allocations and receipts)
         // have no Status column. Add it before using the repository's soft-delete contract;
@@ -190,7 +193,11 @@ const ProjectDeletionService = {
         }
         list.forEach(function(row) {
           try {
-            var result = GoogleSheetsRepository.deleteById(sheet, row.ID);
+            // 13_Events has a sheet-level validation rule that permits ACTIVE/VOID only.
+            // Use VOID for event rows instead of writing the invalid DELETED value.
+            var result = statusMarker
+              ? GoogleSheetsRepository.updateById(sheet, row.ID, { Status: statusMarker })
+              : GoogleSheetsRepository.deleteById(sheet, row.ID);
             if (!result) throw new Error('رکورد برای حذف پیدا نشد یا به‌روزرسانی نشد.');
           } catch (error) {
             failed.push({ sheet: sheet, id: String(row.ID), message: String(error && error.message || error) });
@@ -213,7 +220,7 @@ const ProjectDeletionService = {
         try { StorageRepository.delete(key); }
         catch (error) { failed.push({ sheet: self.SHEETS.ATTACHMENTS, id: String(attachment.ID), message: 'حذف فایل Drive ناموفق بود: ' + String(error && error.message || error) }); }
       });
-      softDelete(this.SHEETS.EVENTS, rows.events);
+      softDelete(this.SHEETS.EVENTS, rows.events, Constants.STATUS.VOID);
       if (!failed.length) {
         try { ProjectRepository.delete(project.ID); }
         catch (error) { failed.push({ sheet: '08_Projects', id: String(project.ID), message: String(error && error.message || error) }); }
