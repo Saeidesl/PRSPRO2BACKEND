@@ -92,7 +92,7 @@ test('caps cumulative allocations at the need quantity and records the remainder
   assert.equal(allocations.reduce((sum, row) => sum + row.AllocatedQuantity, 0), 100);
 });
 test('procurement workspace reuses order mapping, user context, and project visibility checks', () => {
-  const { service, sheets, getProjectLookupCount } = loadProcurementService();
+  const { service, sheets, getProjectLookupCount, getSchemaPreparationCalls } = loadProcurementService();
   sheets['18_MaterialNeeds'] = [{
     ID: 'N_WORKSPACE_1', TenantID: 'T1', ProjectID: 'P1',
     RequestedQuantity: 10, Status: 'ACTIVE', NeedType: 'CONFIRMED', MaterialSpecKey: 'SPEC_WORKSPACE'
