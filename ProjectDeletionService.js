@@ -222,8 +222,18 @@ const ProjectDeletionService = {
       });
       softDelete(this.SHEETS.EVENTS, rows.events, Constants.STATUS.VOID);
       if (!failed.length) {
-        try { ProjectRepository.delete(project.ID); }
-        catch (error) { failed.push({ sheet: '08_Projects', id: String(project.ID), message: String(error && error.message || error) }); }
+        try {
+          // Project status validation only permits ACTIVE, ON_HOLD, COMPLETED, CANCELLED.
+          // Once every dependency has been handled, physically remove the project row
+          // rather than calling deleteById(), which attempts to write the invalid DELETED marker.
+          var projectSheet = GoogleSheetsRepository.getSheet(ProjectRepository.SHEET_NAME);
+          var projectRowNumber = GoogleSheetsRepository.findRowByValue(ProjectRepository.SHEET_NAME, 'ID', project.ID);
+          if (projectRowNumber < 2) throw new Error('رکورد پروژه برای حذف پیدا نشد.');
+          projectSheet.deleteRow(projectRowNumber);
+          GoogleSheetsRepository._invalidateSheetRecordCache(ProjectRepository.SHEET_NAME);
+        } catch (error) {
+          failed.push({ sheet: '08_Projects', id: String(project.ID), message: String(error && error.message || error) });
+        }
       }
       AuditService.log({
         TenantID: context.user.TenantID, UserID: context.user.ID, Action: 'ADMIN_PROJECT_CASCADE_DELETE',
