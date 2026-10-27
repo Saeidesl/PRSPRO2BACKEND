@@ -51,8 +51,9 @@ function loadProcurementService() {
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => true }) },
     Date, Math, Number, String, Object, Array, JSON, isFinite
   };
+  const validatorSource = fs.readFileSync(path.join(__dirname, '..', 'ProcurementValidator.js'), 'utf8');
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementService.js'), 'utf8');
-  vm.runInNewContext(source + '\nthis.__service = ProcurementService;', context);
+  vm.runInNewContext(validatorSource + '\n' + source + '\nthis.__service = ProcurementService;', context);
   return { service: context.__service, sheets, getProjectLookupCount: () => projectLookupCount };
 }
 
