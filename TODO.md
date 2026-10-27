@@ -213,6 +213,7 @@
 - *Log:* قراردادهای مشاهده‌شده در `docs/procurement-data-contracts.md` ثبت شد: ساختار شناسه‌ها و مرز tenant/project، کد MAT تولیدشده، واحدهای متنی بدون enum اجباری، وضعیت‌های مشاهده‌شده با تفکیک نوع رکورد، تاریخ ISO/تبدیل شمسی در UI، قواعد مقدار مثبت/قیمت و پذیرش ورودی عددی رشته‌ای. قواعد سازگاری legacy و ممنوعیت مهاجرت مخرب نیز مستند شد. این سند بر پایه سورس است؛ فهرست وضعیت‌ها جامع فرض نشده و شیت واقعی هنوز بررسی نشده است.
 - [x] 3.3 تکمیل validatorهای API برای فیلدهای سفارش، ردیف سفارش، تخصیص و دریافت.
 - [ ] 3.4 تضمین مرزبندی tenant/project و مجوز در تمام مسیرهای خواندن و نوشتن.
+- پیشرفت: در `tests/procurement-service.test.js` آزمون رد ارجاع پروژه و رویداد متعلق به tenant دیگر اضافه شد. این آزمون هنوز در CI اجرا و تأیید نشده و پوشش کامل همه مسیرها نیز باقی است؛ بنابراین زیرتسک 3.4 تیک نخورده است.
 - [ ] 3.5 طراحی migration افزایشی و امن برای هر تغییر لازم؛ حفظ داده و مسیر بازگشت.
 - *Log:* فایل جدید ProcurementValidator.js با توابع validateOrder، validateReceipt، validateReceiptBatch و توابع کمکی کنترل ساختار، متن، عدد و تاریخ ایجاد شد. در ProcurementService.js این اعتبارسنجی‌ها در ابتدای createOrder، createReceipt، createReceiptsBatch و پیش از منطق نوشتن متصل شدند. آزمون‌های tests/procurement-validator.test.js اضافه و loader در tests/procurement-service.test.js اصلاح شد. تغییرات در PR #60 ثبت شده‌اند: https://github.com/Saeidesl/PRSPRO2BACKEND/pull/60. هنوز نتیجه CI برای این شاخه، تطبیق با Google Sheets واقعی، ممیزی کامل tenant/project و migration امن تأیید نشده؛ بنابراین فقط زیرتسک 3.3 تکمیل‌شده علامت خورده و تسک 3 فعال می‌ماند.
 
