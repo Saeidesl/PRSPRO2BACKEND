@@ -56,7 +56,7 @@ function loadService(lockAvailable = true) {
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'MaterialPlanningService.js'), 'utf8');
   vm.runInNewContext(source + '\nthis.__service = MaterialPlanningService;', context);
-  return { service: context.__service, sheets, getAuditCalls: () => auditCalls };
+  return { service: context.__service, sheets, eventRepository: context.EventRepository, getAuditCalls: () => auditCalls };
 }
 
 test('creates versioned per-unit material specifications without an early-order path', () => {
@@ -207,7 +207,7 @@ test('revised material specifications supersede the old confirmed need without d
 
 
 test('recordCalculation rejects foreign, missing, or cross-project references before insert and audit', () => {
-  const { service, sheets, getAuditCalls } = loadService();
+  const { service, sheets, eventRepository, getAuditCalls } = loadService();
   sheets['24_ProjectMaterialSpecs'] = [
     { ID: 'MS_OK', TenantID: 'T1', ProjectID: 'P1' },
     { ID: 'MS_OTHER_TENANT', TenantID: 'T2', ProjectID: 'P1' },
@@ -231,8 +231,8 @@ test('recordCalculation rejects foreign, missing, or cross-project references be
     { ...base, SourceEventID: 'EV_FOREIGN' }
   ];
   // Explicitly simulate a foreign-tenant source event.
-  const originalFindEvent = EventRepository.findById;
-  EventRepository.findById = (id) => id === 'EV_FOREIGN'
+  const originalFindEvent = eventRepository.findById;
+  eventRepository.findById = (id) => id === 'EV_FOREIGN'
     ? { ID: id, TenantID: 'T2', ProjectID: 'P1' }
     : originalFindEvent(id);
   for (const payload of invalidPayloads) {
