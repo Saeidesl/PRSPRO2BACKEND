@@ -51,26 +51,71 @@ const ProjectDeletionService = {
     });
     var needIds = Object.create(null);
     needs.forEach(function(r) { needIds[String(r.ID)] = true; });
-    var orders = this._rows(this.SHEETS.ORDERS).filter(function(r) {
-      return self._active(r) && self._same(r.TenantID, project.TenantID) && self._same(r.ProjectID, project.ID);
+    // Procurement orders are not project-owned in the database schema.
+    // Link project rows through material needs and allocations; preserve general/shared
+    // orders and line items if another project still uses them.
+    var allOrders = this._rows(this.SHEETS.ORDERS).filter(function(r) {
+      return self._active(r) && self._same(r.TenantID, project.TenantID);
     });
-    var orderIds = Object.create(null);
-    orders.forEach(function(r) { orderIds[String(r.ID)] = true; });
-    var items = this._rows(this.SHEETS.ITEMS).filter(function(r) {
-      return self._active(r) && self._same(r.TenantID, project.TenantID) &&
-        (orderIds[String(r.PurchaseOrderID || r.OrderID || '')] || self._same(r.ProjectID, project.ID));
+    var allItems = this._rows(this.SHEETS.ITEMS).filter(function(r) {
+      return self._active(r) && self._same(r.TenantID, project.TenantID);
     });
+    var allAllocations = this._rows(this.SHEETS.ALLOCATIONS).filter(function(r) {
+      return self._active(r) && self._same(r.TenantID, project.TenantID);
+    });
+    var projectAllocations = allAllocations.filter(function(r) {
+      return self._same(r.ProjectID, project.ID) ||
+        needIds[String(r.MaterialNeedID || '')];
+    });
+    var projectAllocationIds = Object.create(null);
+    projectAllocations.forEach(function(r) { projectAllocationIds[String(r.ID)] = true; });
+    var projectItemIds = Object.create(null);
+    projectAllocations.forEach(function(r) {
+      if (r.PurchaseOrderItemID) projectItemIds[String(r.PurchaseOrderItemID)] = true;
+    });
+    var items = allItems.filter(function(r) {
+      return needIds[String(r.MaterialNeedID || '')] || projectItemIds[String(r.ID)];
+    });
+    items.forEach(function(r) { projectItemIds[String(r.ID)] = true; });
+    var allocations = projectAllocations;
+    var otherAllocationsByItem = Object.create(null);
+    allAllocations.forEach(function(r) {
+      if (projectAllocationIds[String(r.ID)]) return;
+      if (r.PurchaseOrderItemID) otherAllocationsByItem[String(r.PurchaseOrderItemID)] = true;
+    });
+    // Do not remove order lines allocated to another project.
+    items = items.filter(function(r) { return !otherAllocationsByItem[String(r.ID)]; });
     var itemIds = Object.create(null);
     items.forEach(function(r) { itemIds[String(r.ID)] = true; });
-    var allocations = this._rows(this.SHEETS.ALLOCATIONS).filter(function(r) {
-      return self._active(r) && self._same(r.TenantID, project.TenantID) &&
-        (needIds[String(r.MaterialNeedID || '')] || itemIds[String(r.PurchaseOrderItemID || '')] ||
-         orderIds[String(r.PurchaseOrderID || r.OrderID || '')] || self._same(r.ProjectID, project.ID));
+    allocations = allocations.filter(function(r) {
+      return !r.PurchaseOrderItemID || itemIds[String(r.PurchaseOrderItemID)] ||
+        self._same(r.ProjectID, project.ID) || needIds[String(r.MaterialNeedID || '')];
     });
+    var orderIds = Object.create(null);
+    items.forEach(function(r) {
+      var orderId = r.PurchaseOrderID || r.OrderID;
+      if (orderId) orderIds[String(orderId)] = true;
+    });
+    // A purchase order can contain general or other-project items. Only cascade-delete
+    // an order when every active item on it is being removed and no other allocation remains.
+    var orders = allOrders.filter(function(order) {
+      var id = String(order.ID);
+      if (!orderIds[id]) return false;
+      var activeItems = allItems.filter(function(item) {
+        return self._same(item.PurchaseOrderID || item.OrderID, order.ID);
+      });
+      if (!activeItems.length) return false;
+      return activeItems.every(function(item) {
+        return !!itemIds[String(item.ID)] && !otherAllocationsByItem[String(item.ID)];
+      });
+    });
+    var receiptItems = Object.create(null);
+    items.forEach(function(r) { receiptItems[String(r.ID)] = true; });
     var receipts = this._rows(this.SHEETS.RECEIPTS).filter(function(r) {
       return self._active(r) && self._same(r.TenantID, project.TenantID) &&
-        (itemIds[String(r.PurchaseOrderItemID || '')] || orderIds[String(r.PurchaseOrderID || r.OrderID || '')] ||
-         self._same(r.ProjectID, project.ID));
+        ((r.PurchaseOrderItemID && receiptItems[String(r.PurchaseOrderItemID)]) ||
+         self._same(r.ProjectID, project.ID) ||
+         orderIds[String(r.PurchaseOrderID || r.OrderID || '')]);
     });
     var specs = this._rows(this.SHEETS.SPECS).filter(function(r) {
       return self._active(r) && self._same(r.TenantID, project.TenantID) && self._same(r.ProjectID, project.ID);
