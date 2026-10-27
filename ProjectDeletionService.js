@@ -20,8 +20,8 @@ const ProjectDeletionService = {
   _same: function(a, b) { return String(a == null ? '' : a) === String(b == null ? '' : b); },
   _active: function(row) { return String(row && row.Status || '').toUpperCase() !== String(Constants.STATUS.DELETED).toUpperCase(); },
   _rows: function(sheet) {
-    try { return GoogleSheetsRepository.getAll(sheet) || []; }
-    catch (e) { return []; }
+    // Never turn a schema/read failure into an empty dependency list.
+    return GoogleSheetsRepository.getAll(sheet) || [];
   },
   _projectContext: function(projectId, params) {
     Validator.required(projectId, 'شناسه پروژه');
@@ -91,6 +91,10 @@ const ProjectDeletionService = {
   },
 
   preview: function(projectId, params) {
+    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
+        typeof MaterialPlanningService._ensureSchema_ === 'function') {
+      MaterialPlanningService._ensureSchema_();
+    }
     var context = this._projectContext(projectId, params);
     var rows = this._collect(context.project);
     return Response.success({
@@ -106,6 +110,10 @@ const ProjectDeletionService = {
   },
 
   remove: function(projectId, confirmationCode, params) {
+    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
+        typeof MaterialPlanningService._ensureSchema_ === 'function') {
+      MaterialPlanningService._ensureSchema_();
+    }
     var context = this._projectContext(projectId, params);
     var project = context.project;
     if (!confirmationCode || String(confirmationCode).trim() !== String(project.ProjectCode || '').trim()) {
