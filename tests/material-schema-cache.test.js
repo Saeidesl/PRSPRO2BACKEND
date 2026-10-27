@@ -17,7 +17,7 @@ function loadService() {
     path.join(__dirname, '..', 'MaterialPlanningService.js'),
     'utf8'
   );
-  vm.runInNewContext(source + '\\nthis.__service = MaterialPlanningService;', context);
+  vm.runInNewContext(source + '\nthis.__service = MaterialPlanningService;', context);
   return context.__service;
 }
 
@@ -29,7 +29,7 @@ test('material planning service does not expose automatic schema migration on re
 
 test('schema setup remains an explicit database setup responsibility', () => {
   const setupSource = fs.readFileSync(path.join(__dirname, '..', 'DatabaseSetup.js'), 'utf8');
-  assert.match(setupSource, /function setupDatabase\\s*\\(/);
-  assert.match(setupSource, /createAllSheets_\\s*\\(/);
-  assert.match(setupSource, /ensureHeaders_\\s*\\(/);
+  assert.match(setupSource, /function setupDatabase\s*\(/);
+  assert.match(setupSource, /createAllSheets_\s*\(/);
+  assert.match(setupSource, /ensureHeaders_\s*\(/);
 });
