@@ -26,12 +26,19 @@ const ProcurementRepository = {
     return this.getTenantRows(this.SHEETS.ORDERS, tenantId);
   },
 
+  // Legacy rows without Status remain active. Explicitly deleted/voided rows
+  // stay in Sheets for history but are excluded from operational calculations.
+  _isOperationalRow_: function(row) {
+    var status = String(row && row.Status || 'ACTIVE').trim().toUpperCase();
+    return status !== 'DELETED' && status !== 'VOID' && status !== 'CANCELLED';
+  },
+
   getItems: function(tenantId) {
-    return this.getTenantRows(this.SHEETS.ITEMS, tenantId);
+    return this.getTenantRows(this.SHEETS.ITEMS, tenantId).filter(this._isOperationalRow_);
   },
 
   getAllocations: function(tenantId) {
-    return this.getTenantRows(this.SHEETS.ALLOCATIONS, tenantId);
+    return this.getTenantRows(this.SHEETS.ALLOCATIONS, tenantId).filter(this._isOperationalRow_);
   },
 
   getReceipts: function(tenantId) {
