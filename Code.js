@@ -30,11 +30,10 @@ function runTelegramWebhookInfo() {
   return TelegramBotService.getWebhookInfo();
 }
 
-
 /**
- * One-time setup: register the confirmed Telegram chat for the main PMS tenant.
- * Run once from the Apps Script editor after deployment; credentials stay in Script Properties.
+ * Register the confirmed Telegram chat for the actual main tenant.
+ * Run after deployment from the Apps Script editor; credentials stay in Script Properties.
  */
 function registerTelegramMainTenantChat() {
-  return TelegramBotService.registerTenantChat('TEN_MAIN', '8508458192');
+  return TelegramBotService.registerTenantChat('TEN_4262d97d', '8508458192');
 }
