@@ -15,7 +15,7 @@ function loadProcurementService() {
     ProjectRepository: {
       findById: (id) => {
         projectLookupCount++;
-        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : null;
+        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : (String(id) === 'P2' ? { ID: 'P2', TenantID: 'T2' } : null);
       }
     },
     ProjectService: { _isProjectAvailableToUser_: () => true },
@@ -113,4 +113,13 @@ test('procurement workspace reuses order mapping, user context, and project visi
   assert.equal(listOrdersCalls, 1, 'workspace and dashboard should share the same mapped order response');
   assert.equal(userCalls, 1, 'workspace should resolve and prepare the user/schema context once');
   assert.equal(getProjectLookupCount(), 1, 'project visibility should be checked once per project within the workspace request');
+});
+
+test('tenant boundary helpers reject cross-tenant project and event references', () => {
+  const { service } = loadProcurementService();
+  const user = { ID: 'U1', TenantID: 'T1' };
+  assert.throws(() => service._validateProject_('P2', 'T1', user), /پروژه معتبر نیست/);
+  assert.throws(() => service._validateEvent_('EV2', 'T1', user), /رویداد منبع معتبر نیست/);
+  assert.equal(service._validateProject_('P1', 'T1', user).ID, 'P1');
+  assert.equal(service._validateEvent_('EV1', 'T1', user).ID, 'EV1');
 });
