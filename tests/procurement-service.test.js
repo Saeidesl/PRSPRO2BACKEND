@@ -20,7 +20,9 @@ function loadProcurementService() {
     },
     ProjectService: { _isProjectAvailableToUser_: () => true },
     EventRepository: {
-      findById: (id) => String(id) === 'EV1' ? { ID: 'EV1', TenantID: 'T1', ProjectID: 'P1' } : null
+      findById: (id) => String(id) === 'EV1'
+        ? { ID: 'EV1', TenantID: 'T1', ProjectID: 'P1' }
+        : (String(id) === 'EV2' ? { ID: 'EV2', TenantID: 'T2', ProjectID: 'P2' } : null)
     },
     ProcurementRepository: {
       SHEETS: { NEEDS: '18_MaterialNeeds', ORDERS: '19_PurchaseOrders', ITEMS: '20_PurchaseOrderItems', ALLOCATIONS: '21_PurchaseAllocations', RECEIPTS: '22_MaterialReceipts' },
