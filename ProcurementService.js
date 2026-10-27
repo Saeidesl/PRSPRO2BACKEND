@@ -80,6 +80,8 @@ const ProcurementService = {
   },
 
   createOrder: function(body, params) {
+    body = body || {};
+    ProcurementValidator.validateOrder(body);
     if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
         typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
     var lock = LockService.getScriptLock();
@@ -339,6 +341,7 @@ const ProcurementService = {
 
   createReceipt: function(body, params) {
     body = body || {};
+    ProcurementValidator.validateReceipt(body);
     if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
         typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
     var lock = LockService.getScriptLock();
@@ -362,6 +365,7 @@ const ProcurementService = {
 
   createReceiptsBatch: function(body, params) {
     body = body || {};
+    ProcurementValidator.validateReceiptBatch(body);
     if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
         typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
     var entries = body.Receipts;
