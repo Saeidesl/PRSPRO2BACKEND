@@ -33,14 +33,10 @@ const SessionManager = {
     const now =
       new Date();
 
-    const expiresAt =
-      new Date(
-        now.getTime() +
-        AppConfig.AUTH.SESSION_DURATION_HOURS *
-        60 *
-        60 *
-        1000
-      );
+    const durationHours = Number(AppConfig.AUTH.SESSION_DURATION_HOURS);
+    const expiresAt = durationHours > 0
+      ? new Date(now.getTime() + durationHours * 60 * 60 * 1000).toISOString()
+      : null;
 
     const session = {
 
@@ -53,8 +49,8 @@ const SessionManager = {
       createdAt:
         now.toISOString(),
 
-      expiresAt:
-        expiresAt.toISOString(),
+      // A null expiry means the session remains valid until logout.
+      expiresAt: expiresAt,
 
       status:
         Constants.STATUS.ACTIVE
@@ -125,19 +121,25 @@ const SessionManager = {
 
     }
 
-    const expiresAt =
-      new Date(
-        session.expiresAt
-      );
+    // Preserve configurable expiry if a positive duration is explicitly set.
+    // With SESSION_DURATION_HOURS = 0, both new and existing sessions do not
+    // expire automatically; they remain valid until destroyed by logout.
+    const durationHours = Number(AppConfig.AUTH.SESSION_DURATION_HOURS);
+    if (durationHours > 0 && session.expiresAt) {
 
-    if (
-      expiresAt.getTime() <=
-      new Date().getTime()
-    ) {
+      const expiresAt =
+        new Date(session.expiresAt);
 
-      this.destroy(token);
+      if (
+        !Number.isNaN(expiresAt.getTime()) &&
+        expiresAt.getTime() <= new Date().getTime()
+      ) {
 
-      return null;
+        this.destroy(token);
+
+        return null;
+
+      }
 
     }
 
