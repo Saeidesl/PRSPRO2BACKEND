@@ -279,13 +279,47 @@ const MaterialPlanningService = {
     data = data || {};
     var user = this._user_(params);
     this._project_(data.ProjectID, user);
+
+    // Optional references remain optional for legacy callers, but any supplied
+    // reference must belong to this tenant and the exact project before replay
+    // lookup or any write/audit side effect can occur.
+    var projectId = String(data.ProjectID);
+    var tenantId = String(user.TenantID);
+    var referenceError = function(label) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, label + ' با پروژه جاری مطابقت ندارد.');
+    };
+    var materialSpecId = String(data.MaterialSpecID || '').trim();
+    if (materialSpecId) {
+      var materialSpec = GoogleSheetsRepository.findById(this.SHEETS.SPECS, materialSpecId);
+      if (!materialSpec || String(materialSpec.TenantID) !== tenantId ||
+          String(materialSpec.ProjectID) !== projectId) {
+        referenceError('مشخصات مصرف');
+      }
+    }
+    var materialNeedId = String(data.MaterialNeedID || '').trim();
+    if (materialNeedId) {
+      var materialNeed = GoogleSheetsRepository.findById('18_MaterialNeeds', materialNeedId);
+      if (!materialNeed || String(materialNeed.TenantID) !== tenantId ||
+          String(materialNeed.ProjectID) !== projectId) {
+        referenceError('نیاز ملزومات');
+      }
+    }
+    var sourceEventId = String(data.SourceEventID || '').trim();
+    if (sourceEventId) {
+      var sourceEvent = EventRepository.findById(sourceEventId);
+      if (!sourceEvent || String(sourceEvent.TenantID) !== tenantId ||
+          String(sourceEvent.ProjectID || '') !== projectId) {
+        referenceError('رویداد منبع');
+      }
+    }
+
     Validator.required(data.CalculationKey, 'کلید محاسبه');
     var key = String(data.CalculationKey).trim();
     if (key.length > 240) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کلید محاسبه بیش از حد طولانی است.');
     }
     var existing = GoogleSheetsRepository.getAll(this.SHEETS.CALCULATIONS).find(function(row) {
-      return String(row.TenantID) === String(user.TenantID) && String(row.CalculationKey) === key;
+      return String(row.TenantID) === tenantId && String(row.CalculationKey) === key;
     });
     if (existing) return Response.success(Object.assign({ IdempotentReplay: true }, existing));
 
