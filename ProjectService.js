@@ -1,5 +1,20 @@
 const ProjectService = {
 
+  _normalizeCreatedAt_: function(value, fallback) {
+    if (value === undefined || value === null || String(value).trim() === '') return fallback || new Date().toISOString();
+    const raw = String(value).trim();
+    const match = /^(\\d{4})-(\\d{2})-(\\d{2})(?:T.*)?$/.exec(raw);
+    if (!match) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تاریخ ایجاد پروژه معتبر نیست.');
+    }
+    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تاریخ ایجاد پروژه معتبر نیست.');
+    }
+    return date.toISOString();
+  },
+
   _normalizeColorSizeJSON_: function(value) {
     if (value === undefined || value === null || String(value).trim() === '') return JSON.stringify({ colors: [], sizes: [] });
     let parsed;
@@ -508,7 +523,7 @@ const ProjectService = {
         user.ID,
 
       CreatedAt:
-        now,
+        this._normalizeCreatedAt_(project.CreatedAt, now),
 
       UpdatedAt:
         now
@@ -783,6 +798,10 @@ const ProjectService = {
           );
         }
       }
+    }
+
+    if (data.CreatedAt !== undefined) {
+      updateData.CreatedAt = this._normalizeCreatedAt_(data.CreatedAt, existing.CreatedAt || new Date().toISOString());
     }
 
     updateData.UpdatedAt =
