@@ -10,12 +10,18 @@ function loadProcurementService() {
   const sheets = Object.create(null);
   let uuid = 0;
   let projectLookupCount = 0;
+  let projectBulkReadCount = 0;
+  let projectRows = [{ ID: 'P1', TenantID: 'T1' }];
   const context = {
     AccessControlService: { getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' }) },
     ProjectRepository: {
       findById: (id) => {
         projectLookupCount++;
-        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : null;
+        return projectRows.find((row) => String(row.ID) === String(id)) || null;
+      },
+      getAll: () => {
+        projectBulkReadCount++;
+        return projectRows.map((row) => ({ ...row }));
       }
     },
     ProjectService: { _isProjectAvailableToUser_: () => true },
@@ -53,8 +59,36 @@ function loadProcurementService() {
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementService.js'), 'utf8');
   vm.runInNewContext(source + '\nthis.__service = ProcurementService;', context);
-  return { service: context.__service, sheets, getProjectLookupCount: () => projectLookupCount };
+  return {
+    service: context.__service,
+    sheets,
+    getProjectLookupCount: () => projectLookupCount,
+    getProjectBulkReadCount: () => projectBulkReadCount,
+    setProjectRows: (rows) => { projectRows = rows.map((row) => ({ ...row })); }
+  };
 }
+
+
+test('procurement project visibility switches to one bulk project read after repeated distinct lookups', () => {
+  const { service, getProjectLookupCount, getProjectBulkReadCount, setProjectRows } = loadProcurementService();
+  setProjectRows([
+    { ID: 'P1', TenantID: 'T1' },
+    { ID: 'P2', TenantID: 'T1' },
+    { ID: 'P3', TenantID: 'T1' },
+    { ID: 'P4', TenantID: 'T1' }
+  ]);
+  const user = { ID: 'U1', TenantID: 'T1' };
+  const cache = Object.create(null);
+
+  assert.equal(service._isProjectVisible_('P1', user, cache), true);
+  assert.equal(service._isProjectVisible_('P2', user, cache), true);
+  assert.equal(service._isProjectVisible_('P3', user, cache), true);
+  assert.equal(service._isProjectVisible_('P4', user, cache), true);
+  assert.equal(service._isProjectVisible_('P4', user, cache), true);
+
+  assert.equal(getProjectLookupCount(), 2, 'only the first two distinct projects should use targeted lookups');
+  assert.equal(getProjectBulkReadCount(), 1, 'later project checks should share one bulk read');
+});
 
 test('legacy estimated needs and confirmed needs share an allocation key for existing procurement records', () => {
   const { service } = loadProcurementService();
