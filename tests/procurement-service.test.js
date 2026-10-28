@@ -17,10 +17,10 @@ function loadProcurementService() {
     ProjectRepository: {
       findById: (id) => {
         projectLookupCount++;
-        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : (String(id) === 'P2' ? { ID: 'P2', TenantID: 'T2' } : null);
+        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : (String(id) === 'P2' ? { ID: 'P2', TenantID: 'T2' } : (String(id) === 'P3' ? { ID: 'P3', TenantID: 'T1' } : null));
       }
     },
-    ProjectService: { _isProjectAvailableToUser_: () => true },
+    ProjectService: { _isProjectAvailableToUser_: (project) => String(project.ID) !== 'P3' },
     EventRepository: {
       findById: (id) => String(id) === 'EV1'
         ? { ID: 'EV1', TenantID: 'T1', ProjectID: 'P1' }
@@ -208,4 +208,21 @@ test('single and batch receipts reject inactive parent purchase orders', () => {
     );
     assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
   }
+});
+
+
+test('single and batch receipt idempotent replays enforce project visibility', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['22_MaterialReceipts'] = [{
+    ID: 'REC_PRIVATE', TenantID: 'T1', IdempotencyKey: 'private-key',
+    PurchaseOrderItemID: 'ITEM_PRIVATE', ProjectID: 'P3', QuantityReceived: 2
+  }];
+
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: 'ITEM_OTHER', QuantityReceived: 1, IdempotencyKey: 'private-key'
+  }, {}), /پروژه معتبر نیست/);
+  assert.throws(() => service.createReceiptsBatch({
+    Receipts: [{ PurchaseOrderItemID: 'ITEM_OTHER', QuantityReceived: 1, IdempotencyKey: 'private-key' }]
+  }, {}), /پروژه معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 1, 'replay must not write another receipt');
 });
