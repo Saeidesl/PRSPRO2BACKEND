@@ -93,7 +93,7 @@
 - `ProjectService.js`, `ProjectRepository.js`, `ProjectValidator.js`: اطلاعات پروژه، دسترسی به پروژه و مقدار/وضعیت پروژه.
 - `ReportService.js`, `ReportRepository.js`: گزارش پروژه و dashboard؛ `listReportProjects`, `projectReport`, `dashboard`, `getRecentEvents_`, `getRecentProjects_`. گزارش پروژه داده پروژه، رویدادها، نیازها، سفارش‌ها و محاسبات را کنار هم می‌آورد.
 - `AuditService.js`, `AuditRepository.js`, `AuditValidator.js`: ثبت تغییرات مهم، خطاهای یکپارچه‌سازی و عملیات مدیریتی.
-- `PerformanceDiagnostics.js` (در صورت وجود در شاخه فعال)، `GoogleSheetsRepository._logTiming` و ابزارهای آزمون عملکرد: مبنای اندازه‌گیری؛ وجود/فعال بودن diagnostics باید قبل از اتکا در محیط اجرا بررسی شود.
+- `PerformanceDiagnostics.js`: تجمیع اندازه‌گیری‌های request-scoped برای endpointهای خواندنی تأمین؛ `beginRequest`, `record`, `recordEndpointError`, `finishRequest`. `GoogleSheetsRepository._logTiming` عملیات repository را به آن می‌فرستد. خروجی کنسول فقط وقتی تنظیم performance logging فعال باشد چاپ می‌شود. فعال‌سازی و مشاهده لاگ در محیط Apps Script هنوز تأیید نشده است.
 
 ## 3. ساختار داده Google Sheets — headerهای مشاهده‌شده
 
@@ -222,11 +222,12 @@
 
 ### یافته‌های بررسی اولیه تسک 4.1 — هنوز تکمیل نشده
 - در `GoogleSheetsRepository.js` تابع `_logTiming(operation, sheetName, startTime, extra)` زمان عملیات repository را محاسبه می‌کند؛ متدهای `getAll`, `findById`, `findOne`, `findRowByValue`, `insert`, `insertMany` و `updateById` از آن استفاده می‌کنند.
-- `_logTiming` در صورت فعال بودن تنظیم `AppConfig.PERFORMANCE_LOG_TO_CONSOLE` یا `AppConfig.PERFORMANCE.LOG_TO_CONSOLE` لاگ کنسول تولید می‌کند و در صورت تعریف بودن `PerformanceDiagnostics.record` آن را فراخوانی می‌کند؛ فایل مستقل `PerformanceDiagnostics.js` در شاخه `main` با مسیر مورد انتظار پیدا نشد.
+- `_logTiming` در صورت فعال بودن تنظیم `AppConfig.PERFORMANCE_LOG_TO_CONSOLE` یا `AppConfig.PERFORMANCE.LOG_TO_CONSOLE` لاگ کنسول تولید می‌کند و در صورت تعریف بودن `PerformanceDiagnostics.record` آن را فراخوانی می‌کند. برای شاخه کاری فعلی، فایل `PerformanceDiagnostics.js` افزوده شده تا مدت endpoint، تعداد عملیات repository، شمارش و زمان تجمیعی به تفکیک عملیات/شیت و cache hit/missهای ثبت‌شده را جمع کند.
 - endpointهای خواندنی اصلی در `Router.js`: `/procurement/workspace`, `/procurement/dashboard`, `/procurement/needs`, `/procurement/orders`, `/procurement/reports`.
 - `ProcurementRepository.getTenantRows` داده هر شیت را از طریق `GoogleSheetsRepository.getAll` می‌خواند و سپس بر اساس `TenantID` فیلتر می‌کند. `ProcurementService.workspace` از context مشترک برای سفارش‌ها/نیازها/dashboard استفاده می‌کند؛ `reports` نیز داده‌های پروژه، مشخصات مواد و محاسبات را می‌خواند.
-- محدودیت اندازه‌گیری فعلی: زمان عملیات repository به‌تنهایی، زمان کل endpoint، شمار واقعی دسترسی‌های Google Sheets، cache hit/miss و تجمیع تعداد/زمان به تفکیک endpoint را به‌صورت یک گزارش قابل اتکا ارائه نمی‌کند. لاگ متد repository را نباید معادل دسترسی واقعی شبکه/Sheets دانست، چون کش می‌تواند نتیجه را برگرداند.
-- اقدام بعدی برای تکمیل 4.1: افزودن اندازه‌گیری request-scoped در endpointهای بالا و شمارنده‌های عملیات repository با تفکیک cache hit/miss و زمان کل؛ سپس آزمون‌های واحد با mock برای تأیید شمارش و اطمینان از نبود تغییر در payload یا مجوزهای API. تا پیش از اجرای تست‌ها و مشاهده لاگ واقعی، هیچ baseline عددی یا ادعای عملکرد زنده ثبت نشود.
+- پیاده‌سازی اولیه در شاخه کاری انجام شد: `Router._runProcurementRead_` پنج endpoint بالا را اندازه‌گیری می‌کند؛ `PerformanceDiagnostics.js` مدت سرویس endpoint، تعداد و زمان تجمیعی عملیات repository به تفکیک نوع/شیت و خطای endpoint را جمع می‌کند؛ `GoogleSheetsRepository.getAll` و `findById` وضعیت cache hit را به `_logTiming` می‌دهند. این cache hit/miss فقط کش فهرست و رکورد را پوشش می‌دهد و به‌معنی شمارش همه cacheهای داخلی جست‌وجو یا تعداد دقیق RPCهای Google Sheets نیست.
+- آزمون `tests/performance-diagnostics.test.js` اضافه شد تا تجمیع عملیات، زمان، شیت، cache و خطا را بررسی کند. بررسی syntax چهار فایل تغییرکرده و شبیه‌سازی دستی تابع diagnostics موفق بود؛ CI/`node --test` روی محیط repo و مشاهده لاگ واقعی Apps Script هنوز اجرا نشده است. بنابراین 4.1 عمداً تیک نخورده است.
+- گام بعدی تکمیل 4.1: اجرای آزمون‌های CI و فعال‌سازی کنترل‌شده log در محیط تست Apps Script؛ بررسی خروجی واقعی و محدودیت‌های شمارش، سپس ثبت baseline. تا آن زمان هیچ عدد عملکرد زنده ادعا نمی‌شود.
 
 - [ ] 4.1 اندازه‌گیری تعداد/زمان خواندن‌ها و جست‌وجوها در هر endpoint تأمین.
 - [ ] 4.2 کاهش فراخوانی‌های تکراری `getAll/findById` و استفاده از context مشترک درخواست.
