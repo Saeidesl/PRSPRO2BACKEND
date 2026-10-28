@@ -322,8 +322,11 @@ const ProcurementService = {
 
     // Google Sheets has no multi-sheet transaction. Validate the full payload before writing.
     var createdItems = [];
+    var createdAllocationIds = [];
+    var failureStage = 'ORDER_HEADER_INSERT';
     try {
       GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ORDERS, order);
+      failureStage = 'ORDER_ITEM_INSERT';
       normalized.forEach(function(entry) {
         var item = entry.source;
         var row = {
@@ -343,11 +346,13 @@ const ProcurementService = {
           CreatedAt: now,
           UpdatedAt: now
         };
+        failureStage = 'ORDER_ITEM_INSERT';
         GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ITEMS, row);
         createdItems.push(row);
 
         entry.allocations.forEach(function(allocation) {
-          GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ALLOCATIONS, {
+          failureStage = 'ORDER_ALLOCATION_INSERT';
+          var allocationRow = {
             ID: self._id_('ALLOC'),
             TenantID: user.TenantID,
             PurchaseOrderItemID: row.ID,
@@ -355,11 +360,14 @@ const ProcurementService = {
             MaterialNeedID: allocation.MaterialNeedID,
             AllocatedQuantity: allocation.AllocatedQuantity,
             CreatedAt: now
-          });
+          };
+          GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ALLOCATIONS, allocationRow);
+          createdAllocationIds.push(allocationRow.ID);
         });
       });
 
       // Promote to ACTIVE only after all item and allocation writes have succeeded.
+      failureStage = 'ORDER_ACTIVATION';
       GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, {
         Status: 'ACTIVE',
         UpdatedAt: now
@@ -367,31 +375,35 @@ const ProcurementService = {
       order.Status = 'ACTIVE';
       order.UpdatedAt = now;
     } catch (error) {
-      // The header is created as NEEDS_REVIEW, so even a failed recovery write
-      // cannot leave a partial order looking active/countable.
+      // Keep the original failure visible and mark the order for manual reconciliation.
+      var recoveryWriteError = '';
       try {
         GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, {
           Status: 'NEEDS_REVIEW',
-          Notes: (order.Notes ? order.Notes + '\n' : '') + 'ثبت سفارش ناقص ماند؛ نیازمند بررسی: ' + String(error.message || error),
+          Notes: (order.Notes ? order.Notes + '\n' : '') + 'ثبت سفارش ناقص ماند؛ مرحله: ' + failureStage + '؛ نیازمند بررسی: ' + String(error.message || error),
           UpdatedAt: this._now_()
         });
       } catch (recoveryError) {
-        // Preserve the original failure; attempt an audit breadcrumb for later inspection.
-        try {
-          AuditService.log({
-            TenantID: user.TenantID,
-            UserID: user.ID,
-            Action: 'RECOVERY_REQUIRED',
-            EntityType: 'PURCHASE_ORDER',
-            EntityID: order.ID,
-            NewData: {
-              Status: 'NEEDS_REVIEW',
-              OriginalError: String(error && (error.message || error) || error),
-              RecoveryWriteError: String(recoveryError && (recoveryError.message || recoveryError) || recoveryError)
-            }
-          });
-        } catch (auditError) {}
+        recoveryWriteError = String(recoveryError && (recoveryError.message || recoveryError) || recoveryError);
       }
+      // Audit every failed multi-sheet order write, even when the recovery status write succeeds.
+      try {
+        AuditService.log({
+          TenantID: user.TenantID,
+          UserID: user.ID,
+          Action: 'RECOVERY_REQUIRED',
+          EntityType: 'PURCHASE_ORDER',
+          EntityID: order.ID,
+          NewData: {
+            Status: 'NEEDS_REVIEW',
+            FailureStage: failureStage,
+            OriginalError: String(error && (error.message || error) || error),
+            RecoveryWriteError: recoveryWriteError,
+            CreatedItemIDs: createdItems.map(function(item) { return item.ID; }),
+            CreatedAllocationIDs: createdAllocationIds
+          }
+        });
+      } catch (auditError) {}
       throw error;
     }
 
