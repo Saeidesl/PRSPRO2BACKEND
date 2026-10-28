@@ -76,9 +76,24 @@ var PerformanceDiagnostics = {
         : '';
     } catch (configError) {}
 
-    var spreadsheet = spreadsheetId
-      ? SpreadsheetApp.openById(spreadsheetId)
-      : SpreadsheetApp.getActiveSpreadsheet();
+    var spreadsheet = null;
+    if (spreadsheetId) {
+      spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    } else {
+      // Reuse the exact spreadsheet resolved by the repository. In web-app
+      // executions, getActiveSpreadsheet() can be null even when repository
+      // operations have already resolved the database spreadsheet.
+      try {
+        if (typeof GoogleSheetsRepository !== 'undefined' &&
+            GoogleSheetsRepository &&
+            typeof GoogleSheetsRepository.getSpreadsheet === 'function') {
+          spreadsheet = GoogleSheetsRepository.getSpreadsheet();
+        }
+      } catch (repositoryError) {
+        // Try Apps Script's active-spreadsheet fallback below.
+      }
+      if (!spreadsheet) spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    }
     if (!spreadsheet) throw new Error('Spreadsheet unavailable for performance diagnostics');
 
     var sheet = spreadsheet.getSheetByName(this._sheetName);

@@ -17,10 +17,15 @@ function loadDiagnostics(options = {}) {
     Error,
     console: { log: () => {}, error: () => {} }
   };
-  if (options.spreadsheet) {
+  if (options.spreadsheet || options.activeSpreadsheet === null) {
     context.SpreadsheetApp = {
-      getActiveSpreadsheet: () => options.spreadsheet,
+      getActiveSpreadsheet: () => options.activeSpreadsheet === null ? null : options.spreadsheet,
       openById: () => options.spreadsheet
+    };
+  }
+  if (options.repository) {
+    context.GoogleSheetsRepository = {
+      getSpreadsheet: () => options.repository
     };
   }
   const source = fs.readFileSync(path.join(__dirname, '..', 'PerformanceDiagnostics.js'), 'utf8');
@@ -92,6 +97,36 @@ test('writes persistent endpoint summaries to a dedicated sheet when enabled', (
   assert.equal(rows[1][2], 23);
   assert.equal(rows[1][3], 1);
   assert.equal(rows[1][8], '{"getAll":1}');
+});
+
+
+test('uses the database repository spreadsheet when Apps Script has no active spreadsheet', () => {
+  const rows = [];
+  const sheet = {
+    getLastRow: () => rows.length,
+    getRange: () => ({ setValues: values => values.forEach(value => rows.push(value)) }),
+    setFrozenRows: () => {},
+    appendRow: row => rows.push(row),
+    deleteRows: () => {}
+  };
+  const spreadsheet = {
+    getSheetByName: name => name === 'PMS_PerformanceDiagnostics' ? sheet : null,
+    insertSheet: name => {
+      assert.equal(name, 'PMS_PerformanceDiagnostics');
+      return sheet;
+    }
+  };
+  const diagnostics = loadDiagnostics({
+    enabled: true,
+    activeSpreadsheet: null,
+    repository: spreadsheet
+  });
+  diagnostics.beginRequest('/procurement/workspace');
+  diagnostics.record('getAll', '18_MaterialNeeds', 8, { cacheHit: false });
+  diagnostics.finishRequest(23);
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows[1][1], '/procurement/workspace');
 });
 
 test('disabled performance logging emits no console output or spreadsheet writes', () => {
