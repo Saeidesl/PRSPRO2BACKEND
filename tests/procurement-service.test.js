@@ -10,6 +10,7 @@ function loadProcurementService() {
   const sheets = Object.create(null);
   let uuid = 0;
   let insertFailure = null;
+  let updateFailure = null;
   let projectLookupCount = 0;
   let projectBulkReadCount = 0;
   const procurementReadCounts = Object.create(null);
@@ -47,7 +48,14 @@ function loadProcurementService() {
         sheets[name].push({ ...row });
         return { ...row };
       },
+      insertMany: (name, rows) => {
+        if (typeof insertFailure === 'function') rows.forEach((row) => insertFailure(name, row));
+        sheets[name] = sheets[name] || [];
+        sheets[name].push(...rows.map((row) => ({ ...row })));
+        return rows.map((row) => ({ ...row }));
+      },
       updateById: (name, id, patch) => {
+        if (typeof updateFailure === 'function') updateFailure(name, id, patch);
         sheets[name] = sheets[name] || [];
         const i = sheets[name].findIndex((item) => String(item.ID) === String(id));
         if (i < 0) throw new Error('missing row');
@@ -74,7 +82,8 @@ function loadProcurementService() {
     getProjectBulkReadCount: () => projectBulkReadCount,
     procurementReadCounts,
     setProjectRows: (rows) => { projectRows = rows.map((row) => ({ ...row })); },
-    setInsertFailure: (failure) => { insertFailure = failure; }
+    setInsertFailure: (failure) => { insertFailure = failure; },
+    setUpdateFailure: (failure) => { updateFailure = failure; }
   };
 }
 
@@ -205,4 +214,60 @@ test('failed purchase-order item insert marks order NEEDS_REVIEW without droppin
   assert.match(order.Notes, /controlled item insert failure/);
   assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 1,
     'the first item remains recorded as partial history; the failed second item is absent');
+});
+
+
+test('single receipt retry reconciles order status when the first status update fails after receipt persistence', () => {
+  const { service, sheets, setUpdateFailure } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO_REC_SINGLE', TenantID: 'T1', Status: 'ACTIVE', Notes: 'preserve', UpdatedAt: 'before' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_REC_SINGLE', TenantID: 'T1', PurchaseOrderID: 'PO_REC_SINGLE',
+    ItemName: 'پارچه', OrderedQuantity: 10
+  }];
+  const body = { PurchaseOrderItemID: 'ITEM_REC_SINGLE', QuantityReceived: 4, IdempotencyKey: 'REC_SINGLE_RETRY' };
+  setUpdateFailure((sheetName) => {
+    if (sheetName !== '19_PurchaseOrders') return;
+    setUpdateFailure(null);
+    throw new Error('controlled receipt status update failure');
+  });
+
+  assert.throws(() => service.createReceipt(body, {}), /controlled receipt status update failure/);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'receipt remains persisted after status update failure');
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE', 'the first status update failed');
+
+  const retry = service.createReceipt(body, {});
+  assert.equal(retry.success, true);
+  assert.equal(retry.data.IdempotentReplay, true);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'idempotent retry must not duplicate the receipt');
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'PARTIALLY_RECEIVED', 'retry repairs the derived order status');
+  assert.equal(sheets['19_PurchaseOrders'][0].Notes, 'preserve', 'reconciliation preserves unrelated order fields');
+});
+
+test('batch receipt retry reconciles order status when the first status update fails after batch persistence', () => {
+  const { service, sheets, setUpdateFailure } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO_REC_BATCH', TenantID: 'T1', Status: 'ACTIVE', Notes: 'preserve', UpdatedAt: 'before' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_REC_BATCH', TenantID: 'T1', PurchaseOrderID: 'PO_REC_BATCH',
+    ItemName: 'زیپ', OrderedQuantity: 8
+  }];
+  const body = { Receipts: [{
+    PurchaseOrderItemID: 'ITEM_REC_BATCH', QuantityReceived: 3, IdempotencyKey: 'REC_BATCH_RETRY'
+  }] };
+  setUpdateFailure((sheetName) => {
+    if (sheetName !== '19_PurchaseOrders') return;
+    setUpdateFailure(null);
+    throw new Error('controlled batch status update failure');
+  });
+
+  assert.throws(() => service.createReceiptsBatch(body, {}), /controlled batch status update failure/);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'batch receipt remains persisted after status update failure');
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE', 'the first status update failed');
+
+  const retry = service.createReceiptsBatch(body, {});
+  assert.equal(retry.success, true);
+  assert.equal(retry.data.length, 1);
+  assert.equal(retry.data[0].IdempotentReplay, true);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'batch retry must not duplicate the receipt');
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'PARTIALLY_RECEIVED', 'batch retry repairs the derived order status');
+  assert.equal(sheets['19_PurchaseOrders'][0].Notes, 'preserve', 'reconciliation preserves unrelated order fields');
 });
