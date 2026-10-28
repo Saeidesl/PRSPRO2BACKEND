@@ -145,7 +145,7 @@ test('rejects blank, zero, negative and excessive calculation inputs before idem
   const base = { ProjectID: 'P1', CalculationKey: 'VALIDATION-KEY', BasisQuantity: 10, ConsumptionPerUnit: 1, WastagePercent: 0 };
   service.recordCalculation(base, {});
   assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: '' }, {}), /فیلد عددی الزامی است/);
-  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: -1 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: 0 }, {}), /مقدار معتبر نیست/);\n  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: -1 }, {}), /مقدار معتبر نیست/);
   assert.throws(() => service.recordCalculation({ ...base, ConsumptionPerUnit: 0 }, {}), /مقدار معتبر نیست/);
   assert.throws(() => service.recordCalculation({ ...base, WastagePercent: 101 }, {}), /مقدار معتبر نیست/);
   assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: 10000000000000, CalculationKey: 'TOO-LARGE' }, {}), /مقدار محاسبه‌شده خارج از محدوده/);
