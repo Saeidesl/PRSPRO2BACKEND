@@ -242,11 +242,13 @@ const GoogleSheetsRepository = {
 
   getAll: function(sheetName) {
     const startTime = Date.now();
+    let cacheHit = false;
 
     try {
       const listKey = String(sheetName);
       if (Object.prototype.hasOwnProperty.call(this._requestListCache, listKey)) {
-        return this._requestListCache[listKey].map(function(item) { return Object.assign({}, item); });
+        cacheHit = true;
+        return this._requestListCache[listKey].map(function(item) { return Object.assign({}, item);
       }
 
       const sheet = this.getSheet(sheetName);
@@ -289,7 +291,7 @@ const GoogleSheetsRepository = {
       });
       return result;
     } finally {
-      this._logTiming('getAll', sheetName, startTime);
+      this._logTiming('getAll', sheetName, startTime, { cacheHit: cacheHit });
     }
   },
 
@@ -316,6 +318,7 @@ const GoogleSheetsRepository = {
   findById: function(sheetName, id) {
     const startTime = Date.now();
     const cacheKey = String(sheetName) + '|' + String(id);
+    let cacheHit = false;
 
     try {
       if (id === undefined || id === null || id === '') {
@@ -328,6 +331,7 @@ const GoogleSheetsRepository = {
           cacheKey
         )
       ) {
+        cacheHit = true;
         return this._requestRecordCache[cacheKey];
       }
 
@@ -356,7 +360,7 @@ const GoogleSheetsRepository = {
       this._requestRecordCache[cacheKey] = record;
       return record;
     } finally {
-      this._logTiming('findById', sheetName, startTime);
+      this._logTiming('findById', sheetName, startTime, { cacheHit: cacheHit });
     }
   },
 
