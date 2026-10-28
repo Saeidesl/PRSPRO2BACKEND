@@ -358,29 +358,41 @@ const Router = {
       return ProjectService.dashboardLookups(params);
     }
 
+    // Include permission checks in endpoint timing. Authorization can perform
+    // several Google Sheets reads and must be visible in the same measurement.
     if (path === '/procurement/workspace') {
-      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return this._runProcurementRead_('/procurement/workspace', function() { return ProcurementService.workspace(params); });
+      return this._runProcurementRead_('/procurement/workspace', function() {
+        Router.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+        return ProcurementService.workspace(params);
+      });
     }
 
     if (path === '/procurement/reports') {
-      this.requireAny(params, ['REPORT_VIEW', 'PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return this._runProcurementRead_('/procurement/reports', function() { return ProcurementService.reports(params); });
+      return this._runProcurementRead_('/procurement/reports', function() {
+        Router.requireAny(params, ['REPORT_VIEW', 'PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+        return ProcurementService.reports(params);
+      });
     }
 
     if (path === '/procurement/dashboard') {
-      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return this._runProcurementRead_('/procurement/dashboard', function() { return ProcurementService.dashboard(params); });
+      return this._runProcurementRead_('/procurement/dashboard', function() {
+        Router.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+        return ProcurementService.dashboard(params);
+      });
     }
 
     if (path === '/procurement/needs') {
-      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return this._runProcurementRead_('/procurement/needs', function() { return ProcurementService.listNeeds(params); });
+      return this._runProcurementRead_('/procurement/needs', function() {
+        Router.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+        return ProcurementService.listNeeds(params);
+      });
     }
 
     if (path === '/procurement/orders') {
-      this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return this._runProcurementRead_('/procurement/orders', function() { return ProcurementService.listOrders(params); });
+      return this._runProcurementRead_('/procurement/orders', function() {
+        Router.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
+        return ProcurementService.listOrders(params);
+      });
     }
 
     if (path === '/reports/projects') {
