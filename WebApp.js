@@ -2,6 +2,14 @@
 
 function resetRequestCaches_() {
   if (
+    typeof PermissionService !== 'undefined' &&
+    PermissionService &&
+    typeof PermissionService.resetRequestCache === 'function'
+  ) {
+    PermissionService.resetRequestCache();
+  }
+
+  if (
     typeof AccessControlService !== 'undefined' &&
     AccessControlService &&
     typeof AccessControlService.resetRequestCache === 'function'

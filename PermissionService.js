@@ -7,6 +7,13 @@
 
 const PermissionService = {
 
+  // Authorization results are cached only for the current web-app request.
+  _requestUserPermissionCache: {},
+
+  resetRequestCache: function() {
+    this._requestUserPermissionCache = {};
+  },
+
   list: function(params) {
     AccessControlService.getCurrentUser(params || {});
     return Response.success(PermissionRepository.getAll());
@@ -138,46 +145,15 @@ const PermissionService = {
 
     if (!user) return false;
 
-    const permission = PermissionRepository.findByCode(permissionCode);
-    if (!permission) return false;
-
-    const tenantId = String(user.TenantID);
-    const userRoles = UserRoleRepository.getAll().filter(function(item) {
-      return String(item.UserID) === String(userId) &&
-        String(item.TenantID) === tenantId;
-    });
-
-    if (userRoles.length === 0) return false;
-
-    const roles = RoleRepository.getAll().filter(function(role) {
-      return String(role.TenantID) === tenantId &&
-        String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE;
-    });
-
-    const validRoleIds = {};
-    roles.forEach(function(role) {
-      validRoleIds[String(role.ID)] = true;
-    });
-
-    const roleIds = {};
-    userRoles.forEach(function(userRole) {
-      const roleId = String(userRole.RoleID);
-      if (validRoleIds[roleId]) roleIds[roleId] = true;
-    });
-
-    const rolePermissions = GoogleSheetsRepository.getAll('07_RolePermissions');
-    for (let i = 0; i < rolePermissions.length; i++) {
-      const item = rolePermissions[i];
-      if (
-        String(item.TenantID) === tenantId &&
-        roleIds[String(item.RoleID)] &&
-        String(item.PermissionID) === String(permission.ID)
-      ) {
-        return true;
-      }
+    const cacheKey = String(user.TenantID) + ':' + String(userId);
+    if (!Object.prototype.hasOwnProperty.call(this._requestUserPermissionCache, cacheKey)) {
+      // Resolve all permission codes in one bulk pass instead of repeating
+      // findByCode/role filtering for every permission checked by Router.
+      this._requestUserPermissionCache[cacheKey] = this.getUserPermissions(userId, user);
     }
 
-    return false;
+    return this._requestUserPermissionCache[cacheKey].indexOf(String(permissionCode)) !== -1;
+
   },
 
   requirePermission: function(userId, permissionCode, userRecord) {
