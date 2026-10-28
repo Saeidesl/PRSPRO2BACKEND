@@ -492,6 +492,24 @@ const Router = {
       return ProcurementService.createReceipt(body, params);
     }
 
+    const procurementCancelMatch = path.match(/^\/procurement\/orders\/([^/]+)\/cancel$/);
+    if (procurementCancelMatch) {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.cancelOrder(decodeURIComponent(procurementCancelMatch[1]), body, params);
+    }
+
+    const procurementReceiptVoidMatch = path.match(/^\/procurement\/receipts\/([^/]+)\/void$/);
+    if (procurementReceiptVoidMatch) {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.voidReceipt(decodeURIComponent(procurementReceiptVoidMatch[1]), body, params);
+    }
+
+    const procurementAllocationVoidMatch = path.match(/^\/procurement\/allocations\/([^/]+)\/void$/);
+    if (procurementAllocationVoidMatch) {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.voidAllocation(decodeURIComponent(procurementAllocationVoidMatch[1]), body, params);
+    }
+
     const materialSpecCreateMatch = path.match(/^\/projects\/([^/]+)\/material-specifications$/);
     if (materialSpecCreateMatch) {
       const projectId = materialSpecCreateMatch[1];
@@ -672,6 +690,12 @@ const Router = {
       }
 
       return DepartmentService.update(departmentId, body, params);
+    }
+
+    const procurementItemRevisionMatch = path.match(/^\/procurement\/order-items\/([^/]+)$/);
+    if (procurementItemRevisionMatch) {
+      AccessControlService.require(params, 'PROCUREMENT_MANAGE');
+      return ProcurementService.reviseOrderItemQuantity(decodeURIComponent(procurementItemRevisionMatch[1]), body, params);
     }
 
     const materialSpecUpdateMatch = path.match(/^\/material-specifications\/([^/]+)$/);
