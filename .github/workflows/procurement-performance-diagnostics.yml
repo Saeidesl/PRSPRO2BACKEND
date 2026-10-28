@@ -1,0 +1,33 @@
+name: Procurement performance diagnostics tests
+
+on:
+  pull_request:
+    paths:
+      - 'Router.js'
+      - 'GoogleSheetsRepository.js'
+      - 'PerformanceDiagnostics.js'
+      - 'tests/performance-diagnostics.test.js'
+      - '.github/workflows/procurement-performance-diagnostics.yml'
+  push:
+    branches:
+      - main
+      - docs/procurement-standardization-task-1-3
+    paths:
+      - 'Router.js'
+      - 'GoogleSheetsRepository.js'
+      - 'PerformanceDiagnostics.js'
+      - 'tests/performance-diagnostics.test.js'
+      - '.github/workflows/procurement-performance-diagnostics.yml'
+
+jobs:
+  diagnostics-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run diagnostics unit tests
+        run: node --test tests/performance-diagnostics.test.js

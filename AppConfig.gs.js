@@ -3,6 +3,10 @@ const AppConfig = {
   VERSION: '1.0.0',
   ENVIRONMENT: 'MVP',
 
+  // Temporary diagnostics for procurement performance testing.
+  // Disable after collecting the baseline.
+  PERFORMANCE_LOG_TO_CONSOLE: true,
+
   DATABASE: {
     SPREADSHEET_ID: '',
   },

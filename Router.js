@@ -6,6 +6,29 @@
 
 const Router = {
 
+  _runProcurementRead_: function(endpoint, callback) {
+    var startedAt = Date.now();
+    var diagnosticsStarted = false;
+    try {
+      if (typeof PerformanceDiagnostics !== 'undefined' &&
+          PerformanceDiagnostics &&
+          typeof PerformanceDiagnostics.beginRequest === 'function') {
+        PerformanceDiagnostics.beginRequest(endpoint);
+        diagnosticsStarted = true;
+      }
+      return callback();
+    } catch (error) {
+      if (diagnosticsStarted && typeof PerformanceDiagnostics.recordEndpointError === 'function') {
+        PerformanceDiagnostics.recordEndpointError(error);
+      }
+      throw error;
+    } finally {
+      if (diagnosticsStarted && typeof PerformanceDiagnostics.finishRequest === 'function') {
+        PerformanceDiagnostics.finishRequest(Date.now() - startedAt);
+      }
+    }
+  },
+
   requireAny: function(params, permissionCodes) {
     const user = AccessControlService.getCurrentUser(params || {});
 
@@ -337,27 +360,27 @@ const Router = {
 
     if (path === '/procurement/workspace') {
       this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return ProcurementService.workspace(params);
+      return this._runProcurementRead_('/procurement/workspace', function() { return ProcurementService.workspace(params); });
     }
 
     if (path === '/procurement/reports') {
       this.requireAny(params, ['REPORT_VIEW', 'PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return ProcurementService.reports(params);
+      return this._runProcurementRead_('/procurement/reports', function() { return ProcurementService.reports(params); });
     }
 
     if (path === '/procurement/dashboard') {
       this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return ProcurementService.dashboard(params);
+      return this._runProcurementRead_('/procurement/dashboard', function() { return ProcurementService.dashboard(params); });
     }
 
     if (path === '/procurement/needs') {
       this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return ProcurementService.listNeeds(params);
+      return this._runProcurementRead_('/procurement/needs', function() { return ProcurementService.listNeeds(params); });
     }
 
     if (path === '/procurement/orders') {
       this.requireAny(params, ['PROCUREMENT_VIEW', 'PROCUREMENT_MANAGE']);
-      return ProcurementService.listOrders(params);
+      return this._runProcurementRead_('/procurement/orders', function() { return ProcurementService.listOrders(params); });
     }
 
     if (path === '/reports/projects') {
