@@ -180,3 +180,32 @@ test('createReceiptsBatch rejects a soft-deleted purchase order item before writ
   }, {}), /قلم سفارش معتبر نیست/);
   assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
 });
+
+
+test('single and batch receipts reject inactive parent purchase orders', () => {
+  const { service, sheets } = loadProcurementService();
+  const item = {
+    ID: 'ITEM1', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 10, ItemName: 'پارچه', Status: 'ACTIVE'
+  };
+  sheets['20_PurchaseOrderItems'] = [item];
+
+  for (const status of ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW']) {
+    sheets['19_PurchaseOrders'] = [{ ID: 'PO1', TenantID: 'T1', Status: status }];
+    assert.throws(
+      () => service.createReceipt({
+        PurchaseOrderItemID: 'ITEM1', QuantityReceived: 1
+      }, {}),
+      /سفارش خرید معتبر یا فعال نیست/,
+      'single receipt must reject order status ' + status
+    );
+    assert.throws(
+      () => service.createReceiptsBatch({
+        Receipts: [{ PurchaseOrderItemID: 'ITEM1', QuantityReceived: 1 }]
+      }, {}),
+      /سفارش خرید معتبر یا فعال نیست/,
+      'batch receipt must reject order status ' + status
+    );
+    assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+  }
+});
