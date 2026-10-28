@@ -112,3 +112,30 @@ test('rejects a soft-deleted purchase item in event integration before event per
     /قلم سفارش برای ثبت دریافت معتبر یا فعال نیست/
   );
 });
+
+
+test('rejects receipt integration when the parent order is cancelled, void, deleted, or needs review', () => {
+  const { service, settings, setReceiptRows } = loadIntegration();
+  settings[0].Action = 'RECORD_RECEIPT';
+  settings[0].FieldMapJSON = JSON.stringify({
+    PurchaseOrderItemID: 'item_id',
+    QuantityReceived: 'qty'
+  });
+  const item = {
+    ID: 'ITEM1', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 10, Status: 'ACTIVE'
+  };
+  for (const status of ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW']) {
+    setReceiptRows(item, { ID: 'PO1', TenantID: 'T1', Status: status });
+    assert.throws(
+      () => service.validate(
+        { ID: 'ET1', TenantID: 'T1', Version: '2' },
+        { item_id: 'ITEM1', qty: 1 },
+        '',
+        {}
+      ),
+      /سفارش خرید برای ثبت دریافت معتبر یا فعال نیست/,
+      'should reject parent order status ' + status
+    );
+  }
+});
