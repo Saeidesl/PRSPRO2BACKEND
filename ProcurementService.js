@@ -161,6 +161,7 @@ const ProcurementService = {
       }
     });
     var existingAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
+      if (!ProcurementService._active_(allocation.Status)) return false;
       return !!countableExistingItemIds[String(allocation.PurchaseOrderItemID || '')];
     });
     var existingNeedById = Object.create(null);
@@ -680,7 +681,7 @@ const ProcurementService = {
     if (!order || String(order.TenantID) !== String(tenantId)) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش دریافت برای بازیابی پیدا نشد.');
     }
-    if (String(order.Status || '').toUpperCase() === 'NEEDS_REVIEW') return order;
+    if (['NEEDS_REVIEW', 'CANCELLED'].indexOf(String(order.Status || '').toUpperCase()) !== -1) return order;
 
     var items = ProcurementRepository.getItems(tenantId).filter(function(item) {
       return String(item.PurchaseOrderID || '') === String(orderId);
