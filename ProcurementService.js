@@ -643,7 +643,25 @@ const ProcurementService = {
           updated.Status = orderedTotal > 0 && receivedTotal >= orderedTotal ? 'RECEIVED' :
             (receivedTotal > 0 ? 'PARTIALLY_RECEIVED' : 'ACTIVE');
           updated.UpdatedAt = now;
-          GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+          try {
+            GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+          } catch (statusError) {
+            try {
+              AuditService.log({
+                TenantID: user.TenantID,
+                UserID: user.ID,
+                Action: 'RECOVERY_REQUIRED',
+                EntityType: 'PURCHASE_ORDER',
+                EntityID: order.ID,
+                NewData: {
+                  FailureStage: 'RECEIPT_ORDER_STATUS_UPDATE',
+                  OriginalError: String(statusError && (statusError.message || statusError) || statusError),
+                  ReceiptIDs: created.filter(function(receipt) { return String(receipt.PurchaseOrderItemID) === String(entry.item.ID); }).map(function(receipt) { return receipt.ID; })
+                }
+              });
+            } catch (auditError) {}
+            throw statusError;
+          }
         }
         updatedOrders[orderKey] = true;
       });
@@ -841,7 +859,25 @@ const ProcurementService = {
         (allReceived > 0 ? 'PARTIALLY_RECEIVED' : 'ACTIVE');
     }
     updated.UpdatedAt = now;
-    GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+    try {
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+    } catch (statusError) {
+      try {
+        AuditService.log({
+          TenantID: user.TenantID,
+          UserID: user.ID,
+          Action: 'RECOVERY_REQUIRED',
+          EntityType: 'MATERIAL_RECEIPT',
+          EntityID: receipt.ID,
+          NewData: {
+            FailureStage: 'RECEIPT_ORDER_STATUS_UPDATE',
+            PurchaseOrderID: order.ID,
+            OriginalError: String(statusError && (statusError.message || statusError) || statusError)
+          }
+        });
+      } catch (auditError) {}
+      throw statusError;
+    }
     if (overReceiptOverride) {
       AuditService.log({
         TenantID: user.TenantID,
