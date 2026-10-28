@@ -6,6 +6,29 @@
 
 const AttachmentService = {
 
+  // Server-side project filename convention:
+  // PROJECTCODE_ATTACHMENTTYPE_ORIGINALNAME.extension
+  _buildProjectFileName_: function(project, originalName, attachmentType) {
+    function safePart(value, fallback) {
+      var cleaned = String(value || '').trim()
+        .replace(/[\\\\/\\\\:*?"<>|\\u0000-\\u001f\\u007f]/g, '_')
+        .replace(/\\s+/g, '-')
+        .replace(/\\.{2,}/g, '.')
+        .replace(/^\\.+|\\.+$/g, '')
+        .substring(0, 80);
+      return cleaned || fallback;
+    }
+
+    var inputName = String(originalName || 'file').replace(/\\\\/g, '/').split('/').pop();
+    var dot = inputName.lastIndexOf('.');
+    var extension = dot > 0 ? inputName.substring(dot + 1).replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : '';
+    var baseName = dot > 0 ? inputName.substring(0, dot) : inputName;
+    baseName = safePart(baseName, 'file').substring(0, 100);
+    var projectCode = safePart(project && project.ProjectCode, 'PROJECT');
+    var type = safePart(String(attachmentType || 'DOCUMENT').toUpperCase(), 'DOCUMENT').toUpperCase();
+    return projectCode + '_' + type + '_' + baseName + (extension ? '.' + extension : '');
+  },
+
   _isAttachmentVisibleToUser_: function(attachment, user) {
     if (!attachment || String(attachment.TenantID) !== String(user.TenantID)) return false;
     var type = String(attachment.EntityType || '').toUpperCase();
@@ -340,11 +363,21 @@ const AttachmentService = {
      * کاربر جاری از Session مشخص می‌شود.
      */
 
+    // Project files receive a canonical, server-generated name. The project
+    // code is taken from the authorized project record, never from client input.
+    const isProjectAttachment = String(data.EntityType).toUpperCase() === 'PROJECT';
+    const mimeType = String(data.MimeType || '').toLowerCase();
+    const normalizedType = String(data.AttachmentType ||
+      (mimeType.indexOf('image/') === 0 ? 'PROFILE' : 'DOCUMENT')).trim().toUpperCase();
+    const storedFileName = isProjectAttachment
+      ? this._buildProjectFileName_(entity, data.FileName, normalizedType)
+      : String(data.FileName).replace(/[\\\\/\\\\:*?"<>|\\u0000-\\u001f\\u007f]/g, '_').substring(0, 240);
+
     const storageResult =
       StorageRepository.uploadBase64({
 
         fileName:
-          data.FileName,
+          storedFileName,
 
         mimeType:
           data.MimeType,
@@ -397,10 +430,7 @@ const AttachmentService = {
         now,
 
       AttachmentType:
-        String(data.EntityType).toUpperCase() === 'PROJECT' &&
-        String(data.MimeType || '').toLowerCase().indexOf('image/') === 0
-          ? String(data.AttachmentType || 'PROFILE').toUpperCase()
-          : '',
+        isProjectAttachment ? normalizedType : '',
 
       Status:
         Constants.STATUS.ACTIVE
