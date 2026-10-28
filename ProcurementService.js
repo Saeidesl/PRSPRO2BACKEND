@@ -48,13 +48,40 @@ const ProcurementService = {
   _isProjectVisible_: function(projectId, user, visibilityCache) {
     if (!projectId) return true;
     var key = String(projectId);
-    if (visibilityCache && Object.prototype.hasOwnProperty.call(visibilityCache, key)) {
-      return visibilityCache[key];
+    var visibleKey = '$pms_visible|' + key;
+    if (visibilityCache && Object.prototype.hasOwnProperty.call(visibilityCache, visibleKey)) {
+      return visibilityCache[visibleKey];
     }
-    var project = ProjectRepository.findById(projectId);
+
+    var project = null;
+    var projectIndex = visibilityCache && visibilityCache.$pms_projectIndex;
+    if (projectIndex) {
+      project = projectIndex[key] || null;
+    } else {
+      var lookupCount = visibilityCache
+        ? Number(visibilityCache.$pms_projectLookupCount) || 0
+        : 0;
+      // For a small number of project checks, a targeted lookup is cheaper.
+      // Once a request touches a third distinct project, load the project sheet
+      // once and reuse the index instead of issuing one row lookup per project.
+      if (lookupCount >= 2 && typeof ProjectRepository.getAll === 'function') {
+        projectIndex = Object.create(null);
+        ProjectRepository.getAll().forEach(function(row) {
+          if (row && row.ID !== undefined && row.ID !== null) {
+            projectIndex[String(row.ID)] = row;
+          }
+        });
+        if (visibilityCache) visibilityCache.$pms_projectIndex = projectIndex;
+        project = projectIndex[key] || null;
+      } else {
+        project = ProjectRepository.findById(projectId);
+        if (visibilityCache) visibilityCache.$pms_projectLookupCount = lookupCount + 1;
+      }
+    }
+
     var visible = !!project && String(project.TenantID) === String(user.TenantID) &&
       ProjectService._isProjectAvailableToUser_(project, user);
-    if (visibilityCache) visibilityCache[key] = visible;
+    if (visibilityCache) visibilityCache[visibleKey] = visible;
     return visible;
   },
 
