@@ -11,6 +11,7 @@ function loadProcurementService() {
   let uuid = 0;
   let insertFailure = null;
   let updateFailure = null;
+  const auditEntries = [];
   let projectLookupCount = 0;
   let projectBulkReadCount = 0;
   const procurementReadCounts = Object.create(null);
@@ -68,7 +69,7 @@ function loadProcurementService() {
     Constants: { ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR', NOT_FOUND: 'NOT_FOUND', CONFLICT: 'CONFLICT' } },
     ErrorHandler: { create: (_code, message) => new Error(message) },
     Response: { success: (data) => ({ success: true, data }) },
-    AuditService: { log: () => true },
+    AuditService: { log: (entry) => { auditEntries.push(entry); return true; } },
     Utilities: { getUuid: () => 'uuid' + (++uuid) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => true }) },
     Date, Math, Number, String, Object, Array, JSON, isFinite
@@ -83,7 +84,8 @@ function loadProcurementService() {
     procurementReadCounts,
     setProjectRows: (rows) => { projectRows = rows.map((row) => ({ ...row })); },
     setInsertFailure: (failure) => { insertFailure = failure; },
-    setUpdateFailure: (failure) => { updateFailure = failure; }
+    setUpdateFailure: (failure) => { updateFailure = failure; },
+    auditEntries
   };
 }
 
@@ -134,10 +136,11 @@ test('caps cumulative allocations at the need quantity and records the remainder
     MaterialSpecKey: 'SPEC_TEST', CreatedAt: new Date().toISOString()
   };
   sheets['18_MaterialNeeds'] = [need];
-  service.createOrder({
+  const first = service.createOrder({
     ProjectID: 'P1',
     Items: [{ MaterialNeedID: need.ID, ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 60 }]
-  }, {});
+  }, {}).data;
+  assert.equal(first.Order.Status, 'ACTIVE', 'an order becomes active only after all writes succeed');
   const second = service.createOrder({
     ProjectID: 'P1',
     Items: [{ MaterialNeedID: need.ID, ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 50 }]
@@ -216,6 +219,53 @@ test('failed purchase-order item insert marks order NEEDS_REVIEW without droppin
     'the first item remains recorded as partial history; the failed second item is absent');
 });
 
+
+test('partial purchase order remains NEEDS_REVIEW when both item insertion and recovery status update fail', () => {
+  const { service, sheets, setInsertFailure, setUpdateFailure, auditEntries } = loadProcurementService();
+  setInsertFailure((sheetName) => {
+    if (sheetName === '20_PurchaseOrderItems') throw new Error('controlled item insert failure');
+  });
+  setUpdateFailure((sheetName) => {
+    if (sheetName === '19_PurchaseOrders') throw new Error('controlled recovery update failure');
+  });
+
+  assert.throws(() => service.createOrder({
+    OrderNumber: 'PO-RECOVERY-FAILSAFE',
+    SupplierName: 'تأمین‌کننده آزمایشی',
+    IdempotencyKey: 'ORDER-RECOVERY-FAILSAFE',
+    Items: [
+      { ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 10 },
+      { ItemName: 'زیپ', Unit: 'عدد', OrderedQuantity: 5 }
+    ]
+  }, {}), /controlled item insert failure/, 'the original operation error should not be replaced by the recovery error');
+
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'NEEDS_REVIEW',
+    'the header starts in a recovery state, so a failed recovery update cannot leave it ACTIVE');
+  assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 0);
+  assert.ok(auditEntries.some((entry) =>
+    entry.Action === 'RECOVERY_REQUIRED' &&
+    entry.EntityID === sheets['19_PurchaseOrders'][0].ID
+  ), 'a recovery audit breadcrumb should be attempted when the status update also fails');
+});
+
+test('purchase order is not promoted to ACTIVE when the final activation write fails', () => {
+  const { service, sheets, setUpdateFailure, auditEntries } = loadProcurementService();
+  setUpdateFailure((sheetName) => {
+    if (sheetName === '19_PurchaseOrders') throw new Error('controlled activation write failure');
+  });
+
+  assert.throws(() => service.createOrder({
+    OrderNumber: 'PO-ACTIVATION-FAIL',
+    IdempotencyKey: 'ORDER-ACTIVATION-FAIL',
+    Items: [{ ItemName: 'دکمه', Unit: 'عدد', OrderedQuantity: 20 }]
+  }, {}), /controlled activation write failure/);
+
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'NEEDS_REVIEW');
+  assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 1,
+    'the persisted item is retained as partial history for review');
+  assert.ok(auditEntries.some((entry) => entry.Action === 'RECOVERY_REQUIRED'),
+    'failure of both activation and recovery status writes should be traceable');
+});
 
 test('single receipt retry reconciles order status when the first status update fails after receipt persistence', () => {
   const { service, sheets, setUpdateFailure } = loadProcurementService();
