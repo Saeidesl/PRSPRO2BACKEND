@@ -132,7 +132,12 @@ const ProcurementService = {
         var replayItems = ProcurementRepository.getItems(user.TenantID).filter(function(item) {
           return String(item.PurchaseOrderID) === String(replayOrder.ID);
         });
-        return Response.success({ Order: replayOrder, Items: replayItems, IdempotentReplay: true });
+        return Response.success({
+          Order: replayOrder,
+          Items: replayItems,
+          IdempotentReplay: true,
+          RecoveryRequired: String(replayOrder.Status || '').toUpperCase() === 'NEEDS_REVIEW'
+        });
       }
     }
     if (!Array.isArray(body.Items) || !body.Items.length) {
@@ -315,9 +320,9 @@ const ProcurementService = {
     };
 
     // Google Sheets has no multi-sheet transaction. Validate the full payload before writing.
-    GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ORDERS, order);
     var createdItems = [];
     try {
+      GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.ORDERS, order);
       normalized.forEach(function(entry) {
         var item = entry.source;
         var row = {
