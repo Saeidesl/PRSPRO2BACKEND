@@ -347,7 +347,11 @@ const ProcurementService = {
         var replayReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
           return String(existing.IdempotencyKey || '') === idempotencyKey;
         });
-        if (replayReceipt) return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+        if (replayReceipt) {
+          // Idempotent replay must not bypass project-level visibility checks.
+          this._validateProject_(replayReceipt.ProjectID || '', user.TenantID, user);
+          return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+        }
       }
       return this._createReceiptUnlocked_(body, params);
     } finally {
@@ -404,6 +408,8 @@ const ProcurementService = {
         if (entry && entry.IdempotencyKey) {
           var requestKey = String(entry.IdempotencyKey).trim();
           if (existingReceiptByKey[requestKey]) {
+            // A replay is still a read of the original receipt; enforce the same project boundary.
+            this._validateProject_(existingReceiptByKey[requestKey].ProjectID || '', user.TenantID, user);
             replayedReceipts.push(existingReceiptByKey[requestKey]);
             return;
           }
