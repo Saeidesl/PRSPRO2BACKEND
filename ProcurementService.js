@@ -305,7 +305,8 @@ const ProcurementService = {
       SupplierName: String(body.SupplierName || '').trim(),
       OrderDate: body.OrderDate || now,
       ExpectedDeliveryDate: body.ExpectedDeliveryDate || '',
-      Status: 'ACTIVE',
+      // Start in a non-countable recovery state until every item/allocation write succeeds.
+      Status: 'NEEDS_REVIEW',
       Notes: String(body.Notes || ''),
       CreatedBy: user.ID,
       CreatedAt: now,
@@ -351,12 +352,40 @@ const ProcurementService = {
           });
         });
       });
-    } catch (error) {
-      // Keep the order visible for recovery instead of deleting partial audit history.
+
+      // Promote to ACTIVE only after all item and allocation writes have succeeded.
       GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, {
-        Status: 'NEEDS_REVIEW',
-        Notes: (order.Notes ? order.Notes + '\n' : '') + 'ثبت اقلام ناقص ماند؛ نیازمند بررسی: ' + String(error.message || error)
+        Status: 'ACTIVE',
+        UpdatedAt: now
       });
+      order.Status = 'ACTIVE';
+      order.UpdatedAt = now;
+    } catch (error) {
+      // The header is created as NEEDS_REVIEW, so even a failed recovery write
+      // cannot leave a partial order looking active/countable.
+      try {
+        GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, {
+          Status: 'NEEDS_REVIEW',
+          Notes: (order.Notes ? order.Notes + '\n' : '') + 'ثبت سفارش ناقص ماند؛ نیازمند بررسی: ' + String(error.message || error),
+          UpdatedAt: this._now_()
+        });
+      } catch (recoveryError) {
+        // Preserve the original failure; attempt an audit breadcrumb for later inspection.
+        try {
+          AuditService.log({
+            TenantID: user.TenantID,
+            UserID: user.ID,
+            Action: 'RECOVERY_REQUIRED',
+            EntityType: 'PURCHASE_ORDER',
+            EntityID: order.ID,
+            NewData: {
+              Status: 'NEEDS_REVIEW',
+              OriginalError: String(error && (error.message || error) || error),
+              RecoveryWriteError: String(recoveryError && (recoveryError.message || recoveryError) || recoveryError)
+            }
+          });
+        } catch (auditError) {}
+      }
       throw error;
     }
 
