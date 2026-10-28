@@ -611,7 +611,23 @@ const ProcurementService = {
       }, this);
 
       // One sheet write instead of re-reading and re-writing receipt totals per line.
-      GoogleSheetsRepository.insertMany(ProcurementRepository.SHEETS.RECEIPTS, created);
+      try {
+        GoogleSheetsRepository.insertMany(ProcurementRepository.SHEETS.RECEIPTS, created);
+      } catch (insertError) {
+        try {
+          AuditService.log({
+            TenantID: user.TenantID, UserID: user.ID, Action: 'WRITE_FAILED',
+            EntityType: 'MATERIAL_RECEIPT_BATCH', EntityID: created[0] && created[0].ID || '',
+            NewData: {
+              FailureStage: 'RECEIPT_BATCH_INSERT',
+              ReceiptIDs: created.map(function(receipt) { return receipt.ID; }),
+              PurchaseOrderIDs: normalizedEntries.map(function(entry) { return entry.order.ID; }).filter(function(id, index, ids) { return ids.indexOf(id) === index; }),
+              OriginalError: String(insertError && (insertError.message || insertError) || insertError)
+            }
+          });
+        } catch (auditError) {}
+        throw insertError;
+      }
 
       var allItems = ProcurementRepository.getItems(user.TenantID);
       var itemsByOrder = {};
@@ -837,7 +853,19 @@ const ProcurementService = {
       IdempotencyKey: String(body.IdempotencyKey || '')
     };
     this._validateEvent_(receipt.SourceEventID, user.TenantID, user);
-    GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.RECEIPTS, receipt);
+    try {
+      GoogleSheetsRepository.insert(ProcurementRepository.SHEETS.RECEIPTS, receipt);
+    } catch (insertError) {
+      try {
+        AuditService.log({
+          TenantID: user.TenantID, UserID: user.ID, Action: 'WRITE_FAILED',
+          EntityType: 'MATERIAL_RECEIPT', EntityID: receipt.ID,
+          NewData: { FailureStage: 'RECEIPT_INSERT', PurchaseOrderID: order.ID,
+            OriginalError: String(insertError && (insertError.message || insertError) || insertError) }
+        });
+      } catch (auditError) {}
+      throw insertError;
+    }
 
     var allItems = ProcurementRepository.getItems(user.TenantID).filter(function(candidate) {
       return String(candidate.PurchaseOrderID) === String(order.ID);
