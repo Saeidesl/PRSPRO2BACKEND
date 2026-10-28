@@ -1,6 +1,6 @@
 'use strict';
 
-unction resetRequestCaches_() {
+function resetRequestCaches_() {
   if (
     typeof AccessControlService !== 'undefined' &&
     AccessControlService &&
