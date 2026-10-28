@@ -5,6 +5,19 @@
  */
 var PerformanceDiagnostics = {
   _active: null,
+  _items: Object.create(null),
+
+  reset: function() {
+    this._active = null;
+    this._items = Object.create(null);
+  },
+
+  getSummary: function() {
+    var items = this._items;
+    return Object.keys(items).map(function(key) {
+      return Object.assign({}, items[key]);
+    }).sort(function(a, b) { return b.totalMs - a.totalMs; }).slice(0, 25);
+  },
   _sheetName: 'PMS_PerformanceDiagnostics',
   _headers: [
     'Timestamp', 'Endpoint', 'ElapsedMs', 'RepositoryOperationCount',
@@ -41,12 +54,21 @@ var PerformanceDiagnostics = {
   },
 
   record: function(operation, sheetName, elapsedMs, extra) {
-    var current = this._active;
-    if (!current) return;
-
     var operationName = String(operation || 'unknown');
     var sheet = String(sheetName || '');
     var duration = Math.max(0, Number(elapsedMs) || 0);
+    var itemKey = operationName + '|' + sheet;
+    var item = this._items[itemKey];
+    if (!item) item = this._items[itemKey] = { operation: operationName, sheet: sheet, count: 0, totalMs: 0, maxMs: 0 };
+    item.count++;
+    item.totalMs += duration;
+    item.maxMs = Math.max(item.maxMs, duration);
+    if (extra) ['lockWaitMs', 'writeMs', 'updateMs'].forEach(function(key) {
+      if (extra[key] !== undefined) item[key] = (item[key] || 0) + (Number(extra[key]) || 0);
+    });
+
+    var current = this._active;
+    if (!current) return;
     current.repositoryOperationCount++;
     current.repositoryElapsedMs += duration;
     current.operationsByType[operationName] = (current.operationsByType[operationName] || 0) + 1;

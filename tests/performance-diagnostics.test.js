@@ -135,3 +135,28 @@ test('disabled performance logging emits no console output or spreadsheet writes
   const summary = diagnostics.finishRequest(4);
   assert.equal(summary.type, 'PROCUREMENT_ENDPOINT_TIMING');
 });
+
+
+test('collects request-wide sheet summaries even before a procurement endpoint begins', () => {
+  const diagnostics = loadDiagnostics();
+  diagnostics.reset();
+  diagnostics.record('getAll', '18_MaterialNeeds', 7, { cacheHit: false });
+  diagnostics.record('getAll', '18_MaterialNeeds', 2, { cacheHit: true });
+  const summary = diagnostics.getSummary();
+  assert.equal(summary.length, 1);
+  assert.equal(summary[0].operation, 'getAll');
+  assert.equal(summary[0].sheet, '18_MaterialNeeds');
+  assert.equal(summary[0].count, 2);
+  assert.equal(summary[0].totalMs, 9);
+  assert.equal(summary[0].maxMs, 7);
+});
+
+test('reset clears request-wide and endpoint-scoped diagnostics', () => {
+  const diagnostics = loadDiagnostics();
+  diagnostics.record('findById', '19_PurchaseOrders', 4);
+  diagnostics.beginRequest('/procurement/orders');
+  diagnostics.record('getAll', '19_PurchaseOrders', 3);
+  diagnostics.reset();
+  assert.equal(diagnostics.getSummary().length, 0);
+  assert.equal(diagnostics._active, null);
+});

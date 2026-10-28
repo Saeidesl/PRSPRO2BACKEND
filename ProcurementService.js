@@ -922,9 +922,11 @@ const ProcurementService = {
    * Filtering and export are handled client-side after this one on-demand request.
    */
   reports: function(params) {
+    var sharedContext = { projectVisibilityCache: Object.create(null) };
     var user = this._user_(params);
-    var needsResponse = this.listNeeds(params);
-    var ordersResponse = this.listOrders(params);
+    sharedContext.user = user;
+    var needsResponse = this.listNeeds(params, sharedContext);
+    var ordersResponse = this.listOrders(params, sharedContext);
     var needs = needsResponse && Array.isArray(needsResponse.data) ? needsResponse.data : [];
     var orders = ordersResponse && Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
     var projects = ProjectRepository.getAll().filter(function(project) {

@@ -1,58 +1,5 @@
 'use strict';
 
-var PerformanceDiagnostics = {
-  _items: {},
-
-  reset: function() {
-    this._items = {};
-  },
-
-  record: function(operation, sheetName, elapsedMs, extra) {
-    var key = String(operation || '') + '|' + String(sheetName || '');
-    var item = this._items[key];
-
-    if (!item) {
-      item = {
-        operation: operation || '',
-        sheet: sheetName || '',
-        count: 0,
-        totalMs: 0,
-        maxMs: 0
-      };
-      this._items[key] = item;
-    }
-
-    var elapsed = Number(elapsedMs) || 0;
-    item.count++;
-    item.totalMs += elapsed;
-    item.maxMs = Math.max(item.maxMs, elapsed);
-
-    if (extra) {
-      if (extra.lockWaitMs !== undefined) {
-        item.lockWaitMs = (item.lockWaitMs || 0) + extra.lockWaitMs;
-      }
-      if (extra.writeMs !== undefined) {
-        item.writeMs = (item.writeMs || 0) + extra.writeMs;
-      }
-      if (extra.updateMs !== undefined) {
-        item.updateMs = (item.updateMs || 0) + extra.updateMs;
-      }
-    }
-  },
-
-  getSummary: function() {
-    return Object.keys(this._items)
-      .map(function(key) {
-        var item = PerformanceDiagnostics._items[key];
-        return Object.assign({}, item);
-      })
-      .sort(function(a, b) {
-        return b.totalMs - a.totalMs;
-      })
-      .slice(0, 25);
-  }
-};
-
 function resetRequestCaches_() {
   if (
     typeof AccessControlService !== 'undefined' &&
