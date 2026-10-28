@@ -47,7 +47,7 @@ const AttachmentValidator = {
       );
     }
 
-    if (fileName.length > 240 || /[\\/\\\\\\u0000-\\u001f\\u007f]/.test(fileName) ||
+    if (fileName.length > 240 || /[\/\\\u0000-\u001f\u007f]/.test(fileName) ||
         fileName === '.' || fileName === '..') {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام فایل معتبر نیست.');
     }
