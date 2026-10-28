@@ -90,7 +90,7 @@ const APP_CONFIG = {
 
     ATTACHMENTS: {
       name: '15_Attachments',
-      headers: ['ID','TenantID','EntityType','EntityID','FileName','MimeType','FileSize','StorageProvider','StorageKey','UploadedBy','UploadedAt','Status']
+      headers: ['ID','TenantID','EntityType','EntityID','FileName','MimeType','FileSize','StorageProvider','StorageKey','UploadedBy','UploadedAt','Status','AttachmentType']
     },
 
     AUDIT_LOGS: {
