@@ -286,7 +286,7 @@ test('purchase order is not promoted to ACTIVE when the final activation write f
 });
 
 test('single receipt retry reconciles order status when the first status update fails after receipt persistence', () => {
-  const { service, sheets, setUpdateFailure } = loadProcurementService();
+  const { service, sheets, setUpdateFailure, auditEntries } = loadProcurementService();
   sheets['19_PurchaseOrders'] = [{ ID: 'PO_REC_SINGLE', TenantID: 'T1', Status: 'ACTIVE', Notes: 'preserve', UpdatedAt: 'before' }];
   sheets['20_PurchaseOrderItems'] = [{
     ID: 'ITEM_REC_SINGLE', TenantID: 'T1', PurchaseOrderID: 'PO_REC_SINGLE',
@@ -302,6 +302,7 @@ test('single receipt retry reconciles order status when the first status update 
   assert.throws(() => service.createReceipt(body, {}), /controlled receipt status update failure/);
   assert.equal(sheets['22_MaterialReceipts'].length, 1, 'receipt remains persisted after status update failure');
   assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE', 'the first status update failed');
+  assert.ok(auditEntries.some((entry) => entry.Action === 'RECOVERY_REQUIRED' && entry.NewData.FailureStage === 'RECEIPT_ORDER_STATUS_UPDATE'));
 
   const retry = service.createReceipt(body, {});
   assert.equal(retry.success, true);
@@ -312,7 +313,7 @@ test('single receipt retry reconciles order status when the first status update 
 });
 
 test('batch receipt retry reconciles order status when the first status update fails after batch persistence', () => {
-  const { service, sheets, setUpdateFailure } = loadProcurementService();
+  const { service, sheets, setUpdateFailure, auditEntries } = loadProcurementService();
   sheets['19_PurchaseOrders'] = [{ ID: 'PO_REC_BATCH', TenantID: 'T1', Status: 'ACTIVE', Notes: 'preserve', UpdatedAt: 'before' }];
   sheets['20_PurchaseOrderItems'] = [{
     ID: 'ITEM_REC_BATCH', TenantID: 'T1', PurchaseOrderID: 'PO_REC_BATCH',
@@ -330,6 +331,7 @@ test('batch receipt retry reconciles order status when the first status update f
   assert.throws(() => service.createReceiptsBatch(body, {}), /controlled batch status update failure/);
   assert.equal(sheets['22_MaterialReceipts'].length, 1, 'batch receipt remains persisted after status update failure');
   assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE', 'the first status update failed');
+  assert.ok(auditEntries.some((entry) => entry.Action === 'RECOVERY_REQUIRED' && entry.NewData.FailureStage === 'RECEIPT_ORDER_STATUS_UPDATE'));
 
   const retry = service.createReceiptsBatch(body, {});
   assert.equal(retry.success, true);
