@@ -217,6 +217,18 @@ test('failed purchase-order item insert marks order NEEDS_REVIEW without droppin
   assert.match(order.Notes, /controlled item insert failure/);
   assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 1,
     'the first item remains recorded as partial history; the failed second item is absent');
+
+  const replay = service.createOrder({
+    OrderNumber: 'PO-RECOVERY-001',
+    IdempotencyKey: 'ORDER-RECOVERY-001',
+    Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 10 }]
+  }, {});
+  assert.equal(replay.success, true);
+  assert.equal(replay.data.IdempotentReplay, true);
+  assert.equal(replay.data.RecoveryRequired, true,
+    'idempotent replay must explicitly signal that the existing partial order still needs review');
+  assert.equal((sheets['19_PurchaseOrders'] || []).length, 1, 'replay must not create a second order header');
+  assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 1, 'replay must not silently duplicate or fabricate missing items');
 });
 
 
