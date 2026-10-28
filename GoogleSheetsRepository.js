@@ -248,7 +248,7 @@ const GoogleSheetsRepository = {
       const listKey = String(sheetName);
       if (Object.prototype.hasOwnProperty.call(this._requestListCache, listKey)) {
         cacheHit = true;
-        return this._requestListCache[listKey].map(function(item) { return Object.assign({}, item);
+        return this._requestListCache[listKey].map(function(item) { return Object.assign({}, item); });
       }
 
       const sheet = this.getSheet(sheetName);
