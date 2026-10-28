@@ -312,7 +312,7 @@ const ProcurementService = {
       ExpectedDeliveryDate: body.ExpectedDeliveryDate || '',
       // Start in a non-countable recovery state until every item/allocation write succeeds.
       Status: 'NEEDS_REVIEW',
-      Notes: String(body.Notes || '') + (overReceiptOverride ? '\n[OVER_RECEIPT_OVERRIDE] ' + overReceiptOverride.Reason : ''),
+      Notes: String(body.Notes || ''),
       CreatedBy: user.ID,
       CreatedAt: now,
       UpdatedAt: now,
@@ -798,7 +798,7 @@ const ProcurementService = {
       ReceivedAt: body.ReceivedAt || now,
       WarehouseDepartmentID: body.WarehouseDepartmentID || '',
       SourceEventID: body.SourceEventID || '',
-      Notes: String(body.Notes || ''),
+      Notes: String(body.Notes || '') + (overReceiptOverride ? '\n[OVER_RECEIPT_OVERRIDE] ' + overReceiptOverride.Reason : ''),
       ReceivedBy: user.ID,
       CreatedAt: now,
       IdempotencyKey: String(body.IdempotencyKey || '')
