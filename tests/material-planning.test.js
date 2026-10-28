@@ -126,6 +126,31 @@ test('revises specifications without losing the previous revision', () => {
   assert.equal(listed[0].ID, second.ID);
 });
 
+test('uses upward four-decimal rounding without floating-point over-rounding', () => {
+  const { service } = loadService();
+  const exact = service.recordCalculation({
+    ProjectID: 'P1', CalculationKey: 'ROUND-EXACT', BasisQuantity: 1,
+    ConsumptionPerUnit: 0.1, WastagePercent: 0
+  }, {}).data;
+  assert.equal(exact.CalculatedQuantity, 0.1);
+  const rounded = service.recordCalculation({
+    ProjectID: 'P1', CalculationKey: 'ROUND-UP', BasisQuantity: 3,
+    ConsumptionPerUnit: 0.333333, WastagePercent: 0
+  }, {}).data;
+  assert.equal(rounded.CalculatedQuantity, 1);
+});
+
+test('rejects blank, zero, negative and excessive calculation inputs before idempotent replay', () => {
+  const { service } = loadService();
+  const base = { ProjectID: 'P1', CalculationKey: 'VALIDATION-KEY', BasisQuantity: 10, ConsumptionPerUnit: 1, WastagePercent: 0 };
+  service.recordCalculation(base, {});
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: '' }, {}), /فیلد عددی الزامی است/);
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: -1 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, ConsumptionPerUnit: 0 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, WastagePercent: 101 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: 10000000000000, CalculationKey: 'TOO-LARGE' }, {}), /مقدار محاسبه‌شده خارج از محدوده/);
+});
+
 test('calculation history is idempotent and records quantity variance', () => {
   const { service, sheets } = loadService();
   const payload = {
