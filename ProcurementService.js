@@ -916,7 +916,6 @@ const ProcurementService = {
         UpdatedAt: now
       });
       GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ITEMS, item.ID, updated);
-      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, { UpdatedAt: now });
       AuditService.log({ TenantID: user.TenantID, UserID: user.ID, Action: 'REVISE', EntityType: 'PURCHASE_ORDER_ITEM', EntityID: item.ID, OldData: oldItem, NewData: updated, Reason: reason });
       return Response.success(updated);
     } finally {
@@ -934,7 +933,13 @@ const ProcurementService = {
     try {
       var receipt = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.RECEIPTS, receiptId);
       if (!receipt || String(receipt.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رسید معتبر نیست.');
-      if (!ProcurementService._active_(receipt.Status)) return Response.success(Object.assign({ IdempotentReplay: true }, receipt));
+      if (!ProcurementService._active_(receipt.Status)) {
+        var replayItem = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, receipt.PurchaseOrderItemID);
+        if (replayItem && String(replayItem.TenantID) === String(user.TenantID)) {
+          this._reconcileReceiptOrderStatus_(replayItem.PurchaseOrderID, user.TenantID, this._now_());
+        }
+        return Response.success(Object.assign({ IdempotentReplay: true }, receipt));
+      }
       var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, receipt.PurchaseOrderItemID);
       if (!item || String(item.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش رسید معتبر نیست.');
       var now = this._now_();
