@@ -84,6 +84,31 @@ test('rejects invalid material consumption and ignores legacy early-order settin
   assert.equal(legacyPayload.data.EarlyOrderQuantity, '');
 });
 
+test('normalizes recognized unit aliases and rejects unsupported units on create', () => {
+  const { service } = loadService();
+  const alias = service.createSpecification('P1', {
+    ItemName: 'زیپ', Unit: ' PCS ', ConsumptionPerUnit: 1
+  }, {}).data;
+  assert.equal(alias.Unit, 'عدد');
+  assert.throws(() => service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'جعبه ناشناخته', ConsumptionPerUnit: 1
+  }, {}), /واحد اندازه‌گیری معتبر نیست/);
+});
+
+test('preserves a legacy unit when revising other fields but validates an explicitly changed unit', () => {
+  const { service, sheets } = loadService();
+  const legacy = {
+    ID: 'LEGACY1', TenantID: 'T1', ProjectID: 'P1', SpecKey: 'LEGACY_KEY',
+    ItemName: 'ملزوم قدیمی', ItemCode: 'MAT-OLD', Unit: 'واحد قدیمی',
+    ConsumptionPerUnit: 1, WastagePercent: 0, Status: 'ACTIVE', Revision: 1,
+    CreatedBy: 'U1', CreatedAt: '2026-01-01T00:00:00.000Z'
+  };
+  sheets['24_ProjectMaterialSpecs'] = [legacy];
+  const revised = service.reviseSpecification('LEGACY1', { ConsumptionPerUnit: 2 }, {}).data;
+  assert.equal(revised.Unit, 'واحد قدیمی');
+  assert.throws(() => service.reviseSpecification(revised.ID, { Unit: 'واحد نامعتبر' }, {}), /واحد اندازه‌گیری معتبر نیست/);
+});
+
 test('revises specifications without losing the previous revision', () => {
   const { service, sheets } = loadService();
   const first = service.createSpecification('P1', {
@@ -99,6 +124,32 @@ test('revises specifications without losing the previous revision', () => {
   const listed = service.listSpecifications('P1', {}).data.items;
   assert.equal(listed.length, 1);
   assert.equal(listed[0].ID, second.ID);
+});
+
+test('uses upward four-decimal rounding without floating-point over-rounding', () => {
+  const { service } = loadService();
+  const exact = service.recordCalculation({
+    ProjectID: 'P1', CalculationKey: 'ROUND-EXACT', BasisQuantity: 1,
+    ConsumptionPerUnit: 0.1, WastagePercent: 0
+  }, {}).data;
+  assert.equal(exact.CalculatedQuantity, 0.1);
+  const rounded = service.recordCalculation({
+    ProjectID: 'P1', CalculationKey: 'ROUND-UP', BasisQuantity: 3,
+    ConsumptionPerUnit: 0.333333, WastagePercent: 0
+  }, {}).data;
+  assert.equal(rounded.CalculatedQuantity, 1);
+});
+
+test('rejects blank, zero, negative and excessive calculation inputs before idempotent replay', () => {
+  const { service } = loadService();
+  const base = { ProjectID: 'P1', CalculationKey: 'VALIDATION-KEY', BasisQuantity: 10, ConsumptionPerUnit: 1, WastagePercent: 0 };
+  service.recordCalculation(base, {});
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: '' }, {}), /فیلد عددی الزامی است/);
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: 0 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: -1 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, ConsumptionPerUnit: 0 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, WastagePercent: 101 }, {}), /مقدار معتبر نیست/);
+  assert.throws(() => service.recordCalculation({ ...base, BasisQuantity: 10000000000000, CalculationKey: 'TOO-LARGE' }, {}), /مقدار محاسبه‌شده خارج از محدوده/);
 });
 
 test('calculation history is idempotent and records quantity variance', () => {
@@ -144,6 +195,22 @@ test('confirmed quantity event creates material needs and safely replays', () =>
 });
 
 
+
+test('confirmed calculation supersedes an estimated need for the same specification key', () => {
+  const { service, sheets } = loadService();
+  const spec = service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5
+  }, {}).data;
+  sheets['18_MaterialNeeds'] = [{
+    ID: 'EST1', TenantID: 'T1', ProjectID: 'P1', MaterialSpecKey: spec.SpecKey,
+    ItemName: spec.ItemName, Unit: spec.Unit, RequestedQuantity: 100,
+    NeedType: 'ESTIMATED', Status: 'ACTIVE'
+  }];
+  const result = service.recalculateProjectNeeds('P1', 'EV1', 20, '1', {}).data;
+  assert.equal(sheets['18_MaterialNeeds'].find((row) => row.ID === 'EST1').Status, 'SUPERSEDED');
+  assert.equal(result.items[0].RequestedQuantity, 30);
+  assert.equal(sheets['18_MaterialNeeds'].filter((row) => row.NeedType === 'CONFIRMED' && row.Status === 'ACTIVE').length, 1);
+});
 
 test('voiding the source event marks confirmed needs for review without deleting history', () => {
   const { service, sheets } = loadService();
