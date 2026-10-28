@@ -9,6 +9,7 @@ const test = require('node:test');
 function loadProcurementService() {
   const sheets = Object.create(null);
   let uuid = 0;
+  let insertFailure = null;
   let projectLookupCount = 0;
   let projectBulkReadCount = 0;
   const procurementReadCounts = Object.create(null);
@@ -40,13 +41,19 @@ function loadProcurementService() {
     GoogleSheetsRepository: {
       getAll: (name) => (sheets[name] || []).map((row) => ({ ...row })),
       findById: (name, id) => (sheets[name] || []).find((row) => String(row.ID) === String(id)) || null,
-      insert: (name, row) => { sheets[name] = sheets[name] || []; sheets[name].push({ ...row }); return { ...row }; },
-      updateById: (name, id, row) => {
+      insert: (name, row) => {
+        if (typeof insertFailure === 'function') insertFailure(name, row);
+        sheets[name] = sheets[name] || [];
+        sheets[name].push({ ...row });
+        return { ...row };
+      },
+      updateById: (name, id, patch) => {
         sheets[name] = sheets[name] || [];
         const i = sheets[name].findIndex((item) => String(item.ID) === String(id));
         if (i < 0) throw new Error('missing row');
-        sheets[name][i] = { ...row };
-        return { ...row };
+        // Match GoogleSheetsRepository.updateById: undefined fields retain their current values.
+        sheets[name][i] = { ...sheets[name][i], ...patch };
+        return { ...sheets[name][i] };
       }
     },
     Validator: { required: (v, label) => { if (v === undefined || v === null || String(v).trim() === '') throw new Error('required: ' + label); } },
@@ -66,7 +73,8 @@ function loadProcurementService() {
     getProjectLookupCount: () => projectLookupCount,
     getProjectBulkReadCount: () => projectBulkReadCount,
     procurementReadCounts,
-    setProjectRows: (rows) => { projectRows = rows.map((row) => ({ ...row })); }
+    setProjectRows: (rows) => { projectRows = rows.map((row) => ({ ...row })); },
+    setInsertFailure: (failure) => { insertFailure = failure; }
   };
 }
 
@@ -157,4 +165,44 @@ test('procurement workspace reuses order mapping, user context, and project visi
   assert.equal(listOrdersCalls, 1, 'workspace and dashboard should share the same mapped order response');
   assert.equal(userCalls, 1, 'workspace should resolve and prepare the user/schema context once');
   assert.equal(getProjectLookupCount(), 1, 'project visibility should be checked once per project within the workspace request');
+});
+
+test('failed purchase-order item insert marks order NEEDS_REVIEW without dropping existing header fields', () => {
+  const { service, sheets, setInsertFailure } = loadProcurementService();
+  let itemInsertAttempts = 0;
+  setInsertFailure((sheetName) => {
+    if (sheetName !== '20_PurchaseOrderItems') return;
+    itemInsertAttempts++;
+    if (itemInsertAttempts === 2) throw new Error('controlled item insert failure');
+  });
+
+  assert.throws(() => service.createOrder({
+    ProjectID: 'P1',
+    OrderNumber: 'PO-RECOVERY-001',
+    SupplierName: 'تأمین‌کننده آزمایشی',
+    OrderDate: '2026-10-28T10:00:00.000Z',
+    ExpectedDeliveryDate: '2026-11-05',
+    Notes: 'یادداشت اصلی سفارش',
+    IdempotencyKey: 'ORDER-RECOVERY-001',
+    Items: [
+      { ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 10, UnitPrice: 20 },
+      { ItemName: 'زیپ', Unit: 'عدد', OrderedQuantity: 5, UnitPrice: 3 }
+    ]
+  }, {}), /controlled item insert failure/);
+
+  const orders = sheets['19_PurchaseOrders'] || [];
+  assert.equal(orders.length, 1, 'order header must remain for recovery');
+  const order = orders[0];
+  assert.equal(order.Status, 'NEEDS_REVIEW');
+  assert.equal(order.OrderNumber, 'PO-RECOVERY-001');
+  assert.equal(order.SupplierName, 'تأمین‌کننده آزمایشی');
+  assert.equal(order.OrderDate, '2026-10-28T10:00:00.000Z');
+  assert.equal(order.ExpectedDeliveryDate, '2026-11-05');
+  assert.equal(order.CreatedBy, 'U1');
+  assert.equal(order.TenantID, 'T1');
+  assert.equal(order.IdempotencyKey, 'ORDER-RECOVERY-001');
+  assert.match(order.Notes, /یادداشت اصلی سفارش/);
+  assert.match(order.Notes, /controlled item insert failure/);
+  assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 1,
+    'the first item remains recorded as partial history; the failed second item is absent');
 });
