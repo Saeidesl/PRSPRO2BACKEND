@@ -36,3 +36,10 @@ test('GET diagnostics require an authenticated admin user', () => {
 test('GET error responses never include internal diagnostics', () => {
   assert.match(getHandler, /return buildErrorResponse_\(error, timing, false\)/);
 });
+
+
+test('WebApp uses the shared PerformanceDiagnostics implementation without shadowing it', () => {
+  assert.doesNotMatch(source, /var PerformanceDiagnostics\\s*=\\s*\\{/);
+  assert.match(source, /PerformanceDiagnostics\\.reset\\(\\)/);
+  assert.match(source, /PerformanceDiagnostics\\.getSummary\\(\\)/);
+});
