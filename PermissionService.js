@@ -72,19 +72,13 @@ const PermissionService = {
     const tenantId = String(user.TenantID);
 
     const permissions = PermissionRepository.getAll();
-    const userRoles = UserRoleRepository.getAll().filter(function(item) {
-      return String(item.UserID) === String(userId) &&
-        String(item.TenantID) === tenantId;
-    });
+    const userRoles = AccessControlService.getUserRolesForRequest_(userId, tenantId);
 
     if (userRoles.length === 0) {
       return [];
     }
 
-    const roles = RoleRepository.getAll().filter(function(role) {
-      return String(role.TenantID) === tenantId &&
-        String(role.Status || Constants.STATUS.ACTIVE) === Constants.STATUS.ACTIVE;
-    });
+    const roles = AccessControlService.getActiveRolesForTenantRequest_(tenantId);
 
     const validRoleIds = {};
 
