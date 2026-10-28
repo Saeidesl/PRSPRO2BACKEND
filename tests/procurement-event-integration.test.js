@@ -8,6 +8,7 @@ const test = require('node:test');
 
 function loadIntegration() {
   const calls = [];
+  let projectAvailable = true;
   const settings = [{
     ID: 'SET1', TenantID: 'T1', EventTypeID: 'ET1',
     Action: 'RECALCULATE_CONFIRMED_NEEDS',
@@ -26,7 +27,7 @@ function loadIntegration() {
     EventTypeRepository: { findById: () => ({ ID: 'ET1', TenantID: 'T1', Version: '2' }) },
     EventFieldRepository: { findByEventTypeId: () => [] },
     ProjectRepository: { findById: () => ({ ID: 'P1', TenantID: 'T1' }) },
-    ProjectService: { _isProjectAvailableToUser_: () => true },
+    ProjectService: { _isProjectAvailableToUser_: () => projectAvailable },
     MaterialPlanningService: {
       recalculateProjectNeeds: (...args) => {
         calls.push(args);
@@ -44,7 +45,7 @@ function loadIntegration() {
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementEventIntegrationService.js'), 'utf8');
   vm.runInNewContext(source + '\nthis.__service = ProcurementEventIntegrationService;', context);
-  return { service: context.__service, calls };
+  return { service: context.__service, calls, setProjectAvailable: (value) => { projectAvailable = value; } };
 }
 
 test('validates confirmed quantity mapping before event persistence', () => {
@@ -68,4 +69,19 @@ test('applies confirmed quantity integration to the material planner', () => {
   assert.equal(calls[0][1], 'EV1');
   assert.equal(calls[0][2], 840);
   assert.equal(calls[0][3], '2');
+});
+
+
+test('rejects confirmed-quantity recalculation for a project unavailable to the current user', () => {
+  const { service, setProjectAvailable } = loadIntegration();
+  setProjectAvailable(false);
+  assert.throws(
+    () => service.validate(
+      { ID: 'ET1', TenantID: 'T1', Version: '2' },
+      { confirmed_qty: 840 },
+      'P1',
+      {}
+    ),
+    /پروژه برای محاسبه نیاز قطعی معتبر نیست/
+  );
 });
