@@ -672,7 +672,10 @@ const ProcurementService = {
                 NewData: {
                   FailureStage: 'RECEIPT_ORDER_STATUS_UPDATE',
                   OriginalError: String(statusError && (statusError.message || statusError) || statusError),
-                  ReceiptIDs: created.filter(function(receipt) { return String(receipt.PurchaseOrderItemID) === String(entry.item.ID); }).map(function(receipt) { return receipt.ID; })
+                  ReceiptIDs: created.filter(function(receipt) {
+                    var receiptItem = itemsById[String(receipt.PurchaseOrderItemID || '')];
+                    return receiptItem && String(receiptItem.PurchaseOrderID || '') === orderKey;
+                  }).map(function(receipt) { return receipt.ID; })
                 }
               });
             } catch (auditError) {}
