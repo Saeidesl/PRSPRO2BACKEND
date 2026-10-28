@@ -312,7 +312,7 @@ const ProcurementService = {
       ExpectedDeliveryDate: body.ExpectedDeliveryDate || '',
       // Start in a non-countable recovery state until every item/allocation write succeeds.
       Status: 'NEEDS_REVIEW',
-      Notes: String(body.Notes || ''),
+      Notes: String(body.Notes || '') + (overReceiptOverride ? '\n[OVER_RECEIPT_OVERRIDE] ' + overReceiptOverride.Reason : ''),
       CreatedBy: user.ID,
       CreatedAt: now,
       UpdatedAt: now,
@@ -504,8 +504,20 @@ const ProcurementService = {
         var prior = receivedByItem[key] || 0;
         var ordered = Math.max(0, Number(item.OrderedQuantity) || 0);
         plannedByItem[key] = (plannedByItem[key] || 0) + quantity;
+        var overReceiptOverride = null;
         if (prior + plannedByItem[key] > ordered) {
-          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت‌های انتخاب‌شده از مقدار باقیمانده سفارش «' + String(item.ItemName || '') + '» بیشتر است.');
+          var overrideReason = String(entry.OverReceiptReason || '').trim();
+          if (entry.AllowOverReceipt !== true || !overrideReason) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مجموع دریافت‌های انتخاب‌شده از مقدار باقیمانده سفارش «' + String(item.ItemName || '') + '» بیشتر است. برای استثنا باید AllowOverReceipt=true و دلیل صریح ثبت شود.');
+          }
+          overReceiptOverride = {
+            PreviousReceivedQuantity: prior,
+            OrderedQuantity: ordered,
+            RequestedQuantity: quantity,
+            CumulativeReceivedQuantity: prior + plannedByItem[key],
+            ExcessQuantity: prior + plannedByItem[key] - ordered,
+            Reason: overrideReason
+          };
         }
 
         var allocations = allocationsByItem[key] || [];
@@ -551,7 +563,8 @@ const ProcurementService = {
           order: order,
           body: entry,
           projectId: projectId,
-          quantity: quantity
+          quantity: quantity,
+          overReceiptOverride: overReceiptOverride
         });
       }, this);
 
@@ -575,7 +588,7 @@ const ProcurementService = {
           ReceivedAt: entry.body.ReceivedAt || now,
           WarehouseDepartmentID: entry.body.WarehouseDepartmentID || '',
           SourceEventID: entry.body.SourceEventID || '',
-          Notes: String(entry.body.Notes || ''),
+          Notes: String(entry.body.Notes || '') + (entry.overReceiptOverride ? '\n[OVER_RECEIPT_OVERRIDE] ' + entry.overReceiptOverride.Reason : ''),
           ReceivedBy: user.ID,
           CreatedAt: now,
           IdempotencyKey: String(entry.body.IdempotencyKey || '')
@@ -628,7 +641,18 @@ const ProcurementService = {
         this._reconcileReceiptOrderStatus_(replayOrderId, user.TenantID, now);
       }, this);
 
-      created.forEach(function(receipt) {
+      created.forEach(function(receipt, index) {
+        var createdEntry = normalizedEntries[index];
+        if (createdEntry && createdEntry.overReceiptOverride) {
+          AuditService.log({
+            TenantID: user.TenantID,
+            UserID: user.ID,
+            Action: 'OVER_RECEIPT_OVERRIDE',
+            EntityType: 'MATERIAL_RECEIPT',
+            EntityID: receipt.ID,
+            NewData: { Receipt: receipt, Override: createdEntry.overReceiptOverride }
+          });
+        }
         AuditService.log({
           TenantID: user.TenantID,
           UserID: user.ID,
@@ -747,9 +771,21 @@ const ProcurementService = {
     }).reduce(function(sum, receipt) {
       return sum + (Number(receipt.QuantityReceived) || 0);
     }, 0);
-    var ordered = Number(item.OrderedQuantity) || 0;
+    var ordered = Math.max(0, Number(item.OrderedQuantity) || 0);
+    var overReceiptOverride = null;
     if (prior + quantity > ordered) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تحویل جدید از مقدار باقیمانده سفارش بیشتر است.');
+      var overrideReason = String(body.OverReceiptReason || '').trim();
+      if (body.AllowOverReceipt !== true || !overrideReason) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تحویل جدید از مقدار باقیمانده سفارش بیشتر است. برای استثنا باید AllowOverReceipt=true و دلیل صریح ثبت شود.');
+      }
+      overReceiptOverride = {
+        PreviousReceivedQuantity: prior,
+        OrderedQuantity: ordered,
+        RequestedQuantity: quantity,
+        CumulativeReceivedQuantity: prior + quantity,
+        ExcessQuantity: prior + quantity - ordered,
+        Reason: overrideReason
+      };
     }
 
     var now = this._now_();
@@ -791,6 +827,16 @@ const ProcurementService = {
     }
     updated.UpdatedAt = now;
     GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+    if (overReceiptOverride) {
+      AuditService.log({
+        TenantID: user.TenantID,
+        UserID: user.ID,
+        Action: 'OVER_RECEIPT_OVERRIDE',
+        EntityType: 'MATERIAL_RECEIPT',
+        EntityID: receipt.ID,
+        NewData: { Receipt: receipt, Override: overReceiptOverride }
+      });
+    }
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'MATERIAL_RECEIPT',EntityID:receipt.ID,NewData:receipt});
     return Response.success(receipt);
   },
