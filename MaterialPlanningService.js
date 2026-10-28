@@ -11,6 +11,39 @@ const MaterialPlanningService = {
     CALCULATIONS: '25_MaterialNeedCalculations'
   },
 
+  /** Canonical units accepted for new or changed specifications. No automatic
+   * conversion is performed: quantities for the same material must use the same unit.
+   * Existing legacy unit strings remain readable and can be revised without changing Unit.
+   */
+  UNIT_ALIASES: {
+    'عدد': 'عدد', 'دانه': 'عدد', 'قطعه': 'عدد', 'pcs': 'عدد', 'pc': 'عدد', 'piece': 'عدد', 'pieces': 'عدد',
+    'متر': 'متر', 'متر طول': 'متر', 'm': 'متر', 'meter': 'متر', 'meters': 'متر',
+    'سانتی متر': 'سانتی‌متر', 'سانتی‌متر': 'سانتی‌متر', 'cm': 'سانتی‌متر',
+    'میلی متر': 'میلی‌متر', 'میلی‌متر': 'میلی‌متر', 'mm': 'میلی‌متر',
+    'متر مربع': 'مترمربع', 'مترمربع': 'مترمربع', 'm2': 'مترمربع', 'm²': 'مترمربع',
+    'کیلوگرم': 'کیلوگرم', 'کیلو گرم': 'کیلوگرم', 'kg': 'کیلوگرم',
+    'گرم': 'گرم', 'g': 'گرم',
+    'لیتر': 'لیتر', 'l': 'لیتر', 'liter': 'لیتر', 'litre': 'لیتر',
+    'میلی لیتر': 'میلی‌لیتر', 'میلی‌لیتر': 'میلی‌لیتر', 'ml': 'میلی‌لیتر',
+    'رول': 'رول', 'roll': 'رول', 'rolls': 'رول',
+    'بسته': 'بسته', 'pack': 'بسته', 'package': 'بسته', 'packages': 'بسته',
+    'جفت': 'جفت', 'pair': 'جفت', 'pairs': 'جفت',
+    'دست': 'دست', 'set': 'دست', 'sets': 'دست',
+    'یارد': 'یارد', 'yard': 'یارد', 'yards': 'یارد'
+  },
+
+  _normalizeUnit_: function(value) {
+    Validator.required(value, 'واحد اندازه‌گیری');
+    var original = String(value).trim();
+    var key = original.toLowerCase().replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\\s+/g, ' ');
+    var canonical = this.UNIT_ALIASES[key];
+    if (!canonical) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
+        'واحد اندازه‌گیری معتبر نیست. واحدهای مجاز: عدد، متر، سانتی‌متر، میلی‌متر، مترمربع، کیلوگرم، گرم، لیتر، میلی‌لیتر، رول، بسته، جفت، دست، یارد.');
+    }
+    return canonical;
+  },
+
   _user_: function(params) {
     var user = AccessControlService.getCurrentUser(params || {});
     this._ensureSchema_();
@@ -142,7 +175,7 @@ const MaterialPlanningService = {
     Validator.required(body.ItemName, 'نام ملزوم');
     Validator.required(body.Unit, 'واحد اندازه‌گیری');
     var itemName = String(body.ItemName).trim();
-    var unit = String(body.Unit).trim();
+    var unit = this._normalizeUnit_(body.Unit);
     if (itemName.length > 160 || unit.length > 40) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام ملزوم یا واحد اندازه‌گیری بیش از حد طولانی است.');
     }
@@ -212,7 +245,7 @@ const MaterialPlanningService = {
     }
 
     var itemName = String(body.ItemName === undefined ? current.ItemName : body.ItemName).trim();
-    var unit = String(body.Unit === undefined ? current.Unit : body.Unit).trim();
+    var unit = body.Unit === undefined ? String(current.Unit || '').trim() : this._normalizeUnit_(body.Unit);
     Validator.required(itemName, 'نام ملزوم');
     Validator.required(unit, 'واحد اندازه‌گیری');
     if (itemName.length > 160 || unit.length > 40) {
