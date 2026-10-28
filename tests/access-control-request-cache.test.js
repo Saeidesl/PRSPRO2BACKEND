@@ -7,6 +7,7 @@ const test = require('node:test');
 
 const accessSource = fs.readFileSync(path.join(__dirname, '..', 'AccessControlService.js'), 'utf8');
 const webSource = fs.readFileSync(path.join(__dirname, '..', 'WebApp.js'), 'utf8');
+const permissionSource = fs.readFileSync(path.join(__dirname, '..', 'PermissionService.js'), 'utf8');
 
 test('authenticated user and admin status use request-scoped caches', () => {
   assert.match(accessSource, /_requestUserCache: \{\}/);
@@ -22,4 +23,13 @@ test('authenticated user and admin status use request-scoped caches', () => {
 test('request-scoped authorization caches reset at the beginning of GET and POST executions', () => {
   assert.match(webSource, /function resetRequestCaches_\(\) \{[\s\S]*?AccessControlService\.resetRequestCache\(\);/);
   assert.equal((webSource.match(/resetRequestCaches_\(\);/g) || []).length, 2);
+});
+
+
+test('permission checks reuse one resolved permission list per user within a request', () => {
+  assert.match(permissionSource, /_requestUserPermissionCache: \{\}/);
+  assert.match(permissionSource, /resetRequestCache: function\(\) \{\s*this\._requestUserPermissionCache = \{\};/);
+  assert.match(permissionSource, /this\.getUserPermissions\(userId, user\)/);
+  assert.match(permissionSource, /this\._requestUserPermissionCache\[cacheKey\]\.indexOf\(String\(permissionCode\)\)/);
+  assert.match(webSource, /function resetRequestCaches_\(\) \{[\s\S]*?PermissionService\.resetRequestCache\(\);/);
 });
