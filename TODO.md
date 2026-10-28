@@ -1,5 +1,35 @@
 # TODO — استانداردسازی توسعه‌پذیر تأمین ملزومات
 
+## Technical Spec & Architecture Map
+
+### ساختار و مسیر اجرای بک‌اند
+- `Router.js`: نقطه ورود API؛ مسیرهای تأمین شامل workspace، reports، dashboard، needs، orders، ایجاد سفارش، receipt/receipts، مشخصات مصرف و محاسبات نیاز پروژه، تنظیمات تأمین نوع رویداد و retry هستند. کنترل‌های دسترسی باید در همین مسیر و سرویس‌ها بررسی شوند.
+- `ProcurementService.js`: منطق نیازها، ایجاد سفارش، اقلام سفارش، تخصیص و ثبت دریافت؛ شامل اعتبارسنجی اعداد، tenant/project ownership، کلیدهای idempotency و قفل اسکریپت.
+- `ProcurementRepository.js`: لایه خواندن tenant-scoped برای شیت‌های `18_MaterialNeeds`, `19_PurchaseOrders`, `20_PurchaseOrderItems`, `21_PurchaseAllocations`, `22_MaterialReceipts`.
+- `MaterialPlanningService.js`: مشخصات مصرف نسخه‌دار پروژه و تاریخچه محاسبات؛ `_ensureSchema_()` مهاجرت افزایشی شیت‌های نیاز، سفارش، دریافت، مشخصات مصرف و محاسبات را با `ensureHeaders_()` انجام می‌دهد.
+- `ProcurementEventIntegrationService.js`: اتصال تنظیمات نوع رویداد به تأمین در شیت `23_EventTypeProcurementSettings`؛ نگاشت فیلدهای پویا، اعتبارسنجی دریافت و محاسبه نیاز قطعی.
+- `DatabaseSetup.js`: منبع تعریف شیت‌ها و سرستون‌ها در `APP_CONFIG.SHEETS`؛ توابع کلیدی `setupDatabase()`, `createAllSheets_()`, `ensureHeaders_()`, `applyAllValidations_()`, `backfillPurchaseOrderSurplus_()` و `checkDatabaseHealth()`.
+- `GoogleSheetsRepository.js`: `getSheet()`, `getHeaders()`, `getAll()`, `findById()`, `findOne()`, `insert()`, `insertMany()`, `updateById()`; کش‌های درون‌درخواست و `_logTiming()` برای سنجش زمان دسترسی به شیت.
+- `ReportService.js`: زیرساخت گزارش‌ها؛ فرانت‌اند مرتبط در ریپوی `Saeidesl/PRSPRO2` شامل `pages/procurement.html`, `js/modules/procurement.js`, `js/modules/material-planning.js`, و اتصالات `event-types.js`, `events.js`, `reports.js` است.
+- آزمون‌های مرتبط شناخته‌شده: `tests/procurement-service.test.js`, `tests/material-planning.test.js`, `tests/procurement-event-integration.test.js` و آزمون قرارداد API در صورت وجود در شاخه مربوطه.
+
+### قرارداد داده تأمین از روی کد
+- نیاز: `18_MaterialNeeds` با `ID`, `TenantID`, `ProjectID`, `SourceEventID`, `ItemName`, `ItemCode`, `Unit`, `RequestedQuantity`, `NeededBy`, `Status`, `Notes`, اطلاعات ایجاد/ویرایش، `MaterialSpecID`, `MaterialSpecKey`, `SpecificationRevision`, `CalculationID`, `BasisQuantity`, `NeedType`, `CalculationKey`.
+- سفارش: `19_PurchaseOrders` با شناسه tenant، شماره سفارش، تأمین‌کننده، تاریخ سفارش/تحویل مورد انتظار، وضعیت، یادداشت، ثبت‌کننده، زمان‌ها و `IdempotencyKey`.
+- ردیف سفارش: `20_PurchaseOrderItems` شامل `PurchaseOrderID`, `MaterialNeedID`, نام/کد/واحد قلم، `OrderedQuantity`, `UnitPrice`, `SurplusQuantity`, `SurplusCost`.
+- تخصیص: `21_PurchaseAllocations` شامل `PurchaseOrderItemID`, `ProjectID`, `MaterialNeedID`, `AllocatedQuantity`.
+- دریافت: `22_MaterialReceipts` شامل `PurchaseOrderItemID`, `ProjectID`, `QuantityReceived`, `ReceivedAt`, `WarehouseDepartmentID`, `SourceEventID`, `ReceivedBy`, `IdempotencyKey`.
+- مشخصات مصرف: `24_ProjectMaterialSpecs` با `SpecKey`, `ConsumptionPerUnit`, `WastagePercent`, `Revision` و وضعیت؛ تاریخچه محاسبات در `25_MaterialNeedCalculations`.
+- تنظیمات اتصال رویداد به تأمین: `23_EventTypeProcurementSettings` با `EventTypeID`, `Action`, `FieldMapJSON`, وضعیت و اطلاعات ثبت.
+- شناسه‌ها در سرویس‌ها با پیشوند و UUID ساخته می‌شوند؛ شناسه‌ها و ردیف‌ها به `TenantID` مقیدند. ثبت سفارش و دریافت از `LockService` و کلید idempotency استفاده می‌کند. مقدار سفارش و دریافت باید مثبت باشد؛ قیمت واحد می‌تواند صفر باشد. دریافت جزئی مجاز است اما جمع دریافت نباید از مقدار سفارش یا سهم تخصیص‌یافته تجاوز کند.
+
+### یافته‌های ممیزی تسک 1.3 — 2026-10-28
+- **ریسک بحرانی نام شیت تکراری:** در `APP_CONFIG.SHEETS` هر دو `MATERIAL_NEEDS` و `PROJECT_STATUSES` به نام `18_MaterialNeeds` اشاره می‌کنند، درحالی‌که سرستون‌هایشان متفاوت است. `createAllSheets_()` هر دو تعریف را روی یک شیت اعمال می‌کند و `ensureHeaders_()` ستون‌های تعریف دوم را به انتهای همان شیت اضافه می‌کند؛ بنابراین `checkDatabaseHealth()` نیز نمی‌تواند هر دو تعریف را با مقایسه سرستون‌های ابتدایی تأیید کند. این ایراد در بررسی ایستای کد تأیید شد؛ وضعیت واقعی شیت زنده هنوز بررسی نشده است. قبل از هر اصلاح، باید نام صحیح شیت وضعیت‌های پروژه و مهاجرت سازگار مشخص شود.
+- **اعتبارسنجی شیت‌ها:** `applyAllValidations_()` برای وضعیت پروژه/رویداد/کاربر و چند فیلد پایه قوانین فهرستی ایجاد می‌کند، اما در کد فعلی برای شیت‌های تأمین، سفارش، ردیف سفارش، تخصیص، دریافت، مشخصات مصرف و محاسبات، قواعد مستقیم شیت تعریف نشده است. کنترل‌های اصلی تأمین در سرویس‌ها انجام می‌شوند؛ باید اعتبارسنجی برنامه‌ای و سازگاری داده‌های قدیمی جداگانه آزموده شوند.
+- **مهاجرت افزایشی:** `ensureHeaders_()` سرستون‌های تکراری را تشخیص می‌دهد و متوقف می‌شود؛ ستون‌های مفقود را فقط به انتها می‌افزاید و ستون‌های قبلی را جابه‌جا یا حذف نمی‌کند. بااین‌حال، تابع `checkDatabaseHealth()` فرض می‌کند سرستون‌های مورد انتظار دقیقاً در موقعیت ابتدایی تعریف‌شده قرار دارند و با ستون‌های افزوده‌شده در ترتیب متفاوت ممکن است گزارش نادرست بدهد.
+- **راه‌اندازی در برابر بازسازی:** `setupDatabase()` از مسیر `createAllSheets_()` ساختار را به‌صورت افزایشی آماده می‌کند؛ `resetDatabaseSheets()` همه شیت‌ها را حذف و دوباره ایجاد می‌کند و عملیاتی مخرب است. در این ممیزی هیچ‌یک اجرا نشده‌اند.
+- **حدود شواهد:** این مرحله صرفاً بازبینی ایستای کد مخزن است. به Google Sheets زنده متصل نشده‌ایم، داده‌های واقعی/قوانین فعلی شیت‌ها خوانده نشده‌اند و هیچ آزمون خودکار یا انتشار Apps Script انجام نشده است.
+
 ## هدف پروژه
 استانداردسازی بخش تأمین ملزومات سامانه مدیریت تولید پوشاک با حفظ سازگاری با پروژه‌ها، گردش کار، رویدادهای تولید، مجوزها و گزارش‌های موجود؛ با تمرکز بر سهولت استفاده، سرعت، صحت داده‌ها و امکان توسعه به انبارداری کامل در آینده.
 
