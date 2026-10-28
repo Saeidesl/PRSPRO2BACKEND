@@ -420,3 +420,85 @@ test('successful order retry with the same idempotency key returns the original 
   assert.equal(sheets['20_PurchaseOrderItems'][0].OrderedQuantity, 12);
 });
 
+function seedOverReceiptScenario(sheets, suffix) {
+  const orderId = 'PO_OVER_' + suffix;
+  const itemId = 'ITEM_OVER_' + suffix;
+  sheets['19_PurchaseOrders'] = [{
+    ID: orderId, TenantID: 'T1', Status: 'ACTIVE', Notes: 'preserve', ProjectID: ''
+  }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: itemId, TenantID: 'T1', PurchaseOrderID: orderId,
+    ItemName: 'پارچه', OrderedQuantity: 5, ProjectID: ''
+  }];
+  sheets['22_MaterialReceipts'] = [{
+    ID: 'REC_PRIOR_' + suffix, TenantID: 'T1', PurchaseOrderItemID: itemId,
+    ProjectID: '', QuantityReceived: 4, IdempotencyKey: ''
+  }];
+  return { orderId, itemId };
+}
+
+test('single receipt rejects over-receipt unless an explicit override reason is supplied', () => {
+  const { service, sheets } = loadProcurementService();
+  const { itemId } = seedOverReceiptScenario(sheets, 'SINGLE_REJECT');
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: itemId, QuantityReceived: 2, IdempotencyKey: 'OVER_SINGLE_REJECT'
+  }, {}), /AllowOverReceipt=true/);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'rejected over-receipt must not be persisted');
+});
+
+test('single receipt over-receipt override requires a reason and emits an explicit audit record', () => {
+  const { service, sheets, auditEntries } = loadProcurementService();
+  const { itemId } = seedOverReceiptScenario(sheets, 'SINGLE_ALLOW');
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: itemId, QuantityReceived: 2,
+    AllowOverReceipt: true, IdempotencyKey: 'OVER_SINGLE_NO_REASON'
+  }, {}), /AllowOverReceipt=true/);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'override without a reason must not be persisted');
+
+  const result = service.createReceipt({
+    PurchaseOrderItemID: itemId, QuantityReceived: 2,
+    AllowOverReceipt: true, OverReceiptReason: 'تأیید کتبی مسئول دریافت',
+    IdempotencyKey: 'OVER_SINGLE_ALLOW'
+  }, {});
+  assert.equal(result.success, true);
+  assert.match(result.data.Notes, /OVER_RECEIPT_OVERRIDE/);
+  const audit = auditEntries.find((entry) => entry.Action === 'OVER_RECEIPT_OVERRIDE');
+  assert.ok(audit, 'explicit over-receipt audit record must be written');
+  assert.equal(audit.EntityID, result.data.ID);
+  assert.equal(audit.NewData.Override.ExcessQuantity, 1);
+  assert.equal(audit.NewData.Override.Reason, 'تأیید کتبی مسئول دریافت');
+});
+
+test('batch receipt rejects over-receipt unless an explicit override reason is supplied', () => {
+  const { service, sheets } = loadProcurementService();
+  const { itemId } = seedOverReceiptScenario(sheets, 'BATCH_REJECT');
+  assert.throws(() => service.createReceiptsBatch({ Receipts: [{
+    PurchaseOrderItemID: itemId, QuantityReceived: 2, IdempotencyKey: 'OVER_BATCH_REJECT'
+  }] }, {}), /AllowOverReceipt=true/);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'rejected batch over-receipt must not be persisted');
+});
+
+test('batch receipt over-receipt override requires a reason and emits an explicit audit record', () => {
+  const { service, sheets, auditEntries } = loadProcurementService();
+  const { itemId } = seedOverReceiptScenario(sheets, 'BATCH_ALLOW');
+  assert.throws(() => service.createReceiptsBatch({ Receipts: [{
+    PurchaseOrderItemID: itemId, QuantityReceived: 2,
+    AllowOverReceipt: true, IdempotencyKey: 'OVER_BATCH_NO_REASON'
+  }] }, {}), /AllowOverReceipt=true/);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'override without a reason must not be persisted');
+
+  const result = service.createReceiptsBatch({ Receipts: [{
+    PurchaseOrderItemID: itemId, QuantityReceived: 2,
+    AllowOverReceipt: true, OverReceiptReason: 'مغایرت بسته‌بندی تأییدشده',
+    IdempotencyKey: 'OVER_BATCH_ALLOW'
+  }] }, {});
+  assert.equal(result.success, true);
+  assert.equal(result.data.length, 1);
+  assert.match(result.data[0].Notes, /OVER_RECEIPT_OVERRIDE/);
+  const audit = auditEntries.find((entry) => entry.Action === 'OVER_RECEIPT_OVERRIDE');
+  assert.ok(audit, 'explicit batch over-receipt audit record must be written');
+  assert.equal(audit.EntityID, result.data[0].ID);
+  assert.equal(audit.NewData.Override.ExcessQuantity, 1);
+  assert.equal(audit.NewData.Override.Reason, 'مغایرت بسته‌بندی تأییدشده');
+});
+
