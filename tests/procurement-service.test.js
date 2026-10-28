@@ -10,17 +10,21 @@ function loadProcurementService() {
   const sheets = Object.create(null);
   let uuid = 0;
   let projectLookupCount = 0;
+  let schemaPreparationCalls = 0;
   const context = {
     AccessControlService: { getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' }) },
+    MaterialPlanningService: { _ensureSchema_: () => { schemaPreparationCalls++; return true; } },
     ProjectRepository: {
       findById: (id) => {
         projectLookupCount++;
-        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : null;
+        return String(id) === 'P1' ? { ID: 'P1', TenantID: 'T1' } : (String(id) === 'P2' ? { ID: 'P2', TenantID: 'T2' } : (String(id) === 'P3' ? { ID: 'P3', TenantID: 'T1' } : null));
       }
     },
-    ProjectService: { _isProjectAvailableToUser_: () => true },
+    ProjectService: { _isProjectAvailableToUser_: (project) => String(project.ID) !== 'P3' },
     EventRepository: {
-      findById: (id) => String(id) === 'EV1' ? { ID: 'EV1', TenantID: 'T1', ProjectID: 'P1' } : null
+      findById: (id) => String(id) === 'EV1'
+        ? { ID: 'EV1', TenantID: 'T1', ProjectID: 'P1' }
+        : (String(id) === 'EV2' ? { ID: 'EV2', TenantID: 'T2', ProjectID: 'P2' } : null)
     },
     ProcurementRepository: {
       SHEETS: { NEEDS: '18_MaterialNeeds', ORDERS: '19_PurchaseOrders', ITEMS: '20_PurchaseOrderItems', ALLOCATIONS: '21_PurchaseAllocations', RECEIPTS: '22_MaterialReceipts' },
@@ -51,9 +55,10 @@ function loadProcurementService() {
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => true }) },
     Date, Math, Number, String, Object, Array, JSON, isFinite
   };
+  const validatorSource = fs.readFileSync(path.join(__dirname, '..', 'ProcurementValidator.js'), 'utf8');
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementService.js'), 'utf8');
-  vm.runInNewContext(source + '\nthis.__service = ProcurementService;', context);
-  return { service: context.__service, sheets, getProjectLookupCount: () => projectLookupCount };
+  vm.runInNewContext(validatorSource + '\n' + source + '\nthis.__service = ProcurementService;', context);
+  return { service: context.__service, sheets, getProjectLookupCount: () => projectLookupCount, getSchemaPreparationCalls: () => schemaPreparationCalls };
 }
 
 test('legacy estimated needs and confirmed needs share an allocation key for existing procurement records', () => {
@@ -87,7 +92,7 @@ test('caps cumulative allocations at the need quantity and records the remainder
   assert.equal(allocations.reduce((sum, row) => sum + row.AllocatedQuantity, 0), 100);
 });
 test('procurement workspace reuses order mapping, user context, and project visibility checks', () => {
-  const { service, sheets, getProjectLookupCount } = loadProcurementService();
+  const { service, sheets, getProjectLookupCount, getSchemaPreparationCalls } = loadProcurementService();
   sheets['18_MaterialNeeds'] = [{
     ID: 'N_WORKSPACE_1', TenantID: 'T1', ProjectID: 'P1',
     RequestedQuantity: 10, Status: 'ACTIVE', NeedType: 'CONFIRMED', MaterialSpecKey: 'SPEC_WORKSPACE'
@@ -110,6 +115,114 @@ test('procurement workspace reuses order mapping, user context, and project visi
   assert.equal(result.success, true);
   assert.equal(result.data.needs.length, 1);
   assert.equal(listOrdersCalls, 1, 'workspace and dashboard should share the same mapped order response');
-  assert.equal(userCalls, 1, 'workspace should resolve and prepare the user/schema context once');
+  assert.equal(userCalls, 1, 'workspace should resolve the user context once');
+  assert.equal(getSchemaPreparationCalls(), 0, 'workspace must not perform schema migration during a request');
   assert.equal(getProjectLookupCount(), 1, 'project visibility should be checked once per project within the workspace request');
+});
+
+test('tenant boundary helpers reject cross-tenant project and event references', () => {
+  const { service } = loadProcurementService();
+  const user = { ID: 'U1', TenantID: 'T1' };
+  assert.throws(() => service._validateProject_('P2', 'T1', user), /پروژه معتبر نیست/);
+  assert.throws(() => service._validateEvent_('EV2', 'T1', user), /رویداد منبع معتبر نیست/);
+  assert.equal(service._validateProject_('P1', 'T1', user).ID, 'P1');
+  assert.equal(service._validateEvent_('EV1', 'T1', user).ID, 'EV1');
+});
+
+test('createOrder rejects a project owned by another tenant before writing an order', () => {
+  const { service, sheets } = loadProcurementService();
+  assert.throws(() => service.createOrder({
+    ProjectID: 'P2',
+    Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 5 }]
+  }, {}), /پروژه معتبر نیست/);
+  assert.equal((sheets['19_PurchaseOrders'] || []).length, 0);
+  assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 0);
+});
+
+test('createReceipt rejects a source event owned by another tenant before writing a receipt', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{
+    ID: 'PO1', TenantID: 'T1', Status: 'ACTIVE', ProjectID: '', OrderedQuantity: 5
+  }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM1', TenantID: 'T1', PurchaseOrderID: 'PO1', OrderedQuantity: 5, ItemName: 'پارچه'
+  }];
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: 'ITEM1', QuantityReceived: 1, SourceEventID: 'EV2'
+  }, {}), /رویداد منبع معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+});
+
+
+test('createReceipt rejects a soft-deleted purchase order item', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO1', TenantID: 'T1', Status: 'ACTIVE' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_DELETED', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 5, ItemName: 'زیپ', Status: 'DELETED'
+  }];
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: 'ITEM_DELETED', QuantityReceived: 1
+  }, {}), /قلم سفارش معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+});
+
+
+test('createReceiptsBatch rejects a soft-deleted purchase order item before writing receipts', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO1', TenantID: 'T1', Status: 'ACTIVE' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_DELETED_BATCH', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 5, ItemName: 'زیپ', Status: 'DELETED'
+  }];
+  assert.throws(() => service.createReceiptsBatch({
+    Receipts: [{ PurchaseOrderItemID: 'ITEM_DELETED_BATCH', QuantityReceived: 1 }]
+  }, {}), /قلم سفارش معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+});
+
+
+test('single and batch receipts reject inactive parent purchase orders', () => {
+  const { service, sheets } = loadProcurementService();
+  const item = {
+    ID: 'ITEM1', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 10, ItemName: 'پارچه', Status: 'ACTIVE'
+  };
+  sheets['20_PurchaseOrderItems'] = [item];
+
+  for (const status of ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW']) {
+    sheets['19_PurchaseOrders'] = [{ ID: 'PO1', TenantID: 'T1', Status: status }];
+    assert.throws(
+      () => service.createReceipt({
+        PurchaseOrderItemID: 'ITEM1', QuantityReceived: 1
+      }, {}),
+      /سفارش خرید معتبر یا فعال نیست/,
+      'single receipt must reject order status ' + status
+    );
+    assert.throws(
+      () => service.createReceiptsBatch({
+        Receipts: [{ PurchaseOrderItemID: 'ITEM1', QuantityReceived: 1 }]
+      }, {}),
+      /سفارش خرید معتبر یا فعال نیست/,
+      'batch receipt must reject order status ' + status
+    );
+    assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+  }
+});
+
+
+test('single and batch receipt idempotent replays enforce project visibility', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['22_MaterialReceipts'] = [{
+    ID: 'REC_PRIVATE', TenantID: 'T1', IdempotencyKey: 'private-key',
+    PurchaseOrderItemID: 'ITEM_PRIVATE', ProjectID: 'P3', QuantityReceived: 2
+  }];
+
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: 'ITEM_OTHER', QuantityReceived: 1, IdempotencyKey: 'private-key'
+  }, {}), /پروژه معتبر نیست/);
+  assert.throws(() => service.createReceiptsBatch({
+    Receipts: [{ PurchaseOrderItemID: 'ITEM_OTHER', QuantityReceived: 1, IdempotencyKey: 'private-key' }]
+  }, {}), /پروژه معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 1, 'replay must not write another receipt');
 });

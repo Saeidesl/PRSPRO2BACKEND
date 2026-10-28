@@ -8,6 +8,9 @@ const test = require('node:test');
 
 function loadIntegration() {
   const calls = [];
+  let projectAvailable = true;
+  let itemRow = null;
+  let orderRow = null;
   const settings = [{
     ID: 'SET1', TenantID: 'T1', EventTypeID: 'ET1',
     Action: 'RECALCULATE_CONFIRMED_NEEDS',
@@ -21,18 +24,20 @@ function loadIntegration() {
     },
     GoogleSheetsRepository: {
       getAll: (name) => name === '23_EventTypeProcurementSettings' ? settings : [],
-      findById: () => null
+      findById: (name, id) => name === '20_PurchaseOrderItems' && itemRow && String(id) === String(itemRow.ID)
+        ? itemRow : (name === '19_PurchaseOrders' && orderRow && String(id) === String(orderRow.ID) ? orderRow : null)
     },
     EventTypeRepository: { findById: () => ({ ID: 'ET1', TenantID: 'T1', Version: '2' }) },
     EventFieldRepository: { findByEventTypeId: () => [] },
     ProjectRepository: { findById: () => ({ ID: 'P1', TenantID: 'T1' }) },
-    ProjectService: { _isProjectAvailableToUser_: () => true },
+    ProjectService: { _isProjectAvailableToUser_: () => projectAvailable },
     MaterialPlanningService: {
       recalculateProjectNeeds: (...args) => {
         calls.push(args);
         return { success: true, data: { BasisQuantity: args[2] } };
       }
     },
+    ProcurementRepository: { SHEETS: { ITEMS: '20_PurchaseOrderItems', ORDERS: '19_PurchaseOrders' }, getReceipts: () => [] },
     ProcurementService: { createReceipt: () => null },
     Validator: { required: (value, label) => {
       if (value === undefined || value === null || String(value).trim() === '') throw new Error('required: ' + label);
@@ -44,7 +49,7 @@ function loadIntegration() {
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementEventIntegrationService.js'), 'utf8');
   vm.runInNewContext(source + '\nthis.__service = ProcurementEventIntegrationService;', context);
-  return { service: context.__service, calls };
+  return { service: context.__service, calls, setProjectAvailable: (value) => { projectAvailable = value; }, setReceiptRows: (item, order) => { itemRow = item; orderRow = order; }, settings };
 }
 
 test('validates confirmed quantity mapping before event persistence', () => {
@@ -68,4 +73,69 @@ test('applies confirmed quantity integration to the material planner', () => {
   assert.equal(calls[0][1], 'EV1');
   assert.equal(calls[0][2], 840);
   assert.equal(calls[0][3], '2');
+});
+
+
+test('rejects confirmed-quantity recalculation for a project unavailable to the current user', () => {
+  const { service, setProjectAvailable } = loadIntegration();
+  setProjectAvailable(false);
+  assert.throws(
+    () => service.validate(
+      { ID: 'ET1', TenantID: 'T1', Version: '2' },
+      { confirmed_qty: 840 },
+      'P1',
+      {}
+    ),
+    /پروژه برای محاسبه نیاز قطعی معتبر نیست/
+  );
+});
+
+
+test('rejects a soft-deleted purchase item in event integration before event persistence', () => {
+  const { service, settings, setReceiptRows } = loadIntegration();
+  settings[0].Action = 'RECORD_RECEIPT';
+  settings[0].FieldMapJSON = JSON.stringify({
+    PurchaseOrderItemID: 'item_id',
+    QuantityReceived: 'qty'
+  });
+  setReceiptRows(
+    { ID: 'ITEM_DELETED', TenantID: 'T1', PurchaseOrderID: 'PO1', OrderedQuantity: 10, Status: 'DELETED' },
+    { ID: 'PO1', TenantID: 'T1', Status: 'ACTIVE' }
+  );
+  assert.throws(
+    () => service.validate(
+      { ID: 'ET1', TenantID: 'T1', Version: '2' },
+      { item_id: 'ITEM_DELETED', qty: 1 },
+      '',
+      {}
+    ),
+    /قلم سفارش برای ثبت دریافت معتبر یا فعال نیست/
+  );
+});
+
+
+test('rejects receipt integration when the parent order is cancelled, void, deleted, or needs review', () => {
+  const { service, settings, setReceiptRows } = loadIntegration();
+  settings[0].Action = 'RECORD_RECEIPT';
+  settings[0].FieldMapJSON = JSON.stringify({
+    PurchaseOrderItemID: 'item_id',
+    QuantityReceived: 'qty'
+  });
+  const item = {
+    ID: 'ITEM1', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 10, Status: 'ACTIVE'
+  };
+  for (const status of ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW']) {
+    setReceiptRows(item, { ID: 'PO1', TenantID: 'T1', Status: status });
+    assert.throws(
+      () => service.validate(
+        { ID: 'ET1', TenantID: 'T1', Version: '2' },
+        { item_id: 'ITEM1', qty: 1 },
+        '',
+        {}
+      ),
+      /سفارش خرید برای ثبت دریافت معتبر یا فعال نیست/,
+      'should reject parent order status ' + status
+    );
+  }
 });

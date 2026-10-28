@@ -5,10 +5,6 @@
 const ProcurementService = {
   _user_: function(params) {
     var user = AccessControlService.getCurrentUser(params || {});
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') {
-      MaterialPlanningService._ensureSchema_();
-    }
     return user;
   },
 
@@ -80,8 +76,8 @@ const ProcurementService = {
   },
 
   createOrder: function(body, params) {
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
+    body = body || {};
+    ProcurementValidator.validateOrder(body);
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت سفارش دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
@@ -339,8 +335,7 @@ const ProcurementService = {
 
   createReceipt: function(body, params) {
     body = body || {};
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
+    ProcurementValidator.validateReceipt(body);
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت دریافت دیگری در حال انجام است؛ چند لحظه بعد دوباره تلاش کنید.');
@@ -352,7 +347,11 @@ const ProcurementService = {
         var replayReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
           return String(existing.IdempotencyKey || '') === idempotencyKey;
         });
-        if (replayReceipt) return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+        if (replayReceipt) {
+          // Idempotent replay must not bypass project-level visibility checks.
+          this._validateProject_(replayReceipt.ProjectID || '', user.TenantID, user);
+          return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+        }
       }
       return this._createReceiptUnlocked_(body, params);
     } finally {
@@ -362,8 +361,7 @@ const ProcurementService = {
 
   createReceiptsBatch: function(body, params) {
     body = body || {};
-    if (typeof MaterialPlanningService !== 'undefined' && MaterialPlanningService &&
-        typeof MaterialPlanningService._ensureSchema_ === 'function') MaterialPlanningService._ensureSchema_();
+    ProcurementValidator.validateReceiptBatch(body);
     var entries = body.Receipts;
     if (!Array.isArray(entries) || !entries.length) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای ثبت دریافت، حداقل یک قلم لازم است.');
@@ -410,6 +408,8 @@ const ProcurementService = {
         if (entry && entry.IdempotencyKey) {
           var requestKey = String(entry.IdempotencyKey).trim();
           if (existingReceiptByKey[requestKey]) {
+            // A replay is still a read of the original receipt; enforce the same project boundary.
+            this._validateProject_(existingReceiptByKey[requestKey].ProjectID || '', user.TenantID, user);
             replayedReceipts.push(existingReceiptByKey[requestKey]);
             return;
           }
@@ -424,12 +424,12 @@ const ProcurementService = {
         var quantity = this._number_(entry.QuantityReceived, 'مقدار تحویل', false);
         var key = String(entry.PurchaseOrderItemID);
         var item = itemsById[key] || GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, key);
-        if (!item || String(item.TenantID) !== String(user.TenantID)) {
+        if (!item || String(item.TenantID) !== String(user.TenantID) || !this._active_(item.Status)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
         }
         var orderKey = String(item.PurchaseOrderID || '');
         var order = ordersById[orderKey] || GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, orderKey);
-        if (!order || String(order.TenantID) !== String(user.TenantID) || String(order.Status).toUpperCase() === 'CANCELLED') {
+        if (!order || String(order.TenantID) !== String(user.TenantID) || ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(String(order.Status || 'ACTIVE').toUpperCase()) !== -1) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
         }
         var projectId = entry.ProjectID || '';
@@ -581,11 +581,11 @@ const ProcurementService = {
     Validator.required(body.PurchaseOrderItemID, 'قلم سفارش');
     var quantity = this._number_(body.QuantityReceived, 'مقدار تحویل', false);
     var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, body.PurchaseOrderItemID);
-    if (!item || String(item.TenantID) !== String(user.TenantID)) {
+    if (!item || String(item.TenantID) !== String(user.TenantID) || !this._active_(item.Status)) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
     }
     var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
-    if (!order || String(order.TenantID) !== String(user.TenantID) || String(order.Status).toUpperCase() === 'CANCELLED') {
+    if (!order || String(order.TenantID) !== String(user.TenantID) || ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(String(order.Status || 'ACTIVE').toUpperCase()) !== -1) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
     }
     var projectId = body.ProjectID || '';
