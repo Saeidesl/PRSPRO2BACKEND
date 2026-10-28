@@ -608,3 +608,80 @@ test('retrying a voided receipt reconciles the parent order after the first stat
   assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE', 'retry repairs the derived order status');
 });
 
+test('purchase-order header insert failure is recorded with a precise failure stage', () => {
+  const { service, sheets, setInsertFailure, auditEntries } = loadProcurementService();
+  setInsertFailure((sheetName) => {
+    if (sheetName === '19_PurchaseOrders') throw new Error('controlled header insert failure');
+  });
+  assert.throws(() => service.createOrder({
+    IdempotencyKey: 'HEADER-FAIL',
+    Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 3 }]
+  }, {}), /controlled header insert failure/);
+  assert.equal((sheets['19_PurchaseOrders'] || []).length, 0);
+  const audit = auditEntries.find((entry) => entry.Action === 'RECOVERY_REQUIRED');
+  assert.ok(audit, 'header failure must be traceable even when the header itself was not persisted');
+  assert.equal(audit.NewData.FailureStage, 'ORDER_HEADER_INSERT');
+  assert.match(audit.NewData.OriginalError, /controlled header insert failure/);
+});
+
+test('purchase-order allocation insert failure preserves partial rows and records the exact stage', () => {
+  const { service, sheets, setInsertFailure, auditEntries } = loadProcurementService();
+  setInsertFailure((sheetName) => {
+    if (sheetName === '21_PurchaseAllocations') throw new Error('controlled allocation insert failure');
+  });
+  assert.throws(() => service.createOrder({
+    ProjectID: 'P1',
+    IdempotencyKey: 'ALLOCATION-FAIL',
+    Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 3 }]
+  }, {}), /controlled allocation insert failure/);
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'NEEDS_REVIEW');
+  assert.equal((sheets['20_PurchaseOrderItems'] || []).length, 1, 'already-written item remains as history');
+  assert.equal((sheets['21_PurchaseAllocations'] || []).length, 0);
+  const audit = auditEntries.find((entry) => entry.Action === 'RECOVERY_REQUIRED');
+  assert.ok(audit);
+  assert.equal(audit.NewData.FailureStage, 'ORDER_ALLOCATION_INSERT');
+  assert.equal(audit.NewData.CreatedItemIDs.length, 1);
+});
+
+test('single receipt insert failure is recorded without fabricating a receipt row', () => {
+  const { service, sheets, setInsertFailure, auditEntries } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO_RECEIPT_INSERT_FAIL', TenantID: 'T1', Status: 'ACTIVE' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_RECEIPT_INSERT_FAIL', TenantID: 'T1', PurchaseOrderID: 'PO_RECEIPT_INSERT_FAIL',
+    OrderedQuantity: 5, ItemName: 'پارچه'
+  }];
+  setInsertFailure((sheetName) => {
+    if (sheetName === '22_MaterialReceipts') throw new Error('controlled receipt insert failure');
+  });
+  assert.throws(() => service.createReceipt({
+    PurchaseOrderItemID: 'ITEM_RECEIPT_INSERT_FAIL', QuantityReceived: 2,
+    IdempotencyKey: 'RECEIPT-INSERT-FAIL'
+  }, {}), /controlled receipt insert failure/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+  const audit = auditEntries.find((entry) => entry.Action === 'WRITE_FAILED' && entry.EntityType === 'MATERIAL_RECEIPT');
+  assert.ok(audit);
+  assert.equal(audit.NewData.FailureStage, 'RECEIPT_INSERT');
+});
+
+test('batch receipt insert failure records affected order and receipt IDs', () => {
+  const { service, sheets, setInsertFailure, auditEntries } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO_BATCH_INSERT_FAIL', TenantID: 'T1', Status: 'ACTIVE' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_BATCH_INSERT_FAIL', TenantID: 'T1', PurchaseOrderID: 'PO_BATCH_INSERT_FAIL',
+    OrderedQuantity: 5, ItemName: 'زیپ'
+  }];
+  setInsertFailure((sheetName) => {
+    if (sheetName === '22_MaterialReceipts') throw new Error('controlled batch receipt insert failure');
+  });
+  assert.throws(() => service.createReceiptsBatch({ Receipts: [{
+    PurchaseOrderItemID: 'ITEM_BATCH_INSERT_FAIL', QuantityReceived: 2,
+    IdempotencyKey: 'BATCH-INSERT-FAIL'
+  }] }, {}), /controlled batch receipt insert failure/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+  const audit = auditEntries.find((entry) => entry.Action === 'WRITE_FAILED' && entry.EntityType === 'MATERIAL_RECEIPT_BATCH');
+  assert.ok(audit);
+  assert.equal(audit.NewData.FailureStage, 'RECEIPT_BATCH_INSERT');
+  assert.deepEqual(audit.NewData.PurchaseOrderIDs, ['PO_BATCH_INSERT_FAIL']);
+  assert.equal(audit.NewData.ReceiptIDs.length, 1);
+});
+
