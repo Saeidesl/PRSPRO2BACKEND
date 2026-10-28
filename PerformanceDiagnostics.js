@@ -1,10 +1,16 @@
 /**
  * Request-scoped diagnostics for procurement read endpoints.
- * Emits one compact summary per endpoint call when performance logging is enabled.
- * Metrics are observational only and do not alter API responses or business data.
+ * Writes compact timing summaries to a dedicated spreadsheet tab and, optionally, to logs.
+ * Metrics are observational only and do not alter procurement business data.
  */
 var PerformanceDiagnostics = {
   _active: null,
+  _sheetName: 'PMS_PerformanceDiagnostics',
+  _headers: [
+    'Timestamp', 'Endpoint', 'ElapsedMs', 'RepositoryOperationCount',
+    'RepositoryElapsedMs', 'CacheHitCount', 'CacheMissCount', 'Errors',
+    'OperationsByType', 'DurationMsByType', 'OperationsBySheet', 'DurationMsBySheet'
+  ],
 
   _loggingEnabled_: function() {
     try {
@@ -58,6 +64,54 @@ var PerformanceDiagnostics = {
     if (this._active) this._active.errors++;
   },
 
+  _writeSummaryToSheet_: function(summary) {
+    // Do not use GoogleSheetsRepository here: doing so would recursively add
+    // diagnostic repository timings to the same request.
+    if (typeof SpreadsheetApp === 'undefined' || !SpreadsheetApp) return false;
+
+    var spreadsheetId = '';
+    try {
+      spreadsheetId = AppConfig && AppConfig.DATABASE
+        ? String(AppConfig.DATABASE.SPREADSHEET_ID || '')
+        : '';
+    } catch (configError) {}
+
+    var spreadsheet = spreadsheetId
+      ? SpreadsheetApp.openById(spreadsheetId)
+      : SpreadsheetApp.getActiveSpreadsheet();
+    if (!spreadsheet) throw new Error('Spreadsheet unavailable for performance diagnostics');
+
+    var sheet = spreadsheet.getSheetByName(this._sheetName);
+    if (!sheet) sheet = spreadsheet.insertSheet(this._sheetName);
+
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, this._headers.length).setValues([this._headers]);
+      sheet.setFrozenRows(1);
+    }
+
+    sheet.appendRow([
+      new Date().toISOString(),
+      summary.endpoint,
+      summary.elapsedMs,
+      summary.repositoryOperationCount,
+      summary.repositoryElapsedMs,
+      summary.cacheHitCount,
+      summary.cacheMissCount,
+      summary.errors,
+      JSON.stringify(summary.operationsByType),
+      JSON.stringify(summary.durationMsByType),
+      JSON.stringify(summary.operationsBySheet),
+      JSON.stringify(summary.durationMsBySheet)
+    ]);
+
+    // Keep this temporary diagnostic tab bounded.
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 501 && typeof sheet.deleteRows === 'function') {
+      sheet.deleteRows(2, lastRow - 501);
+    }
+    return true;
+  },
+
   finishRequest: function(elapsedMs) {
     var current = this._active;
     if (!current) return null;
@@ -66,8 +120,20 @@ var PerformanceDiagnostics = {
     current.type = 'PROCUREMENT_ENDPOINT_TIMING';
     this._active = null;
 
-    if (this._loggingEnabled_() && typeof console !== 'undefined' && console.log) {
-      console.log(JSON.stringify(current));
+    if (this._loggingEnabled_()) {
+      if (typeof console !== 'undefined' && console.log) {
+        console.log(JSON.stringify(current));
+      }
+      try {
+        this._writeSummaryToSheet_(current);
+      } catch (error) {
+        // Diagnostic failures must never fail a user-facing procurement request.
+        try {
+          if (typeof console !== 'undefined' && console.error) {
+            console.error('PERFORMANCE_DIAGNOSTICS_PERSIST_FAILED: ' + String(error && error.message || error));
+          }
+        } catch (ignored) {}
+      }
     }
     return current;
   }
