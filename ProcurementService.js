@@ -702,16 +702,39 @@ const ProcurementService = {
     return Response.success(receipt);
   },
 
+  /**
+   * Memoize tenant-scoped procurement collections for the lifetime of a read request.
+   * Composite endpoints call multiple read services that otherwise fetch the same collections.
+   * This cache is request-scoped only and must never survive the current API request.
+   */
+  _requestRows_: function(context, collection, tenantId) {
+    context = context || {};
+    var cache = context.procurementRows || (context.procurementRows = Object.create(null));
+    var key = String(tenantId || '') + '|' + String(collection);
+    if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+      var readers = {
+        needs: 'getNeeds', orders: 'getOrders', items: 'getItems',
+        allocations: 'getAllocations', receipts: 'getReceipts'
+      };
+      var reader = readers[collection];
+      if (!reader || typeof ProcurementRepository[reader] !== 'function') {
+        throw new Error('Unsupported procurement collection: ' + collection);
+      }
+      cache[key] = ProcurementRepository[reader](tenantId);
+    }
+    return cache[key];
+  },
+
   listNeeds: function(params, sharedContext) {
     var context = sharedContext || {};
     var user = context.user || this._user_(params);
     context.user = user;
     var visibilityCache = context.projectVisibilityCache || (context.projectVisibilityCache = Object.create(null));
-    var needs = ProcurementRepository.getNeeds(user.TenantID);
-    var items = ProcurementRepository.getItems(user.TenantID);
-    var orders = ProcurementRepository.getOrders(user.TenantID);
-    var allocations = ProcurementRepository.getAllocations(user.TenantID);
-    var receipts = ProcurementRepository.getReceipts(user.TenantID);
+    var needs = this._requestRows_(context, 'needs', user.TenantID);
+    var items = this._requestRows_(context, 'items', user.TenantID);
+    var orders = this._requestRows_(context, 'orders', user.TenantID);
+    var allocations = this._requestRows_(context, 'allocations', user.TenantID);
+    var receipts = this._requestRows_(context, 'receipts', user.TenantID);
     var orderById = Object.create(null);
     orders.forEach(function(order) { orderById[String(order.ID)] = order; });
     var countableItemIds = Object.create(null);
@@ -833,11 +856,11 @@ const ProcurementService = {
     var user = context.user || this._user_(params);
     context.user = user;
     var visibilityCache = context.projectVisibilityCache || (context.projectVisibilityCache = Object.create(null));
-    var orders = ProcurementRepository.getOrders(user.TenantID);
-    var items = ProcurementRepository.getItems(user.TenantID);
-    var receipts = ProcurementRepository.getReceipts(user.TenantID);
-    var allocations = ProcurementRepository.getAllocations(user.TenantID);
-    var needs = ProcurementRepository.getNeeds(user.TenantID);
+    var orders = this._requestRows_(context, 'orders', user.TenantID);
+    var items = this._requestRows_(context, 'items', user.TenantID);
+    var receipts = this._requestRows_(context, 'receipts', user.TenantID);
+    var allocations = this._requestRows_(context, 'allocations', user.TenantID);
+    var needs = this._requestRows_(context, 'needs', user.TenantID);
     var allocationsByItem = {};
     var needsById = {};
     var itemsByOrder = {};
@@ -1034,10 +1057,10 @@ const ProcurementService = {
     var user = context.user || this._user_(params);
     context.user = user;
     var visibilityCache = context.projectVisibilityCache || (context.projectVisibilityCache = Object.create(null));
-    var needs = ProcurementRepository.getNeeds(user.TenantID);
-    var allOrders = ProcurementRepository.getOrders(user.TenantID);
-    var allItems = ProcurementRepository.getItems(user.TenantID);
-    var allReceipts = ProcurementRepository.getReceipts(user.TenantID);
+    var needs = this._requestRows_(context, 'needs', user.TenantID);
+    var allOrders = this._requestRows_(context, 'orders', user.TenantID);
+    var allItems = this._requestRows_(context, 'items', user.TenantID);
+    var allReceipts = this._requestRows_(context, 'receipts', user.TenantID);
 
     // Reuse the same visibility rules as the procurement workspace before
     // computing aggregate counts, so hidden-project records cannot affect totals.
