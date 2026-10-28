@@ -333,11 +333,11 @@ const MaterialPlanningService = {
     if (key.length > 240) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کلید محاسبه بیش از حد طولانی است.');
     }
-    var basis = this._number_(data.BasisQuantity, 'تعداد مبنا', 0, null);
+    var basis = this._number_(data.BasisQuantity, 'تعداد مبنا', 0.0000001, null);
     var consumption = this._number_(data.ConsumptionPerUnit, 'مصرف برای هر واحد', 0.0000001, null);
     var wastage = this._number_(data.WastagePercent === undefined ? 0 : data.WastagePercent, 'درصد ضایعات', 0, 100);
     var calculated = data.CalculatedQuantityOverride !== undefined && data.CalculatedQuantityOverride !== null && String(data.CalculatedQuantityOverride).trim() !== ''
-      ? this._number_(data.CalculatedQuantityOverride, 'مقدار محاسبه‌شده', 0, null)
+      ? this._number_(data.CalculatedQuantityOverride, 'مقدار محاسبه‌شده', 0.0000001, null)
       : this._calculateNeedQuantity_(basis, consumption, wastage);
     var existing = GoogleSheetsRepository.getAll(this.SHEETS.CALCULATIONS).find(function(row) {
       return String(row.TenantID) === String(user.TenantID) && String(row.CalculationKey) === key;
