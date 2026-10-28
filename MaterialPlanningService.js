@@ -35,7 +35,7 @@ const MaterialPlanningService = {
   _normalizeUnit_: function(value) {
     Validator.required(value, 'واحد اندازه‌گیری');
     var original = String(value).trim();
-    var key = original.toLowerCase().replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\\s+/g, ' ');
+    var key = original.toLowerCase().replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ');
     var canonical = this.UNIT_ALIASES[key];
     if (!canonical) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
