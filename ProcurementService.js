@@ -411,7 +411,7 @@ const ProcurementService = {
       var idempotencyKey = String(body.IdempotencyKey || '').trim();
       if (idempotencyKey) {
         var replayReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
-          return this._active_(existing.Status) && String(existing.IdempotencyKey || '') === idempotencyKey;
+          return ProcurementService._active_(existing.Status) && String(existing.IdempotencyKey || '') === idempotencyKey;
         }, this);
         if (replayReceipt) {
           var replayItem = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, replayReceipt.PurchaseOrderItemID);
@@ -450,14 +450,14 @@ const ProcurementService = {
       var existingReceipts = ProcurementRepository.getReceipts(user.TenantID);
       var existingReceiptByKey = Object.create(null);
       existingReceipts.forEach(function(receipt) {
-        if (this._active_(receipt.Status) && receipt.IdempotencyKey) existingReceiptByKey[String(receipt.IdempotencyKey)] = receipt;
+        if (ProcurementService._active_(receipt.Status) && receipt.IdempotencyKey) existingReceiptByKey[String(receipt.IdempotencyKey)] = receipt;
       });
       var replayedReceipts = [];
       var requestKeysInBatch = Object.create(null);
       var allAllocations = ProcurementRepository.getAllocations(user.TenantID);
 
       existingReceipts.forEach(function(receipt) {
-        if (!this._active_(receipt.Status)) return;
+        if (!ProcurementService._active_(receipt.Status)) return;
         var itemKey = String(receipt.PurchaseOrderItemID || '');
         var quantity = Number(receipt.QuantityReceived) || 0;
         if (!itemKey) return;
@@ -465,7 +465,7 @@ const ProcurementService = {
         var projectKey = itemKey + '|' + String(receipt.ProjectID || '');
         receivedByItemProject[projectKey] = (receivedByItemProject[projectKey] || 0) + quantity;
       });
-      allAllocations = allAllocations.filter(function(allocation) { return this._active_(allocation.Status); }, this);
+      allAllocations = allAllocations.filter(function(allocation) { return ProcurementService._active_(allocation.Status); }, this);
       allAllocations.forEach(function(allocation) {
         var key = String(allocation.PurchaseOrderItemID || '');
         if (!key) return;
@@ -685,7 +685,7 @@ const ProcurementService = {
     var items = ProcurementRepository.getItems(tenantId).filter(function(item) {
       return String(item.PurchaseOrderID || '') === String(orderId);
     });
-    var receipts = ProcurementRepository.getReceipts(tenantId).filter(function(receipt) { return this._active_(receipt.Status); }, this);
+    var receipts = ProcurementRepository.getReceipts(tenantId).filter(function(receipt) { return ProcurementService._active_(receipt.Status); }, this);
     var orderedTotal = 0;
     var receivedTotal = 0;
     items.forEach(function(item) {
@@ -738,7 +738,7 @@ const ProcurementService = {
     this._validateProject_(projectId, user.TenantID, user);
 
     var itemAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
-      return this._active_(allocation.Status) && String(allocation.PurchaseOrderItemID || '') === String(item.ID);
+      return ProcurementService._active_(allocation.Status) && String(allocation.PurchaseOrderItemID || '') === String(item.ID);
     }, this);
     if (itemAllocations.length) {
       if (!projectId) {
@@ -753,7 +753,7 @@ const ProcurementService = {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این قلم سفارش به پروژه انتخاب‌شده تخصیص نیافته است.');
       }
       var projectReceived = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) {
-        return this._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID) && String(receipt.ProjectID || '') === String(projectId);
+        return ProcurementService._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID) && String(receipt.ProjectID || '') === String(projectId);
       }, this).reduce(function(sum, receipt) {
         return sum + (Number(receipt.QuantityReceived) || 0);
       }, 0);
@@ -767,7 +767,7 @@ const ProcurementService = {
       }
     }
 
-    var allPriorReceipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) { return this._active_(receipt.Status); }, this);
+    var allPriorReceipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) { return ProcurementService._active_(receipt.Status); }, this);
     var prior = allPriorReceipts.filter(function(receipt) {
       return String(receipt.PurchaseOrderItemID) === String(item.ID);
     }).reduce(function(sum, receipt) {
@@ -811,7 +811,7 @@ const ProcurementService = {
     var allItems = ProcurementRepository.getItems(user.TenantID).filter(function(candidate) {
       return String(candidate.PurchaseOrderID) === String(order.ID);
     });
-    var allReceipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(existingReceipt) { return this._active_(existingReceipt.Status); }, this);
+    var allReceipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(existingReceipt) { return ProcurementService._active_(existingReceipt.Status); }, this);
     var allReceived = 0;
     var allOrdered = 0;
     allItems.forEach(function(candidate) {
@@ -861,7 +861,7 @@ const ProcurementService = {
         return String(item.PurchaseOrderID) === String(order.ID);
       }).map(function(item) { return String(item.ID); });
       var activeReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(receipt) {
-        return this._active_(receipt.Status) && itemIds.indexOf(String(receipt.PurchaseOrderItemID || '')) !== -1;
+        return ProcurementService._active_(receipt.Status) && itemIds.indexOf(String(receipt.PurchaseOrderItemID || '')) !== -1;
       }, this);
       if (activeReceipt) throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'سفارش دارای دریافت فعال است؛ ابتدا رسیدهای مرتبط را با دلیل ابطال کنید.');
       var now = this._now_();
@@ -894,11 +894,11 @@ const ProcurementService = {
         throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'سفارش برای اصلاح فعال یا قابل بررسی نیست.');
       }
       var receipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) {
-        return this._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID);
+        return ProcurementService._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID);
       }, this);
       if (receipts.length) throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'قلم دارای دریافت فعال است؛ ابتدا دریافت‌ها را با حفظ سابقه ابطال کنید.');
       var allocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
-        return this._active_(allocation.Status) && String(allocation.PurchaseOrderItemID) === String(item.ID);
+        return ProcurementService._active_(allocation.Status) && String(allocation.PurchaseOrderItemID) === String(item.ID);
       }, this);
       var allocated = allocations.reduce(function(sum, allocation) {
         return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
@@ -933,7 +933,7 @@ const ProcurementService = {
     try {
       var receipt = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.RECEIPTS, receiptId);
       if (!receipt || String(receipt.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رسید معتبر نیست.');
-      if (!this._active_(receipt.Status)) return Response.success(Object.assign({ IdempotentReplay: true }, receipt));
+      if (!ProcurementService._active_(receipt.Status)) return Response.success(Object.assign({ IdempotentReplay: true }, receipt));
       var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, receipt.PurchaseOrderItemID);
       if (!item || String(item.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش رسید معتبر نیست.');
       var now = this._now_();
@@ -960,11 +960,11 @@ const ProcurementService = {
     try {
       var allocation = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ALLOCATIONS, allocationId);
       if (!allocation || String(allocation.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'تخصیص معتبر نیست.');
-      if (!this._active_(allocation.Status)) return Response.success(Object.assign({ IdempotentReplay: true }, allocation));
+      if (!ProcurementService._active_(allocation.Status)) return Response.success(Object.assign({ IdempotentReplay: true }, allocation));
       var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, allocation.PurchaseOrderItemID);
       if (!item || String(item.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش تخصیص معتبر نیست.');
       var activeReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(receipt) {
-        return this._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID) &&
+        return ProcurementService._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID) &&
           String(receipt.ProjectID || '') === String(allocation.ProjectID || '');
       }, this);
       if (activeReceipt) throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'برای این تخصیص دریافت فعال وجود دارد؛ ابتدا رسید مربوطه را با دلیل ابطال کنید.');
@@ -1034,7 +1034,7 @@ const ProcurementService = {
       itemById[String(item.ID)] = item;
     });
     allocations.forEach(function(allocation) {
-      if (!this._active_(allocation.Status)) return;
+      if (!ProcurementService._active_(allocation.Status)) return;
       var itemId = String(allocation.PurchaseOrderItemID || '');
       if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
       allocationsByItem[itemId].push(allocation);
@@ -1058,7 +1058,7 @@ const ProcurementService = {
       }
     });
     receipts.forEach(function(receipt) {
-      if (!this._active_(receipt.Status)) return;
+      if (!ProcurementService._active_(receipt.Status)) return;
       var itemId = String(receipt.PurchaseOrderItemID || '');
       var quantity = Number(receipt.QuantityReceived) || 0;
       receivedByItem[itemId] = (receivedByItem[itemId] || 0) + quantity;
@@ -1145,7 +1145,7 @@ const ProcurementService = {
     var receiptsByItem = {};
 
     allocations.forEach(function(allocation) {
-      if (!this._active_(allocation.Status)) return;
+      if (!ProcurementService._active_(allocation.Status)) return;
       var itemId = String(allocation.PurchaseOrderItemID || '');
       if (!itemId) return;
       if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
@@ -1161,7 +1161,7 @@ const ProcurementService = {
       itemsByOrder[key].push(item);
     });
     receipts.forEach(function(receipt) {
-      if (!this._active_(receipt.Status)) return;
+      if (!ProcurementService._active_(receipt.Status)) return;
       var key = String(receipt.PurchaseOrderItemID || '');
       if (!key) return;
       receiptsByItem[key] = receiptsByItem[key] || { quantity: 0, records: [] };
@@ -1402,10 +1402,10 @@ const ProcurementService = {
     return Response.success({
       summary: {
         activeNeeds: needs.filter(function(row) {
-          return this._active_(row.Status);
+          return ProcurementService._active_(row.Status);
         }, this).length,
         activeOrders: orders.filter(function(row) {
-          return this._active_(row.Status);
+          return ProcurementService._active_(row.Status);
         }, this).length,
         orderedQuantity: orderedQuantity,
         receivedQuantity: receivedQuantity,
