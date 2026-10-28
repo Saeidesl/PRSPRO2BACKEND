@@ -39,7 +39,7 @@ test('GET error responses never include internal diagnostics', () => {
 
 
 test('WebApp uses the shared PerformanceDiagnostics implementation without shadowing it', () => {
-  assert.doesNotMatch(source, /var PerformanceDiagnostics\\s*=\\s*\\{/);
-  assert.match(source, /PerformanceDiagnostics\\.reset\\(\\)/);
-  assert.match(source, /PerformanceDiagnostics\\.getSummary\\(\\)/);
+  assert.doesNotMatch(source, /var PerformanceDiagnostics\s*=\s*\{/);
+  assert.match(source, /PerformanceDiagnostics\.reset\(\)/);
+  assert.match(source, /PerformanceDiagnostics\.getSummary\(\)/);
 });
