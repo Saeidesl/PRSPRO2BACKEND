@@ -587,3 +587,24 @@ test('order item quantity revision requires a reason and cannot fall below activ
   assert.equal(withReceipt.sheets['20_PurchaseOrderItems'][0].OrderedQuantity, 10);
 });
 
+test('retrying a voided receipt reconciles the parent order after the first status write failed', () => {
+  const { service, sheets, setUpdateFailure } = loadProcurementService();
+  const { orderId, receiptId } = seedLifecycleScenario(sheets, 'VOID_RETRY', true);
+  sheets['19_PurchaseOrders'][0].Status = 'PARTIALLY_RECEIVED';
+  setUpdateFailure((sheetName) => {
+    if (sheetName !== '19_PurchaseOrders') return;
+    setUpdateFailure(null);
+    throw new Error('controlled reconciliation failure after receipt void');
+  });
+
+  assert.throws(() => service.voidReceipt(receiptId, { Reason: 'اصلاح رسید' }, {}),
+    /controlled reconciliation failure after receipt void/);
+  assert.equal(sheets['22_MaterialReceipts'][0].Status, 'VOID', 'void state persists even if derived status write fails');
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'PARTIALLY_RECEIVED');
+
+  const retry = service.voidReceipt(receiptId, { Reason: 'اصلاح رسید' }, {});
+  assert.equal(retry.data.IdempotentReplay, true);
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'retry must preserve the original receipt row');
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE', 'retry repairs the derived order status');
+});
+
