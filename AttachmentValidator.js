@@ -66,6 +66,14 @@ const AttachmentValidator = {
       'EntityType'
     );
 
+    if (data.AttachmentType !== undefined && data.AttachmentType !== null && String(data.AttachmentType).trim() !== '') {
+      Validator.enum(data.AttachmentType, ['PROFILE', 'SEWING_PASSPORT', 'CUTTING_PASSPORT'], 'AttachmentType');
+      if (String(data.EntityType).toUpperCase() !== 'PROJECT' ||
+          String(data.MimeType).toLowerCase().indexOf('image/') !== 0) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع تصویر فقط برای پیوست تصویری پروژه مجاز است.');
+      }
+    }
+
     return true;
 
   }
