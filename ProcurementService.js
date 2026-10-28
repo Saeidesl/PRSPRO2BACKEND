@@ -423,7 +423,7 @@ const ProcurementService = {
         }
         var orderKey = String(item.PurchaseOrderID || '');
         var order = ordersById[orderKey] || GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, orderKey);
-        if (!order || String(order.TenantID) !== String(user.TenantID) || String(order.Status).toUpperCase() === 'CANCELLED') {
+        if (!order || String(order.TenantID) !== String(user.TenantID) || ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(String(order.Status || 'ACTIVE').toUpperCase()) !== -1) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
         }
         var projectId = entry.ProjectID || '';
@@ -579,7 +579,7 @@ const ProcurementService = {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
     }
     var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
-    if (!order || String(order.TenantID) !== String(user.TenantID) || String(order.Status).toUpperCase() === 'CANCELLED') {
+    if (!order || String(order.TenantID) !== String(user.TenantID) || ['CANCELLED', 'VOID', 'DELETED', 'NEEDS_REVIEW'].indexOf(String(order.Status || 'ACTIVE').toUpperCase()) !== -1) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید معتبر یا فعال نیست.');
     }
     var projectId = body.ProjectID || '';
