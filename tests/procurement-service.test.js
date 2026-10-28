@@ -11,6 +11,7 @@ function loadProcurementService() {
   let uuid = 0;
   let projectLookupCount = 0;
   let projectBulkReadCount = 0;
+  const procurementReadCounts = Object.create(null);
   let projectRows = [{ ID: 'P1', TenantID: 'T1' }];
   const context = {
     AccessControlService: { getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' }) },
@@ -30,11 +31,11 @@ function loadProcurementService() {
     },
     ProcurementRepository: {
       SHEETS: { NEEDS: '18_MaterialNeeds', ORDERS: '19_PurchaseOrders', ITEMS: '20_PurchaseOrderItems', ALLOCATIONS: '21_PurchaseAllocations', RECEIPTS: '22_MaterialReceipts' },
-      getNeeds: (tenantId) => (sheets['18_MaterialNeeds'] || []).filter((row) => String(row.TenantID) === String(tenantId)),
-      getOrders: (tenantId) => (sheets['19_PurchaseOrders'] || []).filter((row) => String(row.TenantID) === String(tenantId)),
-      getItems: (tenantId) => (sheets['20_PurchaseOrderItems'] || []).filter((row) => String(row.TenantID) === String(tenantId)),
-      getAllocations: (tenantId) => (sheets['21_PurchaseAllocations'] || []).filter((row) => String(row.TenantID) === String(tenantId)),
-      getReceipts: (tenantId) => (sheets['22_MaterialReceipts'] || []).filter((row) => String(row.TenantID) === String(tenantId))
+      getNeeds: (tenantId) => { procurementReadCounts.getNeeds = (procurementReadCounts.getNeeds || 0) + 1; return (sheets['18_MaterialNeeds'] || []).filter((row) => String(row.TenantID) === String(tenantId)); },
+      getOrders: (tenantId) => { procurementReadCounts.getOrders = (procurementReadCounts.getOrders || 0) + 1; return (sheets['19_PurchaseOrders'] || []).filter((row) => String(row.TenantID) === String(tenantId)); },
+      getItems: (tenantId) => { procurementReadCounts.getItems = (procurementReadCounts.getItems || 0) + 1; return (sheets['20_PurchaseOrderItems'] || []).filter((row) => String(row.TenantID) === String(tenantId)); },
+      getAllocations: (tenantId) => { procurementReadCounts.getAllocations = (procurementReadCounts.getAllocations || 0) + 1; return (sheets['21_PurchaseAllocations'] || []).filter((row) => String(row.TenantID) === String(tenantId)); },
+      getReceipts: (tenantId) => { procurementReadCounts.getReceipts = (procurementReadCounts.getReceipts || 0) + 1; return (sheets['22_MaterialReceipts'] || []).filter((row) => String(row.TenantID) === String(tenantId)); }
     },
     GoogleSheetsRepository: {
       getAll: (name) => (sheets[name] || []).map((row) => ({ ...row })),
@@ -64,6 +65,7 @@ function loadProcurementService() {
     sheets,
     getProjectLookupCount: () => projectLookupCount,
     getProjectBulkReadCount: () => projectBulkReadCount,
+    procurementReadCounts,
     setProjectRows: (rows) => { projectRows = rows.map((row) => ({ ...row })); }
   };
 }
@@ -88,6 +90,15 @@ test('procurement project visibility switches to one bulk project read after rep
 
   assert.equal(getProjectLookupCount(), 2, 'only the first two distinct projects should use targeted lookups');
   assert.equal(getProjectBulkReadCount(), 1, 'later project checks should share one bulk read');
+});
+
+test('workspace reuses tenant-scoped procurement collections across read services within one request', () => {
+  const { service, procurementReadCounts } = loadProcurementService();
+  const result = service.workspace({});
+  assert.equal(result.success, true);
+  for (const collection of ['getNeeds', 'getOrders', 'getItems', 'getAllocations', 'getReceipts']) {
+    assert.equal(procurementReadCounts[collection], 1, collection + ' should be read once per workspace request');
+  }
 });
 
 test('legacy estimated needs and confirmed needs share an allocation key for existing procurement records', () => {
