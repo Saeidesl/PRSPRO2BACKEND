@@ -84,6 +84,31 @@ test('rejects invalid material consumption and ignores legacy early-order settin
   assert.equal(legacyPayload.data.EarlyOrderQuantity, '');
 });
 
+test('normalizes recognized unit aliases and rejects unsupported units on create', () => {
+  const { service } = loadService();
+  const alias = service.createSpecification('P1', {
+    ItemName: 'زیپ', Unit: ' PCS ', ConsumptionPerUnit: 1
+  }, {}).data;
+  assert.equal(alias.Unit, 'عدد');
+  assert.throws(() => service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'جعبه ناشناخته', ConsumptionPerUnit: 1
+  }, {}), /واحد اندازه‌گیری معتبر نیست/);
+});
+
+test('preserves a legacy unit when revising other fields but validates an explicitly changed unit', () => {
+  const { service, sheets } = loadService();
+  const legacy = {
+    ID: 'LEGACY1', TenantID: 'T1', ProjectID: 'P1', SpecKey: 'LEGACY_KEY',
+    ItemName: 'ملزوم قدیمی', ItemCode: 'MAT-OLD', Unit: 'واحد قدیمی',
+    ConsumptionPerUnit: 1, WastagePercent: 0, Status: 'ACTIVE', Revision: 1,
+    CreatedBy: 'U1', CreatedAt: '2026-01-01T00:00:00.000Z'
+  };
+  sheets['24_ProjectMaterialSpecs'] = [legacy];
+  const revised = service.reviseSpecification('LEGACY1', { ConsumptionPerUnit: 2 }, {}).data;
+  assert.equal(revised.Unit, 'واحد قدیمی');
+  assert.throws(() => service.reviseSpecification(revised.ID, { Unit: 'واحد نامعتبر' }, {}), /واحد اندازه‌گیری معتبر نیست/);
+});
+
 test('revises specifications without losing the previous revision', () => {
   const { service, sheets } = loadService();
   const first = service.createSpecification('P1', {
