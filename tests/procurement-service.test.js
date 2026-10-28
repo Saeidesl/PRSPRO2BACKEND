@@ -502,3 +502,88 @@ test('batch receipt over-receipt override requires a reason and emits an explici
   assert.equal(audit.NewData.Override.Reason, 'مغایرت بسته‌بندی تأییدشده');
 });
 
+function seedLifecycleScenario(sheets, suffix, includeReceipt) {
+  const orderId = 'PO_LIFE_' + suffix;
+  const itemId = 'ITEM_LIFE_' + suffix;
+  const allocationId = 'ALLOC_LIFE_' + suffix;
+  sheets['19_PurchaseOrders'] = [{
+    ID: orderId, TenantID: 'T1', Status: 'ACTIVE', Notes: 'original', UpdatedAt: 'before'
+  }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: itemId, TenantID: 'T1', PurchaseOrderID: orderId,
+    ItemName: 'پارچه', OrderedQuantity: 10, UnitPrice: 2, SurplusQuantity: 0, Notes: 'item'
+  }];
+  sheets['21_PurchaseAllocations'] = [{
+    ID: allocationId, TenantID: 'T1', PurchaseOrderItemID: itemId,
+    ProjectID: 'P1', MaterialNeedID: '', AllocatedQuantity: 3, CreatedAt: 'before'
+  }];
+  sheets['22_MaterialReceipts'] = includeReceipt ? [{
+    ID: 'REC_LIFE_' + suffix, TenantID: 'T1', PurchaseOrderItemID: itemId,
+    ProjectID: 'P1', QuantityReceived: 2, Status: 'ACTIVE', IdempotencyKey: 'KEY_LIFE_' + suffix
+  }] : [];
+  return { orderId, itemId, allocationId, receiptId: 'REC_LIFE_' + suffix };
+}
+
+test('purchase order cancellation preserves the row, requires a reason, and writes an audit record', () => {
+  const { service, sheets, auditEntries } = loadProcurementService();
+  const { orderId } = seedLifecycleScenario(sheets, 'CANCEL', false);
+  assert.throws(() => service.cancelOrder(orderId, {}, {}), /دلیل الزامی است/);
+  const result = service.cancelOrder(orderId, { Reason: 'سفارش توسط مسئول تأمین لغو شد' }, {});
+  assert.equal(result.data.Status, 'CANCELLED');
+  assert.match(result.data.Notes, /سفارش توسط مسئول تأمین لغو شد/);
+  assert.equal(sheets['19_PurchaseOrders'].length, 1, 'cancellation must not delete the order');
+  assert.ok(auditEntries.some((entry) => entry.Action === 'CANCEL' && entry.EntityID === orderId));
+});
+
+test('purchase order cancellation is blocked while an active receipt exists', () => {
+  const { service, sheets } = loadProcurementService();
+  const { orderId } = seedLifecycleScenario(sheets, 'CANCEL_BLOCKED', true);
+  assert.throws(() => service.cancelOrder(orderId, { Reason: 'لغو' }, {}), /دارای دریافت فعال است/);
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE');
+});
+
+test('receipt void keeps history and reconciles the parent order using only active receipts', () => {
+  const { service, sheets, auditEntries } = loadProcurementService();
+  const { orderId, receiptId } = seedLifecycleScenario(sheets, 'VOID_RECEIPT', true);
+  assert.throws(() => service.voidReceipt(receiptId, {}, {}), /دلیل الزامی است/);
+  const result = service.voidReceipt(receiptId, { Reason: 'رسید اشتباه ثبت شده بود' }, {});
+  assert.equal(result.data.Status, 'VOID');
+  assert.equal(result.data.VoidReason, 'رسید اشتباه ثبت شده بود');
+  assert.equal(sheets['22_MaterialReceipts'].length, 1, 'void must preserve the receipt row');
+  assert.equal(sheets['19_PurchaseOrders'][0].Status, 'ACTIVE', 'voided quantity must not count toward receipt totals');
+  assert.ok(auditEntries.some((entry) => entry.Action === 'VOID' && entry.EntityID === receiptId));
+});
+
+test('allocation void preserves history but is blocked while a matching active receipt exists', () => {
+  const { service, sheets, auditEntries } = loadProcurementService();
+  const { allocationId } = seedLifecycleScenario(sheets, 'VOID_ALLOC', false);
+  const result = service.voidAllocation(allocationId, { Reason: 'تخصیص به پروژه لغو شد' }, {});
+  assert.equal(result.data.Status, 'VOID');
+  assert.equal(sheets['21_PurchaseAllocations'].length, 1, 'void must preserve the allocation row');
+  assert.ok(auditEntries.some((entry) => entry.Action === 'VOID' && entry.EntityID === allocationId));
+
+  const blocked = loadProcurementService();
+  const scenario = seedLifecycleScenario(blocked.sheets, 'VOID_ALLOC_BLOCKED', true);
+  assert.throws(() => blocked.service.voidAllocation(scenario.allocationId, { Reason: 'لغو' }, {}), /دریافت فعال وجود دارد/);
+  assert.equal(blocked.sheets['21_PurchaseAllocations'][0].Status, undefined);
+});
+
+test('order item quantity revision requires a reason and cannot fall below active allocations or bypass receipts', () => {
+  const { service, sheets, auditEntries } = loadProcurementService();
+  const { itemId } = seedLifecycleScenario(sheets, 'REVISE', false);
+  assert.throws(() => service.reviseOrderItemQuantity(itemId, { OrderedQuantity: 5 }, {}), /دلیل الزامی است/);
+  assert.throws(() => service.reviseOrderItemQuantity(itemId, { OrderedQuantity: 2, Reason: 'اصلاح' }, {}), /از مجموع تخصیص‌های فعال کمتر است/);
+  const result = service.reviseOrderItemQuantity(itemId, { OrderedQuantity: 5, Reason: 'اصلاح سفارش ثبت‌شده' }, {});
+  assert.equal(result.data.OrderedQuantity, 5);
+  assert.equal(result.data.SurplusQuantity, 2);
+  assert.match(result.data.Notes, /اصلاح سفارش ثبت‌شده/);
+  assert.ok(auditEntries.some((entry) => entry.Action === 'REVISE' && entry.EntityID === itemId));
+
+  const withReceipt = loadProcurementService();
+  const scenario = seedLifecycleScenario(withReceipt.sheets, 'REVISE_BLOCKED', true);
+  assert.throws(() => withReceipt.service.reviseOrderItemQuantity(scenario.itemId, {
+    OrderedQuantity: 12, Reason: 'افزایش'
+  }, {}), /دارای دریافت فعال است/);
+  assert.equal(withReceipt.sheets['20_PurchaseOrderItems'][0].OrderedQuantity, 10);
+});
+
