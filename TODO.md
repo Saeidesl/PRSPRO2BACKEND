@@ -219,6 +219,15 @@
 - *Log:* فایل `docs/procurement-data-contracts.md` در شاخه `feature/procurement-standardization-task-3-validation` تکمیل شد. رفتار `DatabaseSetup.js` در `setupDatabase()`، `ensureHeaders_()` و `backfillPurchaseOrderSurplus_()` مستند شد؛ runbook شامل preflight فقط‌خواندنی، backup کامل، افزودن append-only ستون‌ها، backfill جداگانه با ثبت ردیف‌های تغییرکرده، postflight، توقف در header تکراری، و راهبرد rollback بدون حذف خودکار ستون‌هاست. تصریح شد که `resetDatabaseSheets()` برای migration ممنوع است و Google Sheets تراکنش اتمیک چندشیتی تضمین نمی‌کند. طرح فقط مستند شده؛ migration واقعی یا تغییر Google Sheets زنده اجرا نشده است. برای commit `98dbb983b368f3b90f1cd2b3339a693bd6e4c0a8`، هر دو workflow یعنی `Backend source checks` و `PMS agent suite` با نتیجه `success` ثبت شده‌اند.
 
 ## تسک 4 — (IN PROGRESS) بهینه‌سازی دسترسی به Google Sheets
+
+### یافته‌های بررسی اولیه تسک 4.1 — هنوز تکمیل نشده
+- در `GoogleSheetsRepository.js` تابع `_logTiming(operation, sheetName, startTime, extra)` زمان عملیات repository را محاسبه می‌کند؛ متدهای `getAll`, `findById`, `findOne`, `findRowByValue`, `insert`, `insertMany` و `updateById` از آن استفاده می‌کنند.
+- `_logTiming` در صورت فعال بودن تنظیم `AppConfig.PERFORMANCE_LOG_TO_CONSOLE` یا `AppConfig.PERFORMANCE.LOG_TO_CONSOLE` لاگ کنسول تولید می‌کند و در صورت تعریف بودن `PerformanceDiagnostics.record` آن را فراخوانی می‌کند؛ فایل مستقل `PerformanceDiagnostics.js` در شاخه `main` با مسیر مورد انتظار پیدا نشد.
+- endpointهای خواندنی اصلی در `Router.js`: `/procurement/workspace`, `/procurement/dashboard`, `/procurement/needs`, `/procurement/orders`, `/procurement/reports`.
+- `ProcurementRepository.getTenantRows` داده هر شیت را از طریق `GoogleSheetsRepository.getAll` می‌خواند و سپس بر اساس `TenantID` فیلتر می‌کند. `ProcurementService.workspace` از context مشترک برای سفارش‌ها/نیازها/dashboard استفاده می‌کند؛ `reports` نیز داده‌های پروژه، مشخصات مواد و محاسبات را می‌خواند.
+- محدودیت اندازه‌گیری فعلی: زمان عملیات repository به‌تنهایی، زمان کل endpoint، شمار واقعی دسترسی‌های Google Sheets، cache hit/miss و تجمیع تعداد/زمان به تفکیک endpoint را به‌صورت یک گزارش قابل اتکا ارائه نمی‌کند. لاگ متد repository را نباید معادل دسترسی واقعی شبکه/Sheets دانست، چون کش می‌تواند نتیجه را برگرداند.
+- اقدام بعدی برای تکمیل 4.1: افزودن اندازه‌گیری request-scoped در endpointهای بالا و شمارنده‌های عملیات repository با تفکیک cache hit/miss و زمان کل؛ سپس آزمون‌های واحد با mock برای تأیید شمارش و اطمینان از نبود تغییر در payload یا مجوزهای API. تا پیش از اجرای تست‌ها و مشاهده لاگ واقعی، هیچ baseline عددی یا ادعای عملکرد زنده ثبت نشود.
+
 - [ ] 4.1 اندازه‌گیری تعداد/زمان خواندن‌ها و جست‌وجوها در هر endpoint تأمین.
 - [ ] 4.2 کاهش فراخوانی‌های تکراری `getAll/findById` و استفاده از context مشترک درخواست.
 - [ ] 4.3 بهینه‌سازی خواندن/نوشتن دسته‌ای در repository در صورت اثبات سود با اندازه‌گیری.
