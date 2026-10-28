@@ -11,15 +11,15 @@ const AttachmentService = {
   _buildProjectFileName_: function(project, originalName, attachmentType) {
     function safePart(value, fallback) {
       var cleaned = String(value || '').trim()
-        .replace(/[\\\\/\\\\:*?"<>|\\u0000-\\u001f\\u007f]/g, '_')
-        .replace(/\\s+/g, '-')
-        .replace(/\\.{2,}/g, '.')
-        .replace(/^\\.+|\\.+$/g, '')
+        .replace(/[\/\\:*?"<>|\u0000-\u001f\u007f]/g, '_')
+        .replace(/\s+/g, '-')
+        .replace(/\.{2,}/g, '.')
+        .replace(/^\.+|\.+$/g, '')
         .substring(0, 80);
       return cleaned || fallback;
     }
 
-    var inputName = String(originalName || 'file').replace(/\\\\/g, '/').split('/').pop();
+    var inputName = String(originalName || 'file').replace(/\\/g, '/').split('/').pop();
     var dot = inputName.lastIndexOf('.');
     var extension = dot > 0 ? inputName.substring(dot + 1).replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : '';
     var baseName = dot > 0 ? inputName.substring(0, dot) : inputName;
