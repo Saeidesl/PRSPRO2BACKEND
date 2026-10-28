@@ -6,6 +6,9 @@ on:
       - 'Router.js'
       - 'GoogleSheetsRepository.js'
       - 'PerformanceDiagnostics.js'
+      - 'tests/get-performance-diagnostics.test.js'
+      - 'ProcurementService.js'
+      - 'WebApp.js'
       - 'tests/performance-diagnostics.test.js'
       - '.github/workflows/procurement-performance-diagnostics.yml'
   push:
