@@ -70,6 +70,8 @@ const AttachmentService = {
           String(item.EntityType || '').toUpperCase() !== 'PROJECT' ||
           !visibleProjectIds[projectId] ||
           String(item.MimeType || '').toLowerCase().indexOf('image/') !== 0 ||
+          (String(item.AttachmentType || '').trim() !== '' &&
+            String(item.AttachmentType).toUpperCase() !== 'PROFILE') ||
           status === String(Constants.STATUS.DELETED).toUpperCase() ||
           status === 'VOID') return;
 
@@ -393,6 +395,12 @@ const AttachmentService = {
 
       UploadedAt:
         now,
+
+      AttachmentType:
+        String(data.EntityType).toUpperCase() === 'PROJECT' &&
+        String(data.MimeType || '').toLowerCase().indexOf('image/') === 0
+          ? String(data.AttachmentType || 'PROFILE').toUpperCase()
+          : '',
 
       Status:
         Constants.STATUS.ACTIVE
