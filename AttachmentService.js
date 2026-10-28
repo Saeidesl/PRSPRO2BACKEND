@@ -26,7 +26,10 @@ const AttachmentService = {
     baseName = safePart(baseName, 'file').substring(0, 100);
     var projectCode = safePart(project && project.ProjectCode, 'PROJECT');
     var type = safePart(String(attachmentType || 'DOCUMENT').toUpperCase(), 'DOCUMENT').toUpperCase();
-    return projectCode + '_' + type + '_' + baseName + (extension ? '.' + extension : '');
+    var prefix = projectCode + '_' + type + '_';
+    var suffix = extension ? '.' + extension : '';
+    var maxBaseLength = Math.max(1, 240 - prefix.length - suffix.length);
+    return prefix + baseName.substring(0, maxBaseLength) + suffix;
   },
 
   _isAttachmentVisibleToUser_: function(attachment, user) {
