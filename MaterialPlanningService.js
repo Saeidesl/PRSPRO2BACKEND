@@ -129,6 +129,22 @@ const MaterialPlanningService = {
     return n;
   },
 
+  /** Calculate confirmed need with upward rounding to four decimal places.
+   * A tiny scaled tolerance avoids rounding up solely because binary floating-point
+   * represented an exact decimal boundary as (for example) 1.0000000000000002.
+   */
+  _calculateNeedQuantity_: function(basis, consumption, wastage) {
+    var raw = basis * consumption * (1 + wastage / 100);
+    if (!isFinite(raw) || raw < 0 || raw > 1000000000000) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار محاسبه‌شده خارج از محدوده قابل پشتیبانی است.');
+    }
+    var scaled = raw * 10000;
+    var nearest = Math.round(scaled);
+    var tolerance = 0.00000001;
+    var rounded = Math.abs(scaled - nearest) <= tolerance ? nearest : Math.ceil(scaled);
+    return rounded / 10000;
+  },
+
   _project_: function(projectId, user) {
     Validator.required(projectId, 'شناسه پروژه');
     var project = ProjectRepository.findById(projectId);
@@ -317,17 +333,16 @@ const MaterialPlanningService = {
     if (key.length > 240) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کلید محاسبه بیش از حد طولانی است.');
     }
+    var basis = this._number_(data.BasisQuantity, 'تعداد مبنا', 0, null);
+    var consumption = this._number_(data.ConsumptionPerUnit, 'مصرف برای هر واحد', 0.0000001, null);
+    var wastage = this._number_(data.WastagePercent === undefined ? 0 : data.WastagePercent, 'درصد ضایعات', 0, 100);
+    var calculated = data.CalculatedQuantityOverride !== undefined && data.CalculatedQuantityOverride !== null && String(data.CalculatedQuantityOverride).trim() !== ''
+      ? this._number_(data.CalculatedQuantityOverride, 'مقدار محاسبه‌شده', 0, null)
+      : this._calculateNeedQuantity_(basis, consumption, wastage);
     var existing = GoogleSheetsRepository.getAll(this.SHEETS.CALCULATIONS).find(function(row) {
       return String(row.TenantID) === String(user.TenantID) && String(row.CalculationKey) === key;
     });
     if (existing) return Response.success(Object.assign({ IdempotentReplay: true }, existing));
-
-    var basis = this._number_(data.BasisQuantity, 'تعداد مبنا', 0, null);
-    var consumption = this._number_(data.ConsumptionPerUnit, 'مصرف برای هر واحد', 0, null);
-    var wastage = this._number_(data.WastagePercent === undefined ? 0 : data.WastagePercent, 'درصد ضایعات', 0, 100);
-    var calculated = data.CalculatedQuantityOverride !== undefined && data.CalculatedQuantityOverride !== null && String(data.CalculatedQuantityOverride).trim() !== ''
-      ? this._number_(data.CalculatedQuantityOverride, 'مقدار محاسبه‌شده', 0, null)
-      : Math.ceil(basis * consumption * (1 + wastage / 100) * 10000) / 10000;
     var previous = data.PreviousCalculatedQuantity === undefined || data.PreviousCalculatedQuantity === ''
       ? 0 : this._number_(data.PreviousCalculatedQuantity, 'نیاز قبلی', 0, null);
     var record = {
