@@ -683,7 +683,7 @@ test('batch receipt insert failure records affected order and receipt IDs', () =
   const audit = auditEntries.find((entry) => entry.Action === 'WRITE_FAILED' && entry.EntityType === 'MATERIAL_RECEIPT_BATCH');
   assert.ok(audit);
   assert.equal(audit.NewData.FailureStage, 'RECEIPT_BATCH_INSERT');
-  assert.deepEqual(audit.NewData.PurchaseOrderIDs, ['PO_BATCH_INSERT_FAIL']);
+  assert.equal(JSON.stringify(audit.NewData.PurchaseOrderIDs), JSON.stringify(['PO_BATCH_INSERT_FAIL']));
   assert.equal(audit.NewData.ReceiptIDs.length, 1);
 });
 
