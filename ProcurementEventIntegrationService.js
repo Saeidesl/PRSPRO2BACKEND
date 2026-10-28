@@ -139,8 +139,9 @@ const ProcurementEventIntegrationService = {
     if (action === 'RECORD_RECEIPT') {
       var itemId = read('PurchaseOrderItemID');
       var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, itemId);
-      if (!item || String(item.TenantID) !== String(user.TenantID)) {
-        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش برای ثبت دریافت معتبر نیست.');
+      if (!item || String(item.TenantID) !== String(user.TenantID) ||
+          ['CANCELLED', 'VOID', 'DELETED'].indexOf(String(item.Status || 'ACTIVE').toUpperCase()) !== -1) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش برای ثبت دریافت معتبر یا فعال نیست.');
       }
       var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
       if (!order || String(order.TenantID) !== String(user.TenantID) ||
@@ -161,7 +162,8 @@ const ProcurementEventIntegrationService = {
       var mappedProjectIdForReceipt = projectId || read('ProjectID');
       if (mappedProjectIdForReceipt) {
         var receiptProject = ProjectRepository.findById(mappedProjectIdForReceipt);
-        if (!receiptProject || String(receiptProject.TenantID) !== String(user.TenantID)) {
+        if (!receiptProject || String(receiptProject.TenantID) !== String(user.TenantID) ||
+            !ProjectService._isProjectAvailableToUser_(receiptProject, user)) {
           throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه ثبت دریافت معتبر نیست.');
         }
       }
