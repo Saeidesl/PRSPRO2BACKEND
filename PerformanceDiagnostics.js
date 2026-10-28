@@ -26,7 +26,10 @@ var PerformanceDiagnostics = {
       cacheHitCount: 0,
       cacheMissCount: 0,
       operationsByType: Object.create(null),
+      durationMsByType: Object.create(null),
       operationsBySheet: Object.create(null),
+      durationMsBySheet: Object.create(null),
+      repositoryElapsedMs: 0,
       errors: 0
     };
   },
@@ -37,9 +40,15 @@ var PerformanceDiagnostics = {
 
     var operationName = String(operation || 'unknown');
     var sheet = String(sheetName || '');
+    var duration = Math.max(0, Number(elapsedMs) || 0);
     current.repositoryOperationCount++;
+    current.repositoryElapsedMs += duration;
     current.operationsByType[operationName] = (current.operationsByType[operationName] || 0) + 1;
-    if (sheet) current.operationsBySheet[sheet] = (current.operationsBySheet[sheet] || 0) + 1;
+    current.durationMsByType[operationName] = (current.durationMsByType[operationName] || 0) + duration;
+    if (sheet) {
+      current.operationsBySheet[sheet] = (current.operationsBySheet[sheet] || 0) + 1;
+      current.durationMsBySheet[sheet] = (current.durationMsBySheet[sheet] || 0) + duration;
+    }
 
     if (extra && extra.cacheHit === true) current.cacheHitCount++;
     else if (extra && extra.cacheHit === false) current.cacheMissCount++;
