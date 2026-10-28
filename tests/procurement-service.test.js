@@ -166,3 +166,17 @@ test('createReceipt rejects a soft-deleted purchase order item', () => {
   }, {}), /قلم سفارش معتبر نیست/);
   assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
 });
+
+
+test('createReceiptsBatch rejects a soft-deleted purchase order item before writing receipts', () => {
+  const { service, sheets } = loadProcurementService();
+  sheets['19_PurchaseOrders'] = [{ ID: 'PO1', TenantID: 'T1', Status: 'ACTIVE' }];
+  sheets['20_PurchaseOrderItems'] = [{
+    ID: 'ITEM_DELETED_BATCH', TenantID: 'T1', PurchaseOrderID: 'PO1',
+    OrderedQuantity: 5, ItemName: 'زیپ', Status: 'DELETED'
+  }];
+  assert.throws(() => service.createReceiptsBatch({
+    Receipts: [{ PurchaseOrderItemID: 'ITEM_DELETED_BATCH', QuantityReceived: 1 }]
+  }, {}), /قلم سفارش معتبر نیست/);
+  assert.equal((sheets['22_MaterialReceipts'] || []).length, 0);
+});
