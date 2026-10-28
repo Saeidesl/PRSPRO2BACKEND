@@ -411,8 +411,8 @@ const ProcurementService = {
       var idempotencyKey = String(body.IdempotencyKey || '').trim();
       if (idempotencyKey) {
         var replayReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
-          return String(existing.IdempotencyKey || '') === idempotencyKey;
-        });
+          return this._active_(existing.Status) && String(existing.IdempotencyKey || '') === idempotencyKey;
+        }, this);
         if (replayReceipt) {
           var replayItem = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, replayReceipt.PurchaseOrderItemID);
           if (replayItem) this._reconcileReceiptOrderStatus_(replayItem.PurchaseOrderID, user.TenantID, this._now_());
@@ -450,13 +450,14 @@ const ProcurementService = {
       var existingReceipts = ProcurementRepository.getReceipts(user.TenantID);
       var existingReceiptByKey = Object.create(null);
       existingReceipts.forEach(function(receipt) {
-        if (receipt.IdempotencyKey) existingReceiptByKey[String(receipt.IdempotencyKey)] = receipt;
+        if (this._active_(receipt.Status) && receipt.IdempotencyKey) existingReceiptByKey[String(receipt.IdempotencyKey)] = receipt;
       });
       var replayedReceipts = [];
       var requestKeysInBatch = Object.create(null);
       var allAllocations = ProcurementRepository.getAllocations(user.TenantID);
 
       existingReceipts.forEach(function(receipt) {
+        if (!this._active_(receipt.Status)) return;
         var itemKey = String(receipt.PurchaseOrderItemID || '');
         var quantity = Number(receipt.QuantityReceived) || 0;
         if (!itemKey) return;
@@ -464,6 +465,7 @@ const ProcurementService = {
         var projectKey = itemKey + '|' + String(receipt.ProjectID || '');
         receivedByItemProject[projectKey] = (receivedByItemProject[projectKey] || 0) + quantity;
       });
+      allAllocations = allAllocations.filter(function(allocation) { return this._active_(allocation.Status); }, this);
       allAllocations.forEach(function(allocation) {
         var key = String(allocation.PurchaseOrderItemID || '');
         if (!key) return;
@@ -683,7 +685,7 @@ const ProcurementService = {
     var items = ProcurementRepository.getItems(tenantId).filter(function(item) {
       return String(item.PurchaseOrderID || '') === String(orderId);
     });
-    var receipts = ProcurementRepository.getReceipts(tenantId);
+    var receipts = ProcurementRepository.getReceipts(tenantId).filter(function(receipt) { return this._active_(receipt.Status); }, this);
     var orderedTotal = 0;
     var receivedTotal = 0;
     items.forEach(function(item) {
@@ -736,8 +738,8 @@ const ProcurementService = {
     this._validateProject_(projectId, user.TenantID, user);
 
     var itemAllocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
-      return String(allocation.PurchaseOrderItemID || '') === String(item.ID);
-    });
+      return this._active_(allocation.Status) && String(allocation.PurchaseOrderItemID || '') === String(item.ID);
+    }, this);
     if (itemAllocations.length) {
       if (!projectId) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای دریافت این قلم باید پروژه تخصیص‌یافته انتخاب شود.');
@@ -751,8 +753,8 @@ const ProcurementService = {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این قلم سفارش به پروژه انتخاب‌شده تخصیص نیافته است.');
       }
       var projectReceived = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) {
-        return String(receipt.PurchaseOrderItemID) === String(item.ID) && String(receipt.ProjectID || '') === String(projectId);
-      }).reduce(function(sum, receipt) {
+        return this._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID) && String(receipt.ProjectID || '') === String(projectId);
+      }, this).reduce(function(sum, receipt) {
         return sum + (Number(receipt.QuantityReceived) || 0);
       }, 0);
       if (projectReceived + quantity > allocatedToProject) {
@@ -765,7 +767,7 @@ const ProcurementService = {
       }
     }
 
-    var allPriorReceipts = ProcurementRepository.getReceipts(user.TenantID);
+    var allPriorReceipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) { return this._active_(receipt.Status); }, this);
     var prior = allPriorReceipts.filter(function(receipt) {
       return String(receipt.PurchaseOrderItemID) === String(item.ID);
     }).reduce(function(sum, receipt) {
@@ -809,7 +811,7 @@ const ProcurementService = {
     var allItems = ProcurementRepository.getItems(user.TenantID).filter(function(candidate) {
       return String(candidate.PurchaseOrderID) === String(order.ID);
     });
-    var allReceipts = ProcurementRepository.getReceipts(user.TenantID);
+    var allReceipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(existingReceipt) { return this._active_(existingReceipt.Status); }, this);
     var allReceived = 0;
     var allOrdered = 0;
     allItems.forEach(function(candidate) {
@@ -839,6 +841,141 @@ const ProcurementService = {
     }
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'CREATE',EntityType:'MATERIAL_RECEIPT',EntityID:receipt.ID,NewData:receipt});
     return Response.success(receipt);
+  },
+
+
+  cancelOrder: function(orderId, body, params) {
+    body = body || {};
+    var user = this._user_(params);
+    var reason = String(body.Reason || body.reason || '').trim();
+    if (!reason) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای لغو سفارش، دلیل الزامی است.');
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین دیگری در حال انجام است؛ دوباره تلاش کنید.');
+    try {
+      var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, orderId);
+      if (!order || String(order.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش معتبر نیست.');
+      var status = String(order.Status || '').toUpperCase();
+      if (status === 'CANCELLED') return Response.success(Object.assign({ IdempotentReplay: true }, order));
+      if (status === 'NEEDS_REVIEW') throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'سفارش نیازمند بررسی است؛ پیش از لغو باید وضعیت آن تعیین تکلیف شود.');
+      var itemIds = ProcurementRepository.getItems(user.TenantID).filter(function(item) {
+        return String(item.PurchaseOrderID) === String(order.ID);
+      }).map(function(item) { return String(item.ID); });
+      var activeReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(receipt) {
+        return this._active_(receipt.Status) && itemIds.indexOf(String(receipt.PurchaseOrderItemID || '')) !== -1;
+      }, this);
+      if (activeReceipt) throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'سفارش دارای دریافت فعال است؛ ابتدا رسیدهای مرتبط را با دلیل ابطال کنید.');
+      var now = this._now_();
+      var updated = Object.assign({}, order, {
+        Status: 'CANCELLED',
+        Notes: String(order.Notes || '') + (String(order.Notes || '').trim() ? '\n' : '') + '[CANCELLED] ' + reason,
+        UpdatedAt: now
+      });
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, updated);
+      AuditService.log({ TenantID: user.TenantID, UserID: user.ID, Action: 'CANCEL', EntityType: 'PURCHASE_ORDER', EntityID: order.ID, OldData: order, NewData: updated, Reason: reason });
+      return Response.success(updated);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  reviseOrderItemQuantity: function(itemId, body, params) {
+    body = body || {};
+    var user = this._user_(params);
+    var reason = String(body.Reason || body.reason || '').trim();
+    if (!reason) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای اصلاح مقدار سفارش، دلیل الزامی است.');
+    var quantity = this._number_(body.OrderedQuantity, 'مقدار سفارش اصلاح‌شده', false);
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین دیگری در حال انجام است؛ دوباره تلاش کنید.');
+    try {
+      var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, itemId);
+      if (!item || String(item.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش معتبر نیست.');
+      var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
+      if (!order || String(order.TenantID) !== String(user.TenantID) || ['CANCELLED', 'NEEDS_REVIEW'].indexOf(String(order.Status || '').toUpperCase()) !== -1) {
+        throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'سفارش برای اصلاح فعال یا قابل بررسی نیست.');
+      }
+      var receipts = ProcurementRepository.getReceipts(user.TenantID).filter(function(receipt) {
+        return this._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID);
+      }, this);
+      if (receipts.length) throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'قلم دارای دریافت فعال است؛ ابتدا دریافت‌ها را با حفظ سابقه ابطال کنید.');
+      var allocations = ProcurementRepository.getAllocations(user.TenantID).filter(function(allocation) {
+        return this._active_(allocation.Status) && String(allocation.PurchaseOrderItemID) === String(item.ID);
+      }, this);
+      var allocated = allocations.reduce(function(sum, allocation) {
+        return sum + Math.max(0, Number(allocation.AllocatedQuantity) || 0);
+      }, 0);
+      if (quantity < allocated) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار اصلاح‌شده از مجموع تخصیص‌های فعال کمتر است.');
+      var now = this._now_();
+      var oldItem = Object.assign({}, item);
+      var surplus = Math.max(0, quantity - allocated);
+      var updated = Object.assign({}, item, {
+        OrderedQuantity: quantity,
+        SurplusQuantity: surplus,
+        SurplusCost: item.UnitPrice === '' || item.UnitPrice === null || item.UnitPrice === undefined ? '' : surplus * (Number(item.UnitPrice) || 0),
+        Notes: String(item.Notes || '') + (String(item.Notes || '').trim() ? '\n' : '') + '[REVISED] ' + reason,
+        UpdatedAt: now
+      });
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ITEMS, item.ID, updated);
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, { UpdatedAt: now });
+      AuditService.log({ TenantID: user.TenantID, UserID: user.ID, Action: 'REVISE', EntityType: 'PURCHASE_ORDER_ITEM', EntityID: item.ID, OldData: oldItem, NewData: updated, Reason: reason });
+      return Response.success(updated);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  voidReceipt: function(receiptId, body, params) {
+    body = body || {};
+    var user = this._user_(params);
+    var reason = String(body.Reason || body.reason || '').trim();
+    if (!reason) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای ابطال رسید، دلیل الزامی است.');
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین دیگری در حال انجام است؛ دوباره تلاش کنید.');
+    try {
+      var receipt = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.RECEIPTS, receiptId);
+      if (!receipt || String(receipt.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رسید معتبر نیست.');
+      if (!this._active_(receipt.Status)) return Response.success(Object.assign({ IdempotentReplay: true }, receipt));
+      var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, receipt.PurchaseOrderItemID);
+      if (!item || String(item.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش رسید معتبر نیست.');
+      var now = this._now_();
+      var updated = Object.assign({}, receipt, {
+        Status: 'VOID', VoidedAt: now, VoidedBy: user.ID, VoidReason: reason,
+        Notes: String(receipt.Notes || '') + (String(receipt.Notes || '').trim() ? '\n' : '') + '[VOID] ' + reason
+      });
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.RECEIPTS, receipt.ID, updated);
+      AuditService.log({ TenantID: user.TenantID, UserID: user.ID, Action: 'VOID', EntityType: 'MATERIAL_RECEIPT', EntityID: receipt.ID, OldData: receipt, NewData: updated, Reason: reason });
+      this._reconcileReceiptOrderStatus_(item.PurchaseOrderID, user.TenantID, now);
+      return Response.success(updated);
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  voidAllocation: function(allocationId, body, params) {
+    body = body || {};
+    var user = this._user_(params);
+    var reason = String(body.Reason || body.reason || '').trim();
+    if (!reason) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای لغو تخصیص، دلیل الزامی است.');
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین دیگری در حال انجام است؛ دوباره تلاش کنید.');
+    try {
+      var allocation = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ALLOCATIONS, allocationId);
+      if (!allocation || String(allocation.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'تخصیص معتبر نیست.');
+      if (!this._active_(allocation.Status)) return Response.success(Object.assign({ IdempotentReplay: true }, allocation));
+      var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, allocation.PurchaseOrderItemID);
+      if (!item || String(item.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش تخصیص معتبر نیست.');
+      var activeReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(receipt) {
+        return this._active_(receipt.Status) && String(receipt.PurchaseOrderItemID) === String(item.ID) &&
+          String(receipt.ProjectID || '') === String(allocation.ProjectID || '');
+      }, this);
+      if (activeReceipt) throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'برای این تخصیص دریافت فعال وجود دارد؛ ابتدا رسید مربوطه را با دلیل ابطال کنید.');
+      var now = this._now_();
+      var updated = Object.assign({}, allocation, { Status: 'VOID', VoidedAt: now, VoidedBy: user.ID, VoidReason: reason });
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ALLOCATIONS, allocation.ID, updated);
+      AuditService.log({ TenantID: user.TenantID, UserID: user.ID, Action: 'VOID', EntityType: 'PURCHASE_ALLOCATION', EntityID: allocation.ID, OldData: allocation, NewData: updated, Reason: reason });
+      return Response.success(updated);
+    } finally {
+      lock.releaseLock();
+    }
   },
 
   /**
@@ -897,6 +1034,7 @@ const ProcurementService = {
       itemById[String(item.ID)] = item;
     });
     allocations.forEach(function(allocation) {
+      if (!this._active_(allocation.Status)) return;
       var itemId = String(allocation.PurchaseOrderItemID || '');
       if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
       allocationsByItem[itemId].push(allocation);
@@ -920,6 +1058,7 @@ const ProcurementService = {
       }
     });
     receipts.forEach(function(receipt) {
+      if (!this._active_(receipt.Status)) return;
       var itemId = String(receipt.PurchaseOrderItemID || '');
       var quantity = Number(receipt.QuantityReceived) || 0;
       receivedByItem[itemId] = (receivedByItem[itemId] || 0) + quantity;
@@ -1006,6 +1145,7 @@ const ProcurementService = {
     var receiptsByItem = {};
 
     allocations.forEach(function(allocation) {
+      if (!this._active_(allocation.Status)) return;
       var itemId = String(allocation.PurchaseOrderItemID || '');
       if (!itemId) return;
       if (!allocationsByItem[itemId]) allocationsByItem[itemId] = [];
@@ -1021,6 +1161,7 @@ const ProcurementService = {
       itemsByOrder[key].push(item);
     });
     receipts.forEach(function(receipt) {
+      if (!this._active_(receipt.Status)) return;
       var key = String(receipt.PurchaseOrderItemID || '');
       if (!key) return;
       receiptsByItem[key] = receiptsByItem[key] || { quantity: 0, records: [] };
