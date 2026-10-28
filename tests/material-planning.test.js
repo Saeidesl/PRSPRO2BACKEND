@@ -195,6 +195,22 @@ test('confirmed quantity event creates material needs and safely replays', () =>
 
 
 
+test('confirmed calculation supersedes an estimated need for the same specification key', () => {
+  const { service, sheets } = loadService();
+  const spec = service.createSpecification('P1', {
+    ItemName: 'پارچه', Unit: 'متر', ConsumptionPerUnit: 1.5
+  }, {}).data;
+  sheets['18_MaterialNeeds'] = [{
+    ID: 'EST1', TenantID: 'T1', ProjectID: 'P1', MaterialSpecKey: spec.SpecKey,
+    ItemName: spec.ItemName, Unit: spec.Unit, RequestedQuantity: 100,
+    NeedType: 'ESTIMATED', Status: 'ACTIVE'
+  }];
+  const result = service.recalculateProjectNeeds('P1', 'EV1', 20, '1', {}).data;
+  assert.equal(sheets['18_MaterialNeeds'].find((row) => row.ID === 'EST1').Status, 'SUPERSEDED');
+  assert.equal(result.items[0].RequestedQuantity, 30);
+  assert.equal(sheets['18_MaterialNeeds'].filter((row) => row.NeedType === 'CONFIRMED' && row.Status === 'ACTIVE').length, 1);
+});
+
 test('voiding the source event marks confirmed needs for review without deleting history', () => {
   const { service, sheets } = loadService();
   service.createSpecification('P1', {
