@@ -379,7 +379,11 @@ const ProcurementService = {
         var replayReceipt = ProcurementRepository.getReceipts(user.TenantID).find(function(existing) {
           return String(existing.IdempotencyKey || '') === idempotencyKey;
         });
-        if (replayReceipt) return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+        if (replayReceipt) {
+          var replayItem = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, replayReceipt.PurchaseOrderItemID);
+          if (replayItem) this._reconcileReceiptOrderStatus_(replayItem.PurchaseOrderID, user.TenantID, this._now_());
+          return Response.success(Object.assign({ IdempotentReplay: true }, replayReceipt));
+        }
       }
       return this._createReceiptUnlocked_(body, params);
     } finally {
@@ -518,6 +522,10 @@ const ProcurementService = {
       }, this);
 
       if (!normalizedEntries.length) {
+        replayedReceipts.forEach(function(receipt) {
+          var replayItem = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, receipt.PurchaseOrderItemID);
+          if (replayItem) this._reconcileReceiptOrderStatus_(replayItem.PurchaseOrderID, user.TenantID, this._now_());
+        }, this);
         return Response.success(replayedReceipts.map(function(receipt) {
           return Object.assign({ IdempotentReplay: true }, receipt);
         }));
@@ -578,6 +586,14 @@ const ProcurementService = {
         updatedOrders[orderKey] = true;
       });
 
+      replayedReceipts.forEach(function(receipt) {
+        var replayItem = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, receipt.PurchaseOrderItemID);
+        if (!replayItem) return;
+        var replayOrderId = String(replayItem.PurchaseOrderID || '');
+        if (updatedOrders[replayOrderId]) return;
+        this._reconcileReceiptOrderStatus_(replayOrderId, user.TenantID, now);
+      }, this);
+
       created.forEach(function(receipt) {
         AuditService.log({
           TenantID: user.TenantID,
@@ -594,6 +610,45 @@ const ProcurementService = {
     }
   },
 
+  /**
+   * Reconcile the parent order after a receipt write or idempotent replay.
+   * Receipt rows are the source of truth; a prior status update may have failed
+   * after the receipt was persisted, so retries must repair the derived status.
+   */
+  _reconcileReceiptOrderStatus_: function(orderId, tenantId, now) {
+    var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, orderId);
+    if (!order || String(order.TenantID) !== String(tenantId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش دریافت برای بازیابی پیدا نشد.');
+    }
+    if (String(order.Status || '').toUpperCase() === 'NEEDS_REVIEW') return order;
+
+    var items = ProcurementRepository.getItems(tenantId).filter(function(item) {
+      return String(item.PurchaseOrderID || '') === String(orderId);
+    });
+    var receipts = ProcurementRepository.getReceipts(tenantId);
+    var orderedTotal = 0;
+    var receivedTotal = 0;
+    items.forEach(function(item) {
+      var ordered = Math.max(0, Number(item.OrderedQuantity) || 0);
+      orderedTotal += ordered;
+      receivedTotal += receipts.filter(function(receipt) {
+        return String(receipt.PurchaseOrderItemID || '') === String(item.ID);
+      }).reduce(function(sum, receipt) {
+        return sum + (Number(receipt.QuantityReceived) || 0);
+      }, 0);
+    });
+
+    var status = orderedTotal > 0 && receivedTotal >= orderedTotal ? 'RECEIVED' :
+      (receivedTotal > 0 ? 'PARTIALLY_RECEIVED' : 'ACTIVE');
+    if (String(order.Status || '').toUpperCase() !== status) {
+      GoogleSheetsRepository.updateById(ProcurementRepository.SHEETS.ORDERS, order.ID, {
+        Status: status,
+        UpdatedAt: now || this._now_()
+      });
+    }
+    return Object.assign({}, order, { Status: status, UpdatedAt: now || this._now_() });
+  },
+
   _createReceiptUnlocked_: function(body, params) {
     body = body || {};
     var user = this._user_(params);
@@ -603,7 +658,11 @@ const ProcurementService = {
           String(existing.PurchaseOrderItemID || '') === String(body.PurchaseOrderItemID || '') &&
           String(existing.Status || '').toUpperCase() !== 'VOID';
       });
-      if (eventReceiptReplay) return Response.success(Object.assign({ IdempotentReplay: true }, eventReceiptReplay));
+      if (eventReceiptReplay) {
+        var eventReplayItem = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, eventReceiptReplay.PurchaseOrderItemID);
+        if (eventReplayItem) this._reconcileReceiptOrderStatus_(eventReplayItem.PurchaseOrderID, user.TenantID, this._now_());
+        return Response.success(Object.assign({ IdempotentReplay: true }, eventReceiptReplay));
+      }
     }
     Validator.required(body.PurchaseOrderItemID, 'قلم سفارش');
     var quantity = this._number_(body.QuantityReceived, 'مقدار تحویل', false);
