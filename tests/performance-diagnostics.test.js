@@ -32,6 +32,9 @@ test('aggregates repository operations, sheets and cache outcomes per endpoint',
   assert.equal(summary.endpoint, '/procurement/workspace');
   assert.equal(summary.elapsedMs, 25);
   assert.equal(summary.repositoryOperationCount, 3);
+  assert.equal(summary.repositoryElapsedMs, 11);
+  assert.equal(summary.durationMsByType.getAll, 9);
+  assert.equal(summary.durationMsBySheet['18_MaterialNeeds'], 9);
   assert.equal(summary.cacheHitCount, 1);
   assert.equal(summary.cacheMissCount, 2);
   assert.equal(summary.operationsByType.getAll, 2);
