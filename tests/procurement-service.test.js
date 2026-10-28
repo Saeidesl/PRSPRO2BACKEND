@@ -16,6 +16,9 @@ function loadProcurementService() {
   let projectBulkReadCount = 0;
   const procurementReadCounts = Object.create(null);
   let projectRows = [{ ID: 'P1', TenantID: 'T1' }];
+  let lockAcquired = true;
+  let lockAttempts = 0;
+  let lockReleases = 0;
   const context = {
     AccessControlService: { getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' }) },
     ProjectRepository: {
@@ -71,7 +74,7 @@ function loadProcurementService() {
     Response: { success: (data) => ({ success: true, data }) },
     AuditService: { log: (entry) => { auditEntries.push(entry); return true; } },
     Utilities: { getUuid: () => 'uuid' + (++uuid) },
-    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => true }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => { lockAttempts++; return lockAcquired; }, releaseLock: () => { lockReleases++; return true; } }) },
     Date, Math, Number, String, Object, Array, JSON, isFinite
   };
   const source = fs.readFileSync(path.join(__dirname, '..', 'ProcurementService.js'), 'utf8');
@@ -85,6 +88,9 @@ function loadProcurementService() {
     setProjectRows: (rows) => { projectRows = rows.map((row) => ({ ...row })); },
     setInsertFailure: (failure) => { insertFailure = failure; },
     setUpdateFailure: (failure) => { updateFailure = failure; },
+    setLockAcquired: (value) => { lockAcquired = value; },
+    getLockAttempts: () => lockAttempts,
+    getLockReleases: () => lockReleases,
     auditEntries
   };
 }
@@ -333,3 +339,84 @@ test('batch receipt retry reconciles order status when the first status update f
   assert.equal(sheets['19_PurchaseOrders'][0].Status, 'PARTIALLY_RECEIVED', 'batch retry repairs the derived order status');
   assert.equal(sheets['19_PurchaseOrders'][0].Notes, 'preserve', 'reconciliation preserves unrelated order fields');
 });
+
+test('script-lock contention rejects order, single receipt, and batch receipt before any write', () => {
+  const scenarios = [
+    {
+      name: 'order',
+      invoke: (service) => service.createOrder({
+        IdempotencyKey: 'LOCK_ORDER',
+        Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 2 }]
+      }, {})
+    },
+    {
+      name: 'single receipt',
+      invoke: (service) => service.createReceipt({
+        PurchaseOrderItemID: 'ITEM_LOCK', QuantityReceived: 1, IdempotencyKey: 'LOCK_SINGLE'
+      }, {})
+    },
+    {
+      name: 'batch receipt',
+      invoke: (service) => service.createReceiptsBatch({
+        Receipts: [{ PurchaseOrderItemID: 'ITEM_LOCK', QuantityReceived: 1, IdempotencyKey: 'LOCK_BATCH' }]
+      }, {})
+    }
+  ];
+
+  scenarios.forEach(({ name, invoke }) => {
+    const { service, sheets, setLockAcquired, getLockAttempts, getLockReleases } = loadProcurementService();
+    setLockAcquired(false);
+    assert.throws(() => invoke(service), /در حال انجام است/, name + ' should return a retryable contention error');
+    assert.equal(getLockAttempts(), 1, name + ' should attempt to acquire the script lock once');
+    assert.equal(getLockReleases(), 0, name + ' must not release a lock it did not acquire');
+    assert.equal(Object.values(sheets).reduce((sum, rows) => sum + rows.length, 0), 0,
+      name + ' must not write any sheet rows when the lock is unavailable');
+  });
+});
+
+test('script lock is released after a write-path exception so a retry can proceed', () => {
+  const { service, sheets, setInsertFailure, getLockAttempts, getLockReleases } = loadProcurementService();
+  setInsertFailure((sheetName) => {
+    if (sheetName === '20_PurchaseOrderItems') throw new Error('controlled locked write failure');
+  });
+
+  assert.throws(() => service.createOrder({
+    IdempotencyKey: 'LOCK_RELEASE_RETRY',
+    Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 2 }]
+  }, {}), /controlled locked write failure/);
+  assert.equal(getLockAttempts(), 1);
+  assert.equal(getLockReleases(), 1, 'finally must release the acquired lock even on failure');
+
+  setInsertFailure(null);
+  const replay = service.createOrder({
+    IdempotencyKey: 'LOCK_RELEASE_RETRY',
+    Items: [{ ItemName: 'پارچه', Unit: 'متر', OrderedQuantity: 2 }]
+  }, {});
+  assert.equal(replay.data.IdempotentReplay, true);
+  assert.equal(replay.data.RecoveryRequired, true);
+  assert.equal(getLockAttempts(), 2, 'retry should be able to acquire the released lock');
+  assert.equal(getLockReleases(), 2);
+  assert.equal(sheets['19_PurchaseOrders'].length, 1, 'retry must not create a duplicate order');
+});
+
+test('successful order retry with the same idempotency key returns the original order without duplicate writes', () => {
+  const { service, sheets } = loadProcurementService();
+  const first = service.createOrder({
+    OrderNumber: 'PO-IDEMPOTENT-ORDER',
+    IdempotencyKey: 'ORDER-IDEMPOTENCY-SUCCESS',
+    Items: [{ ItemName: 'دکمه', Unit: 'عدد', OrderedQuantity: 12 }]
+  }, {});
+  const replay = service.createOrder({
+    OrderNumber: 'PO-SHOULD-NOT-REPLACE',
+    IdempotencyKey: 'ORDER-IDEMPOTENCY-SUCCESS',
+    Items: [{ ItemName: 'زیپ', Unit: 'عدد', OrderedQuantity: 999 }]
+  }, {});
+
+  assert.equal(first.data.Order.ID, replay.data.Order.ID);
+  assert.equal(replay.data.IdempotentReplay, true);
+  assert.equal(replay.data.Order.OrderNumber, 'PO-IDEMPOTENT-ORDER');
+  assert.equal(sheets['19_PurchaseOrders'].length, 1);
+  assert.equal(sheets['20_PurchaseOrderItems'].length, 1);
+  assert.equal(sheets['20_PurchaseOrderItems'][0].OrderedQuantity, 12);
+});
+
