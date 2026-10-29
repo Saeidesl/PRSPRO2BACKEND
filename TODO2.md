@@ -23,6 +23,16 @@
 - محدودیت‌های حیاتی: داده واقعی حذف/بازنویسی نشود؛ تغییر schema افزایشی و idempotent باشد؛ مجوز tenant/project سمت سرور اعمال شود؛ کد پروژه فقط یک بار و پس از تأیید صادر شود؛ مقدار برنامه‌ریزی‌شده از مقادیر واقعی عملیات جدا باشد؛ اجرای تکراری، تاریخچه اجرای قبلی را تغییر ندهد.
 - این بررسی ایستا بوده است؛ endpointها و payloadهای دقیق، قواعد اعتبارسنجی و رفتارهای اجرایی در تسک‌های پیاده‌سازی از سورس کامل دوباره بررسی و تست می‌شوند.
 
+### قرارداد تثبیت‌شده تسک ۲
+- مدل دامنه: پرونده پیش‌تولید `DesignCase` شناسه داخلی مستقل دارد؛ پروژه فعلی `08_Projects` فقط اجرای تولید است و `ProjectCode` اجباری فعلی‌اش حفظ می‌شود. یک پرونده می‌تواند چند اجرای مستقل تولید داشته باشد.
+- مهاجرت افزایشی پیشنهادی: شیت `26_DesignCases` با ستون‌های `ID, TenantID, DesignCode, Title, Description, Status, Priority, RequestedBy, OwnerUserID, OwnerDepartmentID, ProposedQuantity, ColorSizeJSON, ReferenceAttachmentID, RejectionReason, ApprovedAt, ApprovedBy, CreatedBy, CreatedAt, UpdatedAt, Revision`; افزودن `DesignCaseID, RunNumber, SourceProjectID` به انتهای `08_Projects`؛ افزودن `DesignCaseID` به انتهای `13_Events`؛ و شیت append-only `27_DesignCaseHistory` با `ID, TenantID, DesignCaseID, Revision, Action, FromStatus, ToStatus, Reason, SnapshotJSON, ActorUserID, CreatedAt, IdempotencyKey`.
+- وضعیت‌های پرونده: `DRAFT, IN_DESIGN, PATTERN_MAKING, MATERIALS_PENDING, SAMPLE_SEWING, REVISION_REQUIRED, READY_FOR_APPROVAL, REJECTED, APPROVED, ARCHIVED`. وضعیت پیش‌تولید از وضعیت پروژه تولید جدا است.
+- رنگ/سایز با قالب سازگار فعلی `{colors:[], sizes:[]}` ذخیره و در لحظه تأیید به‌عنوان snapshot به اجرای تولید کپی می‌شود. داده‌های پروژه قدیمی بدون DesignCaseID دست‌نخورده می‌مانند.
+- endpointهای موجود و بدون تغییر: `GET /projects`, `GET /projects/:id`, `POST /projects`, `PUT /projects/:id`, `GET /project-form/lookups`. ایجاد پروژه فعلی همچنان `ProjectCode`, `Title`, `WorkflowID`, `AvailableDepartmentIDs` می‌خواهد.
+- endpointهای هدف برای تسک‌های بعدی: `GET/POST /design-cases`, `GET/PUT /design-cases/:id`, `GET/POST /design-cases/:id/events`, `POST /design-cases/:id/reject`, `POST /design-cases/:id/approve`, `GET /design-cases/:id/production-runs`, `POST /design-cases/:id/production-runs`. payloadها و قواعد دقیق در بخش ۷ فایل بک‌اند `ARCHITECTURE2.md` ثبت شده‌اند. این endpointها هنوز ساخته نشده‌اند.
+- تضمین‌ها: tenant/permission در سرور؛ کد تولید فقط در تأیید؛ بررسی یکتایی کد زیر قفل؛ `IdempotencyKey` برای تأیید/ایجاد؛ retry قابل بازیابی برای شکست نیمه‌کاره؛ هیچ حذف/rename یا backfill اجباری برای داده‌های موجود.
+- وضعیت اجرا: این تسک فقط تثبیت مدل، قرارداد API و طرح مهاجرت است؛ هنوز تغییر کد اصلی یا اجرای مهاجرت دیتابیس انجام نشده. تست runtime نیز هنوز انجام نشده است.
+
 ## 📋 Macro-Task Queue & Implementation Log
 
 - [x] **تسک ۱ — بررسی معماری و برنامه‌ریزی فاز**
