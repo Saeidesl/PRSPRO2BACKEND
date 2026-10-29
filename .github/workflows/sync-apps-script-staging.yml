@@ -1,0 +1,100 @@
+name: Sync and deploy backend to Google Apps Script (STAGING)
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: "Push source to the isolated staging Apps Script project, optionally deploy it"
+        required: true
+        type: choice
+        options:
+          - push_only
+          - push_and_deploy
+        default: push_only
+      confirm_staging_action:
+        description: "Confirm that this action targets the isolated staging project and spreadsheet"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script-staging-sync
+  cancel-in-progress: false
+
+jobs:
+  validate-and-sync-staging:
+    if: ${{ inputs.confirm_staging_action == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout selected feature branch
+        uses: actions/checkout@v4
+
+      - name: Validate source and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f appsscript.json
+          node -e "JSON.parse(require('fs').readFileSync('appsscript.json', 'utf8'));"
+          count=0
+          declare -A names=()
+          for file in *.js; do
+            [ -f "$file" ] || continue
+            node --check "$file"
+            name="${file%.js}"
+            name="${name%.gs}"
+            if [[ -n "${names[$name]+x}" ]]; then
+              echo "Duplicate Apps Script target name: $name.gs"
+              exit 1
+            fi
+            names["$name"]=1
+            count=$((count + 1))
+          done
+          test "$count" -ge 60 || (echo "Refusing sync: expected at least 60 source files, found $count." && exit 1)
+
+      - name: Set up Node.js and clasp
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install --global @google/clasp
+
+      - name: Configure isolated staging credentials
+        env:
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+          STAGING_SCRIPT_ID: ${{ secrets.STAGING_APPS_SCRIPT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLASP_CREDENTIALS" || (echo "Missing CLASP_CREDENTIALS secret" && exit 1)
+          test -n "$STAGING_SCRIPT_ID" || (echo "Missing STAGING_APPS_SCRIPT_ID secret; no source was pushed." && exit 1)
+          printf '%s' "$CLASP_CREDENTIALS" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          mkdir -p deploy
+          cp appsscript.json deploy/appsscript.json
+          for file in *.js; do
+            [ -f "$file" ] || continue
+            name="${file%.js}"
+            name="${name%.gs}"
+            cp "$file" "deploy/$name.gs"
+          done
+          test "$(find deploy -maxdepth 1 -type f -name '*.gs' | wc -l)" -ge 60
+          printf '{"scriptId":"%s","rootDir":"deploy"}\n' "$STAGING_SCRIPT_ID" > .clasp.json
+
+      - name: Push source to staging project only
+        run: clasp push --force
+
+      - name: Deploy staging web app
+        if: ${{ inputs.phase == 'push_and_deploy' }}
+        env:
+          STAGING_DEPLOYMENT_ID: AKfycbw-o15vVNFbnfqhVYV6PtpDOTt4jURF5QKEahvnENkZp2hOPlek1Hj55T2tBnypfPCb
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_DEPLOYMENT_ID" || (echo "Missing staging deployment ID; source was pushed but deployment was skipped." && exit 1)
+          test "$STAGING_DEPLOYMENT_ID" != "AKfycbzHlLF_UuVZu6VIbl59EyIi4ZnLeJfssrBmo0jkn4BvrCPpqYyJ5qP71WdALtyalOKv_A" || (echo "Refusing to deploy: configured deployment ID matches production." && exit 1)
+          clasp deploy --deploymentId "$STAGING_DEPLOYMENT_ID" --description "Staging feature branch ${GITHUB_SHA:0:7}"
