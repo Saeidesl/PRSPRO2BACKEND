@@ -97,3 +97,74 @@
 - اطلاعات اجرای تولید قبلی هنگام تکرار سفارش تغییر نکند.
 - هر تغییر API در هر دو مخزن هماهنگ شود؛ از لایه مرکزی `PMS.Api` در فرانت‌اند استفاده شود.
 - هر گزارش تست باید روشن کند چه چیزی واقعاً اجرا شده و چه چیزی فقط به‌صورت ایستا بررسی شده است.
+
+
+## 7. تسک ۲ — مدل داده نهایی پرونده طرح و اجرای تولید (Schema Freeze)
+
+### تصمیم نهایی مدل دامنه
+- `DesignCase` پرونده پایدار طرح/پیش‌تولید است؛ از ابتدا `ID` داخلی دارد و به `ProjectCode` نیاز ندارد. ایجاد پرونده طرح نباید ردیفی در `08_Projects` با کد خالی ایجاد کند.
+- `Project` موجود در `08_Projects` نماینده یک اجرای واقعی تولید است و قرارداد قدیمی آن حفظ می‌شود: `ProjectCode` همچنان اجباری و یکتا در Tenant است؛ `ID` داخلی از کد قابل نمایش جدا می‌ماند.
+- یک `DesignCase` می‌تواند به چند اجرای تولید متصل شود. اجرای اول و سفارش‌های تکراری هرکدام یک ProjectID مستقل و کد مستقل دارند؛ هیچ‌کدام رویدادها، مقدارهای واقعی یا محاسبات اجرای قبلی را بازنویسی نمی‌کنند.
+- رویدادهای پیش‌تولید در `13_Events` با `DesignCaseID` و بدون `ProjectID` ثبت می‌شوند؛ رویدادهای اجرای تولید با `ProjectID` ثبت می‌شوند. هر رویداد دقیقاً به یکی از این دو والد تعلق دارد. `14_EventData` همچنان از طریق `EventID` به رویداد وصل است.
+- پیوست‌های طرح در `15_Attachments` با `EntityType=DESIGN_CASE` و `EntityID=DesignCaseID` نگهداری می‌شوند؛ فایل‌های پروژه و انواع فعلی پیوست تغییر نمی‌کنند.
+- رنگ و سایز در پرونده طرح به‌صورت فهرست ساختاریافته ذخیره می‌شوند؛ هنگام تأیید به اجرای تولید کپی می‌شوند و در `ColorSizeJSON` با قرارداد فعلی `{ colors: [], sizes: [] }` باقی می‌مانند. ترکیب‌های واقعی و مقدار هر ترکیب در رویدادهای عملیاتی از طریق `VariantDetailsJSON` حفظ می‌شوند.
+- وضعیت پیش‌تولید مستقل از وضعیت اجرای تولید است؛ تغییر مرحله پیش‌تولید نباید `Project.Status` یا `CurrentStepID` اجرای تولید را تغییر دهد.
+- رد طرح با دلیل و تاریخچه حفظ می‌شود. بازگشایی/اصلاح پرونده ردشده باید رویداد جدید ایجاد کند و تاریخچه تصمیم قبلی را پاک نکند.
+- تأیید و ایجاد اجرای اول باید یک عملیات منطقی idempotent باشد؛ تکرار همان درخواست نباید کد یا اجرای دوم بسازد. سفارش تکراری یک عملیات جداگانه است و فقط با اقدام صریح کاربر ایجاد می‌شود.
+
+### طرح افزایشی شیت‌ها و ستون‌ها
+#### شیت جدید `26_DesignCases`
+سرستون‌های پیشنهادی برای ایجاد افزایشی و idempotent:
+`ID, TenantID, DesignCode, Title, Description, Status, Priority, RequestedBy, OwnerUserID, OwnerDepartmentID, ProposedQuantity, ColorSizeJSON, ReferenceAttachmentID, RejectionReason, ApprovedAt, ApprovedBy, CreatedBy, CreatedAt, UpdatedAt, Revision`
+- `ID`: شناسه پایدار تولیدشده در سرور.
+- `DesignCode`: کد قابل نمایش اختیاری و یکتا در Tenant، در صورت نیاز کسب‌وکار؛ با `ProjectCode` یکسان نیست و کد پروژه تولید را جایگزین نمی‌کند.
+- `Status`: فقط وضعیت‌های دامنه طرح؛ مقادیر اولیه: `DRAFT, IN_DESIGN, PATTERN_MAKING, MATERIALS_PENDING, SAMPLE_SEWING, REVISION_REQUIRED, READY_FOR_APPROVAL, REJECTED, APPROVED, ARCHIVED`.
+- `ProposedQuantity`: مقدار برآوردی/نمونه؛ جایگزین تعداد قطعی اجرای تولید نیست.
+- `ColorSizeJSON`: همان قالب سازگار فعلی `{colors:[],sizes:[]}`.
+- `Revision`: نسخه پرونده برای ردیابی اصلاحات؛ هر اصلاح مهم نسخه را افزایش می‌دهد.
+#### تغییر افزایشی شیت `08_Projects`
+افزودن ستون‌های انتهایی:
+`DesignCaseID, RunNumber, SourceProjectID`
+- رکوردهای موجود با مقادیر خالی باقی می‌مانند و معنای فعلی آن‌ها تغییر نمی‌کند.
+- `DesignCaseID` پیوند اجرای تولید به پرونده تأییدشده است.
+- `RunNumber` شماره اجرای تولید در محدوده یک پرونده است؛ اجرای اول 1 و اجرای مجدد عدد بعدی.
+- `SourceProjectID` برای اجرای تکراری، به اجرای قبلی مرجع می‌دهد؛ در اجرای اول خالی است.
+#### تغییر افزایشی شیت `13_Events`
+افزودن ستون انتهایی `DesignCaseID`.
+- برای رویدادهای قدیمی و رویدادهای تولید مقدار خالی می‌ماند.
+- اعتبارسنجی جدید تضمین می‌کند هر رویداد یا `ProjectID` یا `DesignCaseID` داشته باشد، نه هر دو؛ رویدادهای قدیمی بدون تغییر باقی می‌مانند و قاعده برای نوشتن‌های جدید اعمال می‌شود.
+- قبل از rollout، تمام مصرف‌کنندگان `EventRepository`, `EventService`, timeline، گزارش‌ها و فیلترهای دسترسی باید برای هر دو نوع والد سازگار شوند.
+#### شیت جدید `27_DesignCaseHistory`
+سرستون‌ها:
+`ID, TenantID, DesignCaseID, Revision, Action, FromStatus, ToStatus, Reason, SnapshotJSON, ActorUserID, CreatedAt, IdempotencyKey`
+- ثبت تغییر وضعیت، رد/تأیید، اصلاح نسخه و ایجاد اجرای تولید؛ فقط append، بدون حذف یا بازنویسی تاریخچه.
+- ثبت رویداد عملیاتی در `13_Events` و audit عمومی در `16_AuditLogs` مکمل این تاریخچه هستند؛ این سه منبع جایگزین هم نیستند.
+
+### قرارداد API فعلی (در شاخه main)
+- `GET /projects` → `ProjectService.list(params)`; نیازمند `PROJECT_VIEW`.
+- `GET /projects/:projectId` → `ProjectService.get(projectId, params)`; نیازمند `PROJECT_VIEW`.
+- `POST /projects` → `ProjectService.create(body, params)`; نیازمند `PROJECT_CREATE`; payload فعلی به `ProjectCode`, `Title`, `WorkflowID`, `AvailableDepartmentIDs` و سایر فیلدهای پروژه وابسته است. `ProjectCode` و `WorkflowID` اجباری‌اند.
+- `PUT /projects/:projectId` → `ProjectService.update(projectId, body, params)`; نیازمند `PROJECT_EDIT`; کد پروژه پس از ایجاد تغییرناپذیر است.
+- `GET /project-form/lookups` → `ProjectService.projectFormLookups(params)`; lookup واحدها، کاربران، گردش‌کارها و وضعیت‌ها.
+- این APIهای موجود حفظ می‌شوند؛ پرونده طرح از endpointهای جداگانه استفاده می‌کند.
+
+### قرارداد API هدف برای تسک‌های بعدی (هنوز پیاده‌سازی نشده)
+- `GET /design-cases` — فهرست پرونده‌های طرح با فیلتر وضعیت، جست‌وجو، صفحه‌بندی و محدودسازی Tenant/دسترسی.
+- `POST /design-cases` — ساخت پرونده اولیه؛ payload: `{Title, Description?, Priority?, OwnerUserID?, OwnerDepartmentID?, ProposedQuantity?, ColorSizeJSON?, IdempotencyKey}`. پاسخ شامل `ID`, `Status=DRAFT`, `Revision=1`؛ بدون `ProjectCode` و بدون ساخت Project.
+- `GET /design-cases/:id` — جزئیات پرونده و خلاصه اجراهای تولید مرتبط.
+- `PUT /design-cases/:id` — ویرایش مجاز پرونده؛ payload فقط فیلدهای قابل ویرایش و `ExpectedRevision`; رد نسخه قدیمی برای جلوگیری از overwrite هم‌زمان.
+- `GET /design-cases/:id/events` و `POST /design-cases/:id/events` — تاریخچه و ثبت رویداد پیش‌تولید؛ payload رویداد شامل `EventTypeID`, `OccurredAt?`, `PerformedBy?`, `Description?`, `DataJSON?`, `IdempotencyKey`; سرور والد را از مسیر تعیین می‌کند.
+- `POST /design-cases/:id/reject` — payload اجباری `{Reason, IdempotencyKey}`; وضعیت REJECTED و ثبت history/audit.
+- `POST /design-cases/:id/approve` — payload نهایی تولید: `{ProjectCode, Title?, Quantity, WorkflowID, AvailableDepartmentIDs, AllowedUserIDs?, NotifyEnabled?, ColorSizeJSON?, IdempotencyKey}`; سرور در یک عملیات منطقی پرونده را APPROVED می‌کند، اولین `08_Projects` را با `DesignCaseID`, `RunNumber=1` ایجاد می‌کند و کد را فقط در همین نقطه تخصیص می‌دهد.
+- `POST /design-cases/:id/production-runs` — اجرای سفارش تکراری فقط برای پرونده APPROVED؛ payload شامل `ProjectCode, Quantity, WorkflowID, AvailableDepartmentIDs, ColorSizeJSON?, SourceProjectID?, IdempotencyKey`; اجرای جدید ProjectID و ProjectCode مستقل دارد و سوابق اجرای قبلی دست‌نخورده می‌ماند.
+- `GET /design-cases/:id/production-runs` — فهرست اجراهای مرتبط.
+- endpointهای جدید باید permission code اختصاصی یا سیاستی روشن مبتنی بر مجوزهای فعلی داشته باشند؛ تمام مسیرها tenant-scoped و idempotent هستند. این مسیرها قرارداد پیشنهادی هستند، نه endpointهای موجود.
+
+### قواعد یکپارچگی و مهاجرت
+1. مهاجرت فقط ستون/شیت جدید اضافه می‌کند؛ هیچ سطر یا ستون موجود حذف، rename یا جابه‌جا نمی‌شود.
+2. اجرای `DatabaseSetup` باید ایمن، تکرارپذیر و بدون seed تکراری باشد؛ ایجاد شیت‌ها و سرستون‌ها به شکل افزایشی انجام می‌شود.
+3. قبل از تغییر، مصرف‌کنندگان مستقیم `ProjectCode`, `ProjectID`, `ColorSizeJSON`, `VariantDetailsJSON`, گزارش‌ها، attachments و procurement شناسایی و در تست رگرسیون پوشش داده می‌شوند.
+4. برای کدهای پروژه، یکتایی در Tenant زیر `LockService` بررسی می‌شود؛ کد از کلاینت قابل اعتماد نیست و قبل از تأیید تولیدی ایجاد نمی‌شود.
+5. ساخت اجرای تولید و تغییر وضعیت پرونده در Google Sheets تراکنش واقعی نیست؛ پیاده‌سازی باید قفل، `IdempotencyKey`, وضعیت عملیات قابل بازیابی و ثبت audit داشته باشد و در صورت شکست نیمه‌کاره، retry همان اجرا را تکمیل کند نه اینکه اجرای دوم بسازد.
+6. فهرست‌های رنگ/سایز نسخه‌ای از پرونده به اجرا کپی می‌شوند؛ ویرایش بعدی طرح نباید رنگ/سایز اجرای قدیمی را تغییر دهد.
+7. داده‌های قدیمی Project بدون `DesignCaseID` همچنان پروژه معتبر باقی می‌مانند و نیازی به backfill اجباری ندارند.
