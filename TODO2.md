@@ -1,0 +1,43 @@
+## 🎯 Current Objective
+
+طراحی و پیاده‌سازی چرخه یکپارچه «طرح → پیش‌تولید و نمونه‌گیری → تأیید/عدم تأیید → تولید» در PMS. پرونده از ابتدا شناسه داخلی ثابت دارد؛ کد پروژه تولیدی فقط پس از تأیید صادر می‌شود. داده‌های رنگ/سایز، ملزومات، رویدادها، گزارش‌ها و سفارش‌های تکراری باید ساختاریافته و بدون شکستن داده‌های فعلی پشتیبانی شوند.
+
+## 🗺️ Technical Spec & Architecture Map (DO NOT DELETE)
+
+### مخازن و اسناد مرجع
+- Backend: `Saeidesl/PRSPRO2BACKEND`, شاخه `main`.
+- Frontend: `Saeidesl/PRSPRO2`, شاخه `main`.
+- نقشه تفصیلی بک‌اند: `ARCHITECTURE2.md` در ریشه مخزن بک‌اند.
+- نقشه تفصیلی فرانت‌اند: `ARCHITECTURE2.md` در ریشه مخزن فرانت‌اند.
+- اسناد موجود که باید حفظ شوند: بک‌اند `TODO.md` و فرانت‌اند `ARCHITECTURE.md` و `TODO1.md`. این فاز آن‌ها را بازنویسی نمی‌کند.
+
+### نقشه فنی تأییدشده از سورس فعلی
+- Backend GAS V8 / Google Sheets: `Router.js`, `ProjectService.js`, `ProjectRepository.js`, `ProjectValidator.js`, `EventService.js`, `EventTypeService.js`, `EventFieldService.js`, `EventDataService.js`, `GoogleSheetsRepository.js`, `DatabaseSetup.js`, `MaterialPlanningService.js`, `ProcurementService.js`, `ProcurementRepository.js`, `ProcurementEventIntegrationService.js`, `ReportService.js`, `AccessControlService.js`, `AuditService.js`.
+- Frontend: `pages/projects.html`, `pages/project-detail.html`, `pages/dashboard.html`, `js/modules/projects.js`, `js/modules/project-detail.js`, `js/modules/events.js`, `js/modules/event-types.js`, `js/modules/material-planning.js`, `js/modules/project-images.js`, `js/core/api.js`, `js/core/router.js`, `js/components/layout.js`, `css/project-form.css`, `css/unified-theme.css`.
+- Project sheet `08_Projects` فعلاً شامل `ID, TenantID, ProjectCode, Title, Description, WorkflowID, WorkflowVersion, CurrentStepID, Status, CreatedBy, CreatedAt, UpdatedAt, Quantity, ColorSizeJSON, AvailableDepartmentIDs, AllowedUserIDs, NotifyEnabled, CurrentStepStatus` است. Repository توابع `findById`, `findByProjectCode`, `existsByProjectCode`, `insert`, `update`, `delete` دارد.
+- رویدادها در `13_Events` به `ProjectID` و `EventTypeID` متصل‌اند؛ داده پویا در `14_EventData.DataJSON` ذخیره می‌شود. فیلدهای پویا از شیت `12_EventFields` تعریف می‌شوند. پیوست‌ها در `15_Attachments` با `EntityType/EntityID/AttachmentType` متصل‌اند.
+- رنگ/سایز فعلی در ستون `ColorSizeJSON` پروژه ذخیره می‌شود؛ شکل دقیق JSON و تمام مصرف‌کنندگان باید پیش از تغییر بررسی شود.
+- ملزومات فعلی: `18_MaterialNeeds`, `24_ProjectMaterialSpecs`, `25_MaterialNeedCalculations`; سفارش/دریافت: شیت‌های 19 تا 22؛ تنظیم رویداد-تأمین: `23_EventTypeProcurementSettings`.
+- `ProjectService.projectFormLookups(params)` داده‌های lookup فرم فعلی را آماده می‌کند. `EventService` می‌تواند طبق تنظیمات نوع رویداد وضعیت یا مرحله پروژه را تغییر دهد.
+- Frontend `Projects.openCreateForm(project, options)` و `Projects.openProjectEditForm(projectId, options)` را در `js/modules/projects.js` دارد؛ فرم‌های پروژه در زمان اجرا ساخته می‌شوند. درخواست‌ها باید از `PMS.Api` در `js/core/api.js` عبور کنند.
+- محدودیت‌های حیاتی: داده واقعی حذف/بازنویسی نشود؛ تغییر schema افزایشی و idempotent باشد؛ مجوز tenant/project سمت سرور اعمال شود؛ کد پروژه فقط یک بار و پس از تأیید صادر شود؛ مقدار برنامه‌ریزی‌شده از مقادیر واقعی عملیات جدا باشد؛ اجرای تکراری، تاریخچه اجرای قبلی را تغییر ندهد.
+- این بررسی ایستا بوده است؛ endpointها و payloadهای دقیق، قواعد اعتبارسنجی و رفتارهای اجرایی در تسک‌های پیاده‌سازی از سورس کامل دوباره بررسی و تست می‌شوند.
+
+## 📋 Macro-Task Queue & Implementation Log
+
+- [x] **تسک ۱ — بررسی معماری و برنامه‌ریزی فاز**
+  - *Log:* فایل‌های پایه و اسناد موجود در دو مخزن بررسی شدند: بک‌اند `TODO.md`, `DatabaseSetup.js`, `ProjectRepository.js`, بخش‌های `ProjectService.js`, `EventService.js` و معماری تأمین؛ فرانت‌اند `ARCHITECTURE.md`, `TODO1.md` و نقشه ماژول‌های پروژه/رویداد/API. مدل فعلی پروژه، داده‌های رویداد پویا، رنگ/سایز، ملزومات و فایل‌های وابسته ثبت شد. `ARCHITECTURE2.md` در هر دو مخزن ایجاد شد. بررسی ایستا است و هنوز تست اجرایی انجام نشده.
+- [ ] **تسک ۲ — تثبیت مدل داده پرونده طرح و اجرای تولید (IN PROGRESS)**
+  - تعیین رابطه طرح/پرونده اولیه/اجرای تولید، شناسه پایدار و کد نهایی، وضعیت‌ها، سازگاری با داده‌های موجود، رنگ‌بندی/سایزبندی ساختاریافته، تاریخچه و مدل سفارش تکراری؛ مستندسازی قرارداد دقیق API و مهاجرت افزایشی پیش از تغییر کد.
+- [ ] **تسک ۳ — پرونده پیش‌تولید و گردش نمونه‌گیری در فرانت‌اند و بک‌اند**
+  - ایجاد/فهرست/مشاهده/ویرایش پرونده اولیه؛ تصویر طرح؛ نقش‌ها و مراحل طراحی، الگوسازی، درخواست/تحویل ملزومات، نمونه‌دوزی، اصلاحات و تاریخچه؛ اتصال به شناسه پایدار با UI هماهنگ با تم و موبایل.
+- [ ] **تسک ۴ — رویدادهای تأیید/عدم تأیید و تبدیل امن به تولید**
+  - رویداد تأیید، فرم اطلاعات تولید، صدور یکتای کد، ثبت تعداد و رنگ/سایز؛ رویداد عدم تأیید با دلیل؛ کنترل دوباره‌ثبت، دسترسی و خطاهای نیمه‌کاره؛ اتصال پرونده موجود به جریان تولید بدون ایجاد پرونده تکراری.
+- [ ] **تسک ۵ — اتصال داده‌های ساختاریافته به برش، ملزومات، محاسبات و گزارش‌ها**
+  - نمایش رنگ/سایز و تعداد به برش؛ ثبت مقادیر واقعی؛ محاسبه نیاز بر پایه مشخصات مصرف و ضایعات؛ جلوگیری از نیازهای تکراری؛ یکپارچگی گزارش پروژه و گزارش تأمین.
+- [ ] **تسک ۶ — فرم‌ساز پویا و اتصال فرم به رویداد**
+  - تعریف/ویرایش فرم و فیلدها، اعتبارسنجی، ذخیره داده ساختاریافته، اتصال نوع رویداد به فرم، نمایش در زمان ثبت رویداد و حفظ نسخه/تاریخچه؛ سازگاری با زیرساخت EventTypes/EventFields/EventData.
+- [ ] **تسک ۷ — پشتیبانی از سفارش تکراری، آزمون رگرسیون و بهینه‌سازی**
+  - شروع اجرای تولید جدید از طرح تأییدشده و مرحله مناسب؛ استفاده مجدد کنترل‌شده از الگو/استاندارد مصرف؛ حفظ تاریخچه اجرای قبلی؛ آزمون مسیر کامل، مجوزها، داده‌های قدیمی، کارایی و گزارش نهایی.
+
+> قاعده اجرا: هر Macro-Task به‌صورت یک تحویل کامل فرانت‌اند+بک‌اند اجرا می‌شود. پس از هر تسک، نتیجه و فایل‌های تغییرکرده گزارش می‌شوند؛ تیک تسک و Log دقیق تکمیل فقط بعد از تأیید کاربر ثبت می‌شود. تسک ۱ تنها به دلیل انجام بررسی و برنامه‌ریزی تیک خورده است؛ تسک ۲ فعال است.
