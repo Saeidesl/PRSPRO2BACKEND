@@ -145,13 +145,13 @@ const Router = {
       return DesignCaseService.list(params);
     }
 
-    const designCaseEventsGet = path.match(/^\\/design-cases\\/([^/]+)\\/events$/);
+    const designCaseEventsGet = path.match(/^\/design-cases\/([^/]+)\/events$/);
     if (designCaseEventsGet) {
       this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_EDIT', 'PROJECT_CREATE']);
       return DesignCaseService.get(designCaseEventsGet[1], params);
     }
 
-    const designCaseGet = path.match(/^\\/design-cases\\/([^/]+)$/);
+    const designCaseGet = path.match(/^\/design-cases\/([^/]+)$/);
     if (designCaseGet) {
       this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_EDIT', 'PROJECT_CREATE']);
       return DesignCaseService.get(designCaseGet[1], params);
@@ -531,7 +531,7 @@ const Router = {
       return DesignCaseService.create(body, params);
     }
 
-    const designCaseEventPost = path.match(/^\\/design-cases\\/([^/]+)\\/events$/);
+    const designCaseEventPost = path.match(/^\/design-cases\/([^/]+)\/events$/);
     if (designCaseEventPost) {
       this.requireAny(params, ['PROJECT_EDIT', 'EVENT_CREATE']);
       return DesignCaseService.addEvent(designCaseEventPost[1], body, params);
@@ -708,7 +708,7 @@ const Router = {
       return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
     }
 
-    const designCasePut = path.match(/^\\/design-cases\\/([^/]+)$/);
+    const designCasePut = path.match(/^\/design-cases\/([^/]+)$/);
     if (designCasePut) {
       AccessControlService.require(params, 'PROJECT_EDIT');
       return DesignCaseService.update(designCasePut[1], body, params);
