@@ -140,23 +140,6 @@ const Router = {
       return ProjectService.projectFormLookups(params);
     }
 
-    if (path === '/design-cases') {
-      this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_CREATE', 'PROJECT_EDIT']);
-      return DesignCaseService.list(params);
-    }
-
-    const designCaseEventsGet = path.match(/^\/design-cases\/([^/]+)\/events$/);
-    if (designCaseEventsGet) {
-      this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_EDIT', 'PROJECT_CREATE']);
-      return DesignCaseService.get(designCaseEventsGet[1], params);
-    }
-
-    const designCaseGet = path.match(/^\/design-cases\/([^/]+)$/);
-    if (designCaseGet) {
-      this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_EDIT', 'PROJECT_CREATE']);
-      return DesignCaseService.get(designCaseGet[1], params);
-    }
-
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_VIEW');
       return ProjectService.list(params);
@@ -526,17 +509,6 @@ const Router = {
       return MaterialPlanningService.createSpecification(projectId, body, params);
     }
 
-    if (path === '/design-cases') {
-      AccessControlService.require(params, 'PROJECT_CREATE');
-      return DesignCaseService.create(body, params);
-    }
-
-    const designCaseEventPost = path.match(/^\/design-cases\/([^/]+)\/events$/);
-    if (designCaseEventPost) {
-      this.requireAny(params, ['PROJECT_EDIT', 'EVENT_CREATE']);
-      return DesignCaseService.addEvent(designCaseEventPost[1], body, params);
-    }
-
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_CREATE');
       return ProjectService.create(body, params);
@@ -706,12 +678,6 @@ const Router = {
     if (materialSpecUpdateMatch) {
       AccessControlService.require(params, 'PROJECT_EDIT');
       return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
-    }
-
-    const designCasePut = path.match(/^\/design-cases\/([^/]+)$/);
-    if (designCasePut) {
-      AccessControlService.require(params, 'PROJECT_EDIT');
-      return DesignCaseService.update(designCasePut[1], body, params);
     }
 
     if (path.indexOf('/projects/') === 0) {
