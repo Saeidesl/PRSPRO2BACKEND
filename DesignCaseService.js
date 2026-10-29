@@ -45,7 +45,7 @@ const DesignCaseService = {
     return item;
   },
   _recordHistory_: function(item, action, fromStatus, toStatus, reason, user, idempotencyKey) {
-    var nextRevision = (Number(item.Revision) || 0) + 1;
+    var nextRevision = Number(item.Revision) || 1;
     var snapshot = {};
     Object.keys(item).forEach(function(key) { snapshot[key] = item[key]; });
     snapshot.Status = toStatus;
