@@ -27,7 +27,9 @@ const EventTypeService = {
     if (!eventType) return eventType;
 
     const result = Object.assign({}, eventType);
-    result.ConnectionType = String(result.ConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT' ? 'INDEPENDENT' : 'PROJECT';
+    const connectionType = String(result.ConnectionType || 'PROJECT').toUpperCase();
+    result.ConnectionType = ['INDEPENDENT','DESIGN_CASE'].indexOf(connectionType) !== -1 ? connectionType : 'PROJECT';
+    result.TransitionsToProduction = this._toBoolean_(result.TransitionsToProduction);
     const self = this;
 
     this.ARRAY_FIELDS.forEach(function(field) {
@@ -69,7 +71,8 @@ const EventTypeService = {
       'UseProjectColors',
       'UseProjectSizes',
       'TrackVariantQuantity',
-      'IsWorkCompletion'
+      'IsWorkCompletion',
+      'TransitionsToProduction'
     ].forEach(function(field) {
       if (result[field] !== undefined) {
         result[field] = self._toBoolean_(result[field]);
@@ -390,7 +393,7 @@ const EventTypeService = {
       TenantID: user.TenantID,
       Name: data.Name,
       Code: data.Code,
-      ConnectionType: String(data.ConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT' ? 'INDEPENDENT' : 'PROJECT',
+      ConnectionType: ['INDEPENDENT','DESIGN_CASE'].indexOf(String(data.ConnectionType || 'PROJECT').toUpperCase()) !== -1 ? String(data.ConnectionType).toUpperCase() : 'PROJECT',
       Version: data.Version || 1,
       Description: data.Description || '',
       DepartmentID: data.DepartmentID || '',
@@ -405,6 +408,8 @@ const EventTypeService = {
       TargetDepartmentID: data.TargetDepartmentID || '',
       TargetProjectStatus: data.TargetProjectStatus || '',
       TargetStepStatus: data.TargetStepStatus || '',
+      TargetDesignCaseStatus: data.TargetDesignCaseStatus || '',
+      TransitionsToProduction: this._toBoolean_(data.TransitionsToProduction),
       AllowedDepartmentIDs: this._parseArray_(
         data.AllowedDepartmentIDs
       ),
@@ -450,7 +455,9 @@ const EventTypeService = {
       'EVENT_TYPE_MANAGE'
     );
 
-    EventTypeValidator.validateUpdate(data);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      EventTypeValidator.validateUpdate(data);
+    }
 
     const existing = EventTypeRepository.findById(id);
 
@@ -463,6 +470,11 @@ const EventTypeService = {
         'نوع رویداد مورد نظر پیدا نشد.'
       );
     }
+
+    // Validate partial updates against the effective full configuration.
+    // Otherwise changing a single design-case setting can be rejected because
+    // ConnectionType was omitted, or can leave incompatible stale settings behind.
+    EventTypeValidator.validateUpdate(Object.assign({}, this._normalize_(existing), data));
 
     if (
       data.Code !== undefined &&

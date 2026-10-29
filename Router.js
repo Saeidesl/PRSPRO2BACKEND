@@ -140,6 +140,29 @@ const Router = {
       return ProjectService.projectFormLookups(params);
     }
 
+    if (path === '/design-cases') {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return DesignCaseService.list(params);
+    }
+
+    const designCaseAttachmentsMatch = path.match(/^\/design-cases\/([^/]+)\/attachments$/);
+    if (designCaseAttachmentsMatch) {
+      AccessControlService.require(params, 'ATTACHMENT_VIEW');
+      return AttachmentService.listByEntity('DESIGN_CASE', decodeURIComponent(designCaseAttachmentsMatch[1]), params);
+    }
+
+    const designCaseEventsMatch = path.match(/^\/design-cases\/([^/]+)\/events$/);
+    if (designCaseEventsMatch) {
+      AccessControlService.require(params, 'EVENT_VIEW');
+      return EventService.listByDesignCase(decodeURIComponent(designCaseEventsMatch[1]), params);
+    }
+
+    const designCaseMatch = path.match(/^\/design-cases\/([^/]+)$/);
+    if (designCaseMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return DesignCaseService.get(decodeURIComponent(designCaseMatch[1]), params);
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_VIEW');
       return ProjectService.list(params);
@@ -509,6 +532,31 @@ const Router = {
       return MaterialPlanningService.createSpecification(projectId, body, params);
     }
 
+    if (path === '/design-cases') {
+      AccessControlService.require(params, 'PROJECT_CREATE');
+      return DesignCaseService.create(body, params);
+    }
+
+    const designCaseApproveMatch = path.match(/^\/design-cases\/([^/]+)\/approve$/);
+    if (designCaseApproveMatch) {
+      AccessControlService.require(params, 'PROJECT_CREATE');
+      return DesignCaseService.approve(decodeURIComponent(designCaseApproveMatch[1]), body, params);
+    }
+
+    const designCaseEventCreateMatch = path.match(/^\/design-cases\/([^/]+)\/events$/);
+    if (designCaseEventCreateMatch) {
+      AccessControlService.require(params, 'EVENT_CREATE');
+      return EventService.createForDesignCase(decodeURIComponent(designCaseEventCreateMatch[1]), body, params);
+    }
+
+    const designCaseAttachmentMatch = path.match(/^\/design-cases\/([^/]+)\/attachments$/);
+    if (designCaseAttachmentMatch) {
+      AccessControlService.require(params, 'ATTACHMENT_UPLOAD');
+      body.EntityType = 'DESIGN_CASE';
+      body.EntityID = decodeURIComponent(designCaseAttachmentMatch[1]);
+      return AttachmentService.upload(body, params);
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_CREATE');
       return ProjectService.create(body, params);
@@ -678,6 +726,12 @@ const Router = {
     if (materialSpecUpdateMatch) {
       AccessControlService.require(params, 'PROJECT_EDIT');
       return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
+    }
+
+    const designCaseUpdateMatch = path.match(/^\/design-cases\/([^/]+)$/);
+    if (designCaseUpdateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return DesignCaseService.update(decodeURIComponent(designCaseUpdateMatch[1]), body, params);
     }
 
     if (path.indexOf('/projects/') === 0) {
