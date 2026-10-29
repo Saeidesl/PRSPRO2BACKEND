@@ -28,7 +28,7 @@ const AttachmentValidator = {
     Validator.string(data.MimeType, 'MimeType');
     Validator.string(data.Base64, 'Base64');
 
-    Validator.enum(data.EntityType, ['PROJECT', 'EVENT'], 'EntityType');
+    Validator.enum(data.EntityType, ['PROJECT', 'EVENT', 'DESIGN_CASE'], 'EntityType');
 
     var entityType = String(data.EntityType).toUpperCase();
     var mimeType = String(data.MimeType || '').trim().toLowerCase();
@@ -62,13 +62,13 @@ const AttachmentValidator = {
     if (data.AttachmentType !== undefined && data.AttachmentType !== null &&
         String(data.AttachmentType).trim() !== '') {
       var attachmentType = String(data.AttachmentType).trim().toUpperCase();
-      if (entityType !== 'PROJECT' || !/^[A-Z0-9_-]{1,64}$/.test(attachmentType)) {
+      if ((entityType !== 'PROJECT' && entityType !== 'DESIGN_CASE') || !/^[A-Z0-9_-]{1,64}$/.test(attachmentType)) {
         throw ErrorHandler.create(
           Constants.ERROR.VALIDATION_ERROR,
           'نوع فایل معتبر نیست؛ نوع باید شناسه‌ای کوتاه و قابل توسعه باشد.'
         );
       }
-    } else if (entityType === 'PROJECT' && mimeType.indexOf('image/') === 0) {
+    } else if ((entityType === 'PROJECT' || entityType === 'DESIGN_CASE') && mimeType.indexOf('image/') === 0) {
       // Legacy clients may omit the type for profile images.
       data.AttachmentType = 'PROFILE';
     }

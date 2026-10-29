@@ -752,6 +752,145 @@ const EventService = {
     });
   },
 
+  listByDesignCase: function(designCaseId, params) {
+    Validator.required(designCaseId, 'DesignCaseID');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const designCase = DesignCaseRepository.findById(designCaseId);
+    if (!designCase || String(designCase.TenantID) !== String(user.TenantID)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پرونده طرح مورد نظر پیدا نشد.');
+    }
+    const types = Object.create(null);
+    (EventTypeRepository.getAll() || []).forEach(function(type) {
+      if (String(type.TenantID) === String(user.TenantID)) types[String(type.ID)] = type;
+    });
+    const users = Object.create(null);
+    (UserRepository.getAll() || []).forEach(function(item) {
+      if (String(item.TenantID) === String(user.TenantID)) {
+        users[String(item.ID)] = item.Name || item.FullName || item.Username || String(item.ID);
+      }
+    });
+    const storedDataByEvent = Object.create(null);
+    (EventDataRepository.getAll() || []).forEach(function(row) {
+      if (String(row.EventID || '') && String(row.EventID || '') !== '') storedDataByEvent[String(row.EventID)] = row.DataJSON || '';
+    });
+    const events = (EventRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === String(user.TenantID) &&
+        String(item.DesignCaseID || '') === String(designCaseId) &&
+        String(item.Status || '').toUpperCase() !== 'VOID';
+    }).sort(function(a,b) {
+      return new Date(a.OccurredAt || a.CreatedAt).getTime() - new Date(b.OccurredAt || b.CreatedAt).getTime();
+    }).map(function(item) {
+      const result = Object.assign({}, item);
+      const type = types[String(item.EventTypeID)];
+      result.EventTypeName = type ? (type.Name || type.Code || '') : '';
+      result.EventTypeCode = type ? (type.Code || '') : '';
+      result.PerformedByName = users[String(item.PerformedBy)] || '';
+      result.CreatedByName = users[String(item.CreatedBy)] || '';
+      const storedJson = storedDataByEvent[String(item.ID)] || '';
+      try { result.DynamicData = storedJson ? JSON.parse(String(storedJson)) : {}; }
+      catch (e) { result.DynamicData = {}; }
+      return result;
+    });
+    return Response.success({DesignCase: designCase, events: events, total: events.length});
+  },
+
+  // رویداد پرونده طرح از همان سرویس و موتور ثبت رویداد استفاده می‌کند.
+  createForDesignCase: function(designCaseId, event, params) {
+    Validator.required(designCaseId, 'DesignCaseID');
+    var type = EventTypeRepository.findById(event && event.EventTypeID);
+    if (!type || String(type.ConnectionType || 'PROJECT').toUpperCase() !== 'DESIGN_CASE') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع رویداد برای پرونده طرح تنظیم نشده است.');
+    }
+    return this.create(Object.assign({}, event || {}, { DesignCaseID: String(designCaseId) }), params);
+  },
+
+  // Recover a persisted DESIGN_CASE event when a previous request stopped during
+  // its configured status transition. Never overwrite a newer transition.
+  _recoverPendingDesignCaseEvent_: function(prior, requestEvent, user) {
+    if (!prior || !prior.DesignCaseID || !requestEvent || !user) return null;
+
+    // Recovery is allowed only for an exact replay of the original request.
+    // A reused idempotency key with a different design case or event type must
+    // never complete the previously persisted event.
+    const requestKey = String(requestEvent.IdempotencyKey || '').trim();
+    if (!requestKey ||
+        String(prior.TenantID || '') !== String(user.TenantID || '') ||
+        String(prior.CreatedBy || '') !== String(user.ID || '') ||
+        String(prior.IdempotencyKey || '') !== requestKey ||
+        String(requestEvent.DesignCaseID || '') !== String(prior.DesignCaseID || '') ||
+        String(requestEvent.EventTypeID || '') !== String(prior.EventTypeID || '') ||
+        String(prior.Status || '').toUpperCase() !== 'ACTIVE') return null;
+
+    const eventType = EventTypeRepository.findById(prior.EventTypeID);
+    if (!eventType || String(eventType.TenantID) !== String(user.TenantID) ||
+        String(eventType.ConnectionType || 'PROJECT').toUpperCase() !== 'DESIGN_CASE') return null;
+    const targetStatus = this._toBoolean_(eventType.TransitionsToProduction)
+      ? 'READY_FOR_APPROVAL' : String(eventType.TargetDesignCaseStatus || '').trim().toUpperCase();
+    if (!targetStatus) return null;
+    const allowedStatuses = ['DRAFT','IN_DESIGN','PATTERN_MAKING','MATERIALS_PENDING','SAMPLE_SEWING','REVISION_REQUIRED','READY_FOR_APPROVAL','REJECTED'];
+    if (allowedStatuses.indexOf(targetStatus) === -1) return null;
+
+    const designCase = DesignCaseRepository.findById(prior.DesignCaseID);
+    if (!designCase || String(designCase.TenantID) !== String(user.TenantID)) return null;
+    const priorTime = new Date(prior.CreatedAt || 0).getTime();
+    if (!priorTime) return null;
+
+    const hasLaterEvent = (EventRepository.getAll() || []).some(function(item) {
+      if (String(item.ID) === String(prior.ID) ||
+          String(item.TenantID) !== String(user.TenantID) ||
+          String(item.DesignCaseID || '') !== String(prior.DesignCaseID) ||
+          String(item.Status || '').toUpperCase() === String(Constants.STATUS.VOID).toUpperCase()) return false;
+      const createdAt = new Date(item.CreatedAt || item.OccurredAt || 0).getTime();
+      return createdAt > priorTime;
+    });
+    if (hasLaterEvent) return null;
+
+    let current = designCase;
+    if (String(current.Status || '').toUpperCase() !== targetStatus) {
+      const updatedAt = new Date(current.UpdatedAt || 0).getTime();
+      if (updatedAt > priorTime) return null;
+      current = DesignCaseRepository.update(current.ID, {
+        Status: targetStatus,
+        UpdatedAt: new Date().toISOString(),
+        Revision: Number(current.Revision || 1) + 1
+      });
+      if (!current || String(current.Status || '').toUpperCase() !== targetStatus) return null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(requestEvent, 'DynamicData')) {
+      const storedData = EventDataRepository.findByEventId(prior.ID);
+      if (!storedData) {
+        const dynamicData = EventDataService.validateDynamicData(
+          eventType.ID, requestEvent.DynamicData, user.TenantID
+        );
+        EventDataRepository.insert({
+          ID: 'ED_' + Utilities.getUuid().replace(/-/g, ''),
+          EventID: prior.ID,
+          DataJSON: JSON.stringify(dynamicData),
+          CreatedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    const histories = DesignCaseHistoryRepository.findByDesignCaseId(prior.DesignCaseID) || [];
+    const historyExists = histories.some(function(row) {
+      return String(row.Action || '') === 'EVENT_TRANSITION' &&
+        String(row.IdempotencyKey || '') === String(prior.IdempotencyKey || '');
+    });
+    if (!historyExists) {
+      DesignCaseService._history_(current, 'EVENT_TRANSITION', designCase.Status, targetStatus,
+        'بازیابی انتقال وضعیت رویداد نیمه‌کاره', user, String(prior.IdempotencyKey || ''));
+    }
+    AuditService.log({
+      TenantID: user.TenantID, UserID: user.ID, Action: 'DESIGN_CASE_EVENT_RECOVERY',
+      EntityType: 'DESIGN_CASE', EntityID: current.ID, OldData: designCase, NewData: current,
+      Reason: 'بازیابی امن انتقال وضعیت رویداد ذخیره‌شده'
+    });
+    const completed = EventRepository.update(prior.ID, { IdempotencyStatus: 'COMPLETED' });
+    if (!completed || String(completed.IdempotencyStatus || '').toUpperCase() !== 'COMPLETED') return null;
+    return completed;
+  },
+
   // ثبت رویداد با جلوگیری از ایجاد تکراری هنگام تکرار درخواست شبکه
   create: function(event, params) {
     Validator.object(event, 'event');
@@ -779,10 +918,14 @@ const EventService = {
       });
       if (prior) {
         if (String(prior.IdempotencyStatus || '').toUpperCase() === 'PROCESSING') {
-          throw ErrorHandler.create(
-            Constants.ERROR.VALIDATION_ERROR,
-            'این درخواست قبلاً شروع شده اما تکمیل آن تأیید نشده است؛ از ثبت مجدد خودداری شد و بررسی رویداد موجود لازم است.'
-          );
+          const recoveredEvent = this._recoverPendingDesignCaseEvent_(prior, event, user);
+          if (!recoveredEvent) {
+            throw ErrorHandler.create(
+              Constants.ERROR.VALIDATION_ERROR,
+              'این درخواست قبلاً شروع شده اما تکمیل آن تأیید نشده است؛ از ثبت مجدد خودداری شد و بررسی رویداد موجود لازم است.'
+            );
+          }
+          prior.IdempotencyStatus = recoveredEvent.IdempotencyStatus;
         }
         let project = null;
         if (prior.ProjectID) {
@@ -858,8 +1001,10 @@ const EventService = {
     }
 
     const connectionType = String(eventType.ConnectionType || 'PROJECT').toUpperCase();
-    const isProjectEvent = connectionType !== 'INDEPENDENT';
+    const isProjectEvent = connectionType === 'PROJECT';
+    const isDesignCaseEvent = connectionType === 'DESIGN_CASE';
     let project = null;
+    let designCase = null;
 
     if (isProjectEvent) {
       if (!event.ProjectID) {
@@ -877,6 +1022,12 @@ const EventService = {
         );
       }
       this._checkProjectAvailability_(project, user);
+    } else if (isDesignCaseEvent) {
+      if (!event.DesignCaseID) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای این نوع رویداد انتخاب پرونده طرح الزامی است.');
+      designCase = DesignCaseRepository.findById(event.DesignCaseID);
+      if (!designCase || String(designCase.TenantID) !== String(user.TenantID)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پرونده طرح مورد نظر پیدا نشد.');
+      }
     }
 
     if (!isAdmin) {
@@ -1050,6 +1201,7 @@ const EventService = {
       IdempotencyKey: String(event.IdempotencyKey || '').trim(),
       IdempotencyStatus: String(event.IdempotencyKey || '').trim() ? 'PROCESSING' : '',
       ProjectID: project ? project.ID : '',
+      DesignCaseID: designCase ? designCase.ID : '',
       EventTypeID: eventType.ID,
       EventTypeVersion: eventType.Version || 1,
       PerformedBy: performedBy,
@@ -1071,6 +1223,17 @@ const EventService = {
       PreviousAvailableDepartmentIDs: project ? (project.AvailableDepartmentIDs || '') : '',
       PreviousSnapshotCaptured: project ? true : false
     };
+
+    if (designCase) {
+      const configuredTarget = this._toBoolean_(eventType.TransitionsToProduction)
+        ? 'READY_FOR_APPROVAL' : String(eventType.TargetDesignCaseStatus || '').trim().toUpperCase();
+      if (configuredTarget) {
+        const allowedDesignStatuses = ['DRAFT','IN_DESIGN','PATTERN_MAKING','MATERIALS_PENDING','SAMPLE_SEWING','REVISION_REQUIRED','READY_FOR_APPROVAL','REJECTED'];
+        if (allowedDesignStatuses.indexOf(configuredTarget) === -1) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'وضعیت مقصد پرونده طرح در تنظیمات نوع رویداد معتبر نیست.');
+        }
+      }
+    }
 
     // Reject missing/invalid mapped procurement inputs before writing the event.
     if (typeof ProcurementEventIntegrationService !== 'undefined') {
@@ -1128,6 +1291,26 @@ const EventService = {
         NewData: procurementIntegration,
         Reason: 'رویداد ثبت شد اما اتصال تأمین نیازمند بررسی است.'
       });
+    }
+
+    var updatedDesignCase = designCase;
+    if (designCase && (eventType.TargetDesignCaseStatus || this._toBoolean_(eventType.TransitionsToProduction))) {
+      const targetDesignStatus = this._toBoolean_(eventType.TransitionsToProduction)
+        ? 'READY_FOR_APPROVAL' : String(eventType.TargetDesignCaseStatus || '').trim().toUpperCase();
+      const allowedDesignStatuses = ['DRAFT','IN_DESIGN','PATTERN_MAKING','MATERIALS_PENDING','SAMPLE_SEWING','REVISION_REQUIRED','READY_FOR_APPROVAL','REJECTED'];
+      if (allowedDesignStatuses.indexOf(targetDesignStatus) === -1) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'وضعیت مقصد پرونده طرح در تنظیمات نوع رویداد معتبر نیست.');
+      }
+      updatedDesignCase = DesignCaseRepository.update(designCase.ID, {
+        Status: targetDesignStatus,
+        UpdatedAt: now,
+        Revision: Number(designCase.Revision || 1) + 1
+      });
+      DesignCaseService._history_(updatedDesignCase, 'EVENT_TRANSITION', designCase.Status, targetDesignStatus,
+        'تغییر وضعیت بر اساس تنظیمات نوع رویداد', user, String(event.IdempotencyKey || ''));
+      AuditService.log({TenantID:user.TenantID, UserID:user.ID, Action:Constants.ACTION.UPDATE,
+        EntityType:'DESIGN_CASE', EntityID:designCase.ID, OldData:designCase, NewData:updatedDesignCase,
+        Reason:'تغییر وضعیت پرونده بر اساس تنظیمات نوع رویداد'});
     }
 
     const projectUpdate = {
@@ -1209,6 +1392,8 @@ const EventService = {
       {
         event: finalEvent,
         project: updatedProject,
+        designCase: updatedDesignCase,
+        requiresProductionDetails: !!(designCase && this._toBoolean_(eventType.TransitionsToProduction)),
         workflowMoved: workflowMoved,
         currentStepID: updatedProject ? updatedProject.CurrentStepID : '',
         projectStatus: updatedProject ? updatedProject.Status : '',
@@ -1220,7 +1405,7 @@ const EventService = {
       {
         message: workflowMoved
           ? 'رویداد ثبت شد و مرحله پروژه به‌روزرسانی شد.'
-          : (isProjectEvent ? 'رویداد با موفقیت ثبت شد.' : 'رویداد مستقل با موفقیت ثبت شد.')
+          : (isProjectEvent ? 'رویداد با موفقیت ثبت شد.' : (isDesignCaseEvent ? 'رویداد پرونده طرح با موفقیت ثبت شد.' : 'رویداد مستقل با موفقیت ثبت شد.'))
       }
     );
   },

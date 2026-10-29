@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','DesignCaseID','RunNumber','SourceProjectID']
     },
 
     WORKFLOWS: {
@@ -70,7 +70,7 @@ const APP_CONFIG = {
 
     EVENT_TYPES: {
       name: '11_EventTypes',
-      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion']
+      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion','TargetDesignCaseStatus','TransitionsToProduction']
     },
 
     EVENT_FIELDS: {
@@ -80,7 +80,7 @@ const APP_CONFIG = {
 
     EVENTS: {
       name: '13_Events',
-      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON','PreviousCurrentStepStatus','IdempotencyKey','IdempotencyStatus']
+      headers: ['ID','TenantID','ProjectID','DesignCaseID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON','PreviousCurrentStepStatus','IdempotencyKey','IdempotencyStatus']
     },
 
     EVENT_DATA: {
@@ -137,6 +137,16 @@ const APP_CONFIG = {
       headers: ['ID','TenantID','ProjectID','MaterialSpecID','MaterialNeedID','SourceEventID','SourceEventVersion','CalculationKey','BasisQuantity','ConsumptionPerUnit','WastagePercent','CalculatedQuantity','PreviousCalculatedQuantity','VarianceQuantity','CalculationType','Status','CreatedBy','CreatedAt']
     },
 
+    DESIGN_CASES: {
+      name: '26_DesignCases',
+      headers: ['ID','TenantID','Title','Description','Status','Phase','RequiredMaterialsJSON','PrimaryImageAttachmentID','WorkflowID','CurrentStepID','CreatedBy','CreatedAt','UpdatedAt','Revision','ApprovedAt','ApprovedBy','RejectionReason','IdempotencyKey','ProductionProjectID','ApprovalIdempotencyKey','ApprovalStatus']
+    },
+
+    DESIGN_CASE_HISTORY: {
+      name: '27_DesignCaseHistory',
+      headers: ['ID','TenantID','DesignCaseID','Revision','Action','FromStatus','ToStatus','Reason','SnapshotJSON','ActorUserID','CreatedAt','IdempotencyKey']
+    },
+
     PURCHASE_ORDERS: {
       name: '19_PurchaseOrders',
       headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt','IdempotencyKey']
@@ -172,7 +182,7 @@ const APP_CONFIG = {
     'text','number','date','datetime','select','textarea','boolean'
   ],
 
-  ATTACHMENT_ENTITY_TYPES: ['PROJECT','EVENT'],
+  ATTACHMENT_ENTITY_TYPES: ['PROJECT','EVENT','DESIGN_CASE'],
 
   STORAGE_PROVIDERS: ['GOOGLE_DRIVE'],
 
@@ -503,11 +513,21 @@ function setupDatabase() {
 
   try {
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    // Always initialize the explicitly configured staging database when an ID is set.
+    // This prevents a manual setup run from accidentally targeting a different active sheet.
+    const configuredSpreadsheetId =
+      typeof AppConfig !== 'undefined' &&
+      AppConfig.DATABASE &&
+      AppConfig.DATABASE.SPREADSHEET_ID
+        ? String(AppConfig.DATABASE.SPREADSHEET_ID).trim()
+        : '';
+    const ss = configuredSpreadsheetId
+      ? SpreadsheetApp.openById(configuredSpreadsheetId)
+      : SpreadsheetApp.getActiveSpreadsheet();
 
     if (!ss) {
       throw new Error(
-        'Spreadsheet پیدا نشد. اسکریپت را از داخل Google Sheet اجرا کن.'
+        'Spreadsheet پیدا نشد. شناسه دیتابیس در AppConfig را بررسی کن.'
       );
     }
 
