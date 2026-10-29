@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','DesignCaseID','RunNumber','SourceProjectID']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus']
     },
 
     WORKFLOWS: {
@@ -80,7 +80,7 @@ const APP_CONFIG = {
 
     EVENTS: {
       name: '13_Events',
-      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON','PreviousCurrentStepStatus','IdempotencyKey','IdempotencyStatus','DesignCaseID']
+      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON','PreviousCurrentStepStatus','IdempotencyKey','IdempotencyStatus']
     },
 
     EVENT_DATA: {
@@ -96,16 +96,6 @@ const APP_CONFIG = {
     AUDIT_LOGS: {
       name: '16_AuditLogs',
       headers: ['ID','TenantID','UserID','Action','EntityType','EntityID','OldData','NewData','Reason','CreatedAt']
-    },
-
-    DESIGN_CASES: {
-      name: '26_DesignCases',
-      headers: ['ID','TenantID','DesignCode','Title','Description','Status','Priority','RequestedBy','OwnerUserID','OwnerDepartmentID','ProposedQuantity','ColorSizeJSON','ReferenceAttachmentID','RejectionReason','ApprovedAt','ApprovedBy','CreatedBy','CreatedAt','UpdatedAt','Revision','ReferenceImageURL']
-    },
-
-    DESIGN_CASE_HISTORY: {
-      name: '27_DesignCaseHistory',
-      headers: ['ID','TenantID','DesignCaseID','Revision','Action','FromStatus','ToStatus','Reason','SnapshotJSON','ActorUserID','CreatedAt','IdempotencyKey']
     },
 
     WORKFLOW_STEP_DEPARTMENTS: {
