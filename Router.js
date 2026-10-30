@@ -270,7 +270,7 @@ const Router = {
     }
 
     if (path === '/event-types') {
-      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE', 'SYSTEM_SETTINGS']);
       return EventTypeService.list(params);
     }
 
@@ -621,15 +621,13 @@ const Router = {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
       return FormService.create(body, params);
     }
-    const formFieldCreateMatch = path.match(/^\\/forms\\/([^/]+)\\/fields$/);
-    if (formFieldCreateMatch) {
+    if (path.indexOf('/forms/') === 0 && path.split('/')[3] === 'fields') {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
-      return FormService.addField(decodeURIComponent(formFieldCreateMatch[1]), body, params);
+      return FormService.addField(decodeURIComponent(path.split('/')[2]), body, params);
     }
-    const eventTypeFormCreateMatch = path.match(/^\\/event-types\\/([^/]+)\\/forms$/);
-    if (eventTypeFormCreateMatch) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      return FormService.assignEventType(decodeURIComponent(eventTypeFormCreateMatch[1]), body, params);
+    if (path.indexOf('/event-types/') === 0 && path.split('/')[3] === 'forms') {
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'SYSTEM_SETTINGS']);
+      return FormService.assignEventType(decodeURIComponent(path.split('/')[2]), body, params);
     }
 
     if (path === '/event-types') {
@@ -916,7 +914,7 @@ const Router = {
       return FormService.removeField(decodeURIComponent(path.split('/')[2]), params);
     }
     if (path.indexOf('/event-type-forms/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'SYSTEM_SETTINGS']);
       return FormService.unassignEventType(decodeURIComponent(path.split('/')[2]), params);
     }
 
