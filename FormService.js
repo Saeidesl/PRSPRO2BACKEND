@@ -123,6 +123,7 @@ const FormService = {
     FormValidator.validateField(data,false);
     var type=InformationTypeRepository.findById(data.InformationTypeID);
     if(!type||String(type.TenantID)!==String(user.TenantID)||String(type.Status || 'ACTIVE')!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع اطلاعات فعال پیدا نشد.');
+    if(String(type.Cardinality).toUpperCase()==='MULTIPLE'&&!InformationTypeRepository.findColumns(type.ID).some(function(column){return String(column.TenantID)===String(user.TenantID)&&String(column.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'ابتدا ستون‌های نوع اطلاعات جدولی را تعریف کنید.');
     if(FormRepository.findFieldsByForm(formId).some(function(row){return String(row.InformationTypeID)===String(type.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
     var visibilityRule=this._parse(data.VisibilityRuleJSON,{});
     this._validateVisibilityReference_(formId,'',visibilityRule,user.TenantID);
@@ -141,6 +142,7 @@ const FormService = {
     if(data.InformationTypeID!==undefined) {
       var type=InformationTypeRepository.findById(data.InformationTypeID);
       if(!type||String(type.TenantID)!==String(user.TenantID)||String(type.Status)!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع اطلاعات فعال پیدا نشد.');
+      if(String(type.Cardinality).toUpperCase()==='MULTIPLE'&&!InformationTypeRepository.findColumns(type.ID).some(function(column){return String(column.TenantID)===String(user.TenantID)&&String(column.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'ابتدا ستون‌های نوع اطلاعات جدولی را تعریف کنید.');
       var duplicate=FormRepository.findFieldsByForm(form.ID).some(function(row){return String(row.ID)!==String(id)&&String(row.InformationTypeID)===String(type.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
       if(duplicate)throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
     }
