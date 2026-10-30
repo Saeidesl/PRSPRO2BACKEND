@@ -52,14 +52,15 @@ const FormService = {
     if (operator === 'NOT_EQUALS') return empty || String(value) !== String(rule.value);
     return true;
   },
-  _validateVisibilityReference_: function(formId, fieldId, rule, tenantId) {
+  _validateVisibilityReference_: function(formId, fieldId, rule, tenantId, fieldOrder) {
     if (!rule || !rule.fieldId) return;
     var fields = FormRepository.findFieldsByForm(formId);
     var valid = fields.some(function(field) {
       return String(field.TenantID) === String(tenantId) &&
         String(field.Status || 'ACTIVE') === 'ACTIVE' &&
         String(field.InformationTypeID) === String(rule.fieldId) &&
-        String(field.ID) !== String(fieldId || '');
+        String(field.ID) !== String(fieldId || '') &&
+        Number(field.FieldOrder || 0) < Number(fieldOrder || 0);
     });
     if (!valid) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فیلد مرجع شرط نمایش باید یکی از فیلدهای فعال دیگر همین فرم باشد.');
   },
@@ -126,7 +127,7 @@ const FormService = {
     if(String(type.Cardinality).toUpperCase()==='MULTIPLE'&&!InformationTypeRepository.findColumns(type.ID).some(function(column){return String(column.TenantID)===String(user.TenantID)&&String(column.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'ابتدا ستون‌های نوع اطلاعات جدولی را تعریف کنید.');
     if(FormRepository.findFieldsByForm(formId).some(function(row){return String(row.InformationTypeID)===String(type.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
     var visibilityRule=this._parse(data.VisibilityRuleJSON,{});
-    this._validateVisibilityReference_(formId,'',visibilityRule,user.TenantID);
+    this._validateVisibilityReference_(formId,'',visibilityRule,user.TenantID,Number(data.FieldOrder || 0));
     var now=new Date().toISOString();
     var row={ID:this._id('FF'),TenantID:user.TenantID,FormID:form.ID,InformationTypeID:type.ID,FieldOrder:Number(data.FieldOrder || FormRepository.findFieldsByForm(formId).length+1),GroupName:String(data.GroupName || ''),LabelOverride:String(data.LabelOverride || ''),HelpText:String(data.HelpText || ''),IsRequired:data.IsRequired===true,VisibilityRuleJSON:JSON.stringify(data.VisibilityRuleJSON || {}),Status:data.Status || 'ACTIVE',CreatedAt:now,UpdatedAt:now};
     var created=FormRepository.insertField(row);
@@ -154,6 +155,14 @@ const FormService = {
       var duplicate=FormRepository.findFieldsByForm(form.ID).some(function(row){return String(row.ID)!==String(id)&&String(row.InformationTypeID)===String(type.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
       if(duplicate)throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
     }
+    if(data.FieldOrder!==undefined&&Number(data.FieldOrder)!==Number(existing.FieldOrder || 0)) {
+      var laterDependent=FormRepository.findFieldsByForm(form.ID).some(function(field){
+        if(String(field.ID)===String(id)||String(field.Status || 'ACTIVE')!=='ACTIVE')return false;
+        var rule=FormService._parse(field.VisibilityRuleJSON,{});
+        return String(rule.fieldId || '')===String(existing.InformationTypeID)&&Number(field.FieldOrder || 0)<=Number(data.FieldOrder);
+      });
+      if(laterDependent)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'ترتیب این فیلد نمی‌تواند بعد از فیلدهای وابسته به آن قرار بگیرد.');
+    }
     if(data.Status!==undefined&&String(data.Status)!=='ACTIVE') {
       var dependentField=FormRepository.findFieldsByForm(form.ID).some(function(field){
         if(String(field.ID)===String(id)||String(field.Status || 'ACTIVE')!=='ACTIVE')return false;
@@ -163,7 +172,7 @@ const FormService = {
       if(dependentField)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'ابتدا شرط نمایش فیلدهای وابسته را اصلاح کنید؛ این فیلد مرجع شرط نمایش است.');
     }
     var visibilityRule=data.VisibilityRuleJSON!==undefined?this._parse(data.VisibilityRuleJSON,{}):this._parse(existing.VisibilityRuleJSON,{});
-    this._validateVisibilityReference_(form.ID,id,visibilityRule,user.TenantID);
+    this._validateVisibilityReference_(form.ID,id,visibilityRule,user.TenantID,Number(data.FieldOrder !== undefined ? data.FieldOrder : existing.FieldOrder));
     var patch={UpdatedAt:new Date().toISOString()};
     ['InformationTypeID','FieldOrder','GroupName','LabelOverride','HelpText','IsRequired','Status'].forEach(function(key){if(data[key]!==undefined)patch[key]=data[key];});
     if(data.VisibilityRuleJSON!==undefined)patch.VisibilityRuleJSON=JSON.stringify(data.VisibilityRuleJSON);
