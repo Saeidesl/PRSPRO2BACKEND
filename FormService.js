@@ -60,7 +60,7 @@ const FormService = {
         String(field.Status || 'ACTIVE') === 'ACTIVE' &&
         String(field.InformationTypeID) === String(rule.fieldId) &&
         String(field.ID) !== String(fieldId || '') &&
-        Number(field.FieldOrder || 0) < Number(fieldOrder || 0);
+        String(field.ID) !== String(fieldId || '');
     });
     if (!valid) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فیلد مرجع شرط نمایش باید یکی از فیلدهای فعال دیگر همین فرم باشد.');
   },
