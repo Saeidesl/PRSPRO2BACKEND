@@ -36,5 +36,6 @@ test('legacy design-case sheets are no longer part of active database setup', ()
   assert.doesNotMatch(schema, /name: '26_DesignCases'|name: '27_DesignCaseHistory'/);
   assert.match(schema, /ATTACHMENT_ENTITY_TYPES: \['PROJECT','EVENT'\]/);
   // Legacy columns in existing project/event sheets are intentionally retained for data safety.
-  assert.match(schema, /'DesignCaseID'/);
+  assert.doesNotMatch(schema, /'DesignCaseID'|'TargetDesignCaseStatus'|'TransitionsToProduction'/);
+  assert.match(schema, /Never reorder, overwrite, or delete user data/i);
 });
