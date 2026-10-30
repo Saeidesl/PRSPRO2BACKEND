@@ -126,10 +126,12 @@ const FormService = {
     if(!type||String(type.TenantID)!==String(user.TenantID)||String(type.Status || 'ACTIVE')!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع اطلاعات فعال پیدا نشد.');
     if(String(type.Cardinality).toUpperCase()==='MULTIPLE'&&!InformationTypeRepository.findColumns(type.ID).some(function(column){return String(column.TenantID)===String(user.TenantID)&&String(column.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'ابتدا ستون‌های نوع اطلاعات جدولی را تعریف کنید.');
     if(FormRepository.findFieldsByForm(formId).some(function(row){return String(row.InformationTypeID)===String(type.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
+    var currentFields=FormRepository.findFieldsByForm(formId).filter(function(row){return String(row.Status || 'ACTIVE')==='ACTIVE';});
+    var newFieldOrder=data.FieldOrder!==undefined?Number(data.FieldOrder):currentFields.reduce(function(max,row){return Math.max(max,Number(row.FieldOrder)||0);},0)+1;
     var visibilityRule=this._parse(data.VisibilityRuleJSON,{});
-    this._validateVisibilityReference_(formId,'',visibilityRule,user.TenantID,Number(data.FieldOrder || 0));
+    this._validateVisibilityReference_(formId,'',visibilityRule,user.TenantID,newFieldOrder);
     var now=new Date().toISOString();
-    var row={ID:this._id('FF'),TenantID:user.TenantID,FormID:form.ID,InformationTypeID:type.ID,FieldOrder:Number(data.FieldOrder || FormRepository.findFieldsByForm(formId).length+1),GroupName:String(data.GroupName || ''),LabelOverride:String(data.LabelOverride || ''),HelpText:String(data.HelpText || ''),IsRequired:data.IsRequired===true,VisibilityRuleJSON:JSON.stringify(data.VisibilityRuleJSON || {}),Status:data.Status || 'ACTIVE',CreatedAt:now,UpdatedAt:now};
+    var row={ID:this._id('FF'),TenantID:user.TenantID,FormID:form.ID,InformationTypeID:type.ID,FieldOrder:newFieldOrder,GroupName:String(data.GroupName || ''),LabelOverride:String(data.LabelOverride || ''),HelpText:String(data.HelpText || ''),IsRequired:data.IsRequired===true,VisibilityRuleJSON:JSON.stringify(data.VisibilityRuleJSON || {}),Status:data.Status || 'ACTIVE',CreatedAt:now,UpdatedAt:now};
     var created=FormRepository.insertField(row);
     FormRepository.updateForm(form.ID,{Version:Number(form.Version || 1)+1,UpdatedAt:now});
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.CREATE,EntityType:'FORM_FIELD',EntityID:created.ID,NewData:created,Reason:'افزودن فیلد متصل به اطلاعات مرکزی'});
