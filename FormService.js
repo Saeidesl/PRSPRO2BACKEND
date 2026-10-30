@@ -132,6 +132,18 @@ const FormService = {
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.DELETE,EntityType:'FORM_FIELD',EntityID:id,OldData:existing,NewData:updated,Reason:'حذف منطقی فیلد فرم'});
     return Response.success(updated,{message:'فیلد فرم حذف منطقی شد.'});
   },
+  listFormEventTypes: function(formId, params) {
+    var user=this._user(params), form=this._form(formId,user.TenantID);
+    var mappings=FormRepository.getEventTypeMappings().filter(function(row){
+      return String(row.TenantID)===String(user.TenantID)&&String(row.FormID)===String(form.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';
+    });
+    var types=EventTypeRepository.getAll().filter(function(type){return String(type.TenantID)===String(user.TenantID);});
+    return Response.success(mappings.map(function(mapping){
+      var type=types.find(function(item){return String(item.ID)===String(mapping.EventTypeID);});
+      if(!type)return null;
+      return Object.assign({},mapping,{EventType:{ID:type.ID,Name:type.Name,Code:type.Code,ConnectionType:type.ConnectionType}});
+    }).filter(Boolean));
+  },
   listEventTypeForms: function(eventTypeId, params) {
     var user=this._user(params), eventType=this._eventType(eventTypeId,user.TenantID);
     var rows=FormRepository.findMappingsByEventType(eventTypeId).filter(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
@@ -181,6 +193,13 @@ const FormService = {
       if(Number(raw.FormVersion || 0)!==version)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'نسخه فرم تغییر کرده است؛ فرم را دوباره باز کنید و اطلاعات را مجدداً وارد کنید.');
       var fields=this._definition(form,tenantId),values=raw.Values;
       if(!values||typeof values!=='object'||Array.isArray(values))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقادیر فرم معتبر نیستند.');
+      var hasMeaningfulValue=Object.keys(values).some(function(key){
+        var value=values[key];
+        return Array.isArray(value)?value.length>0:(value!==undefined&&value!==null&&value!=='' );
+      });
+      if((mapping.IsRequired===true||String(mapping.IsRequired).toLowerCase()==='true')&&!hasMeaningfulValue) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فرم الزامی باید حداقل یک مقدار داشته باشد.');
+      }
       var allowedTypes=Object.create(null),clean=Object.create(null);
       fields.forEach(function(field){
         var type=field.InformationType, key=String(type.ID), supplied=Object.prototype.hasOwnProperty.call(values,key), value=supplied?values[key]:undefined;
