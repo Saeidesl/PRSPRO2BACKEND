@@ -157,16 +157,6 @@ const APP_CONFIG = {
       headers: ['ID','TenantID','ProjectID','MaterialSpecID','MaterialNeedID','SourceEventID','SourceEventVersion','CalculationKey','BasisQuantity','ConsumptionPerUnit','WastagePercent','CalculatedQuantity','PreviousCalculatedQuantity','VarianceQuantity','CalculationType','Status','CreatedBy','CreatedAt']
     },
 
-    DESIGN_CASES: {
-      name: '26_DesignCases',
-      headers: ['ID','TenantID','Title','Description','Status','Phase','RequiredMaterialsJSON','PrimaryImageAttachmentID','WorkflowID','CurrentStepID','CreatedBy','CreatedAt','UpdatedAt','Revision','ApprovedAt','ApprovedBy','RejectionReason','IdempotencyKey','ProductionProjectID','ApprovalIdempotencyKey','ApprovalStatus']
-    },
-
-    DESIGN_CASE_HISTORY: {
-      name: '27_DesignCaseHistory',
-      headers: ['ID','TenantID','DesignCaseID','Revision','Action','FromStatus','ToStatus','Reason','SnapshotJSON','ActorUserID','CreatedAt','IdempotencyKey']
-    },
-
     PURCHASE_ORDERS: {
       name: '19_PurchaseOrders',
       headers: ['ID','TenantID','OrderNumber','SupplierName','OrderDate','ExpectedDeliveryDate','Status','Notes','CreatedBy','CreatedAt','UpdatedAt','IdempotencyKey']
@@ -202,7 +192,7 @@ const APP_CONFIG = {
     'text','number','date','datetime','select','textarea','boolean'
   ],
 
-  ATTACHMENT_ENTITY_TYPES: ['PROJECT','EVENT','DESIGN_CASE'],
+  ATTACHMENT_ENTITY_TYPES: ['PROJECT','EVENT'],
 
   STORAGE_PROVIDERS: ['GOOGLE_DRIVE'],
 
