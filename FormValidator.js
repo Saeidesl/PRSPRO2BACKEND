@@ -22,6 +22,19 @@ const FormValidator = {
     ['GroupName','LabelOverride','HelpText'].forEach(function(key) {
       if (data[key] !== undefined && String(data[key]).length > 500) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, key + ' بیش از حد مجاز است.');
     });
+    if (data.VisibilityRuleJSON !== undefined) {
+      var rule = data.VisibilityRuleJSON;
+      if (typeof rule === 'string') {
+        try { rule = JSON.parse(rule || '{}'); }
+        catch (error) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شرط نمایش فیلد معتبر نیست.'); }
+      }
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شرط نمایش فیلد معتبر نیست.');
+      if (rule.fieldId) {
+        Validator.required(rule.fieldId, 'فیلد مرجع شرط نمایش');
+        Validator.enum(String(rule.operator || ''), ['EQUALS','NOT_EQUALS','FILLED','EMPTY'], 'VisibilityOperator');
+        if (['EQUALS','NOT_EQUALS'].indexOf(String(rule.operator)) !== -1 && rule.value === undefined) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار شرط نمایش الزامی است.');
+      }
+    }
     if (data.Status !== undefined) Validator.enum(data.Status, ['ACTIVE','INACTIVE'], 'Status');
     return true;
   }
