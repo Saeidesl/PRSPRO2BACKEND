@@ -66,7 +66,8 @@ const InformationTypeService = {
     if(String(type.Cardinality).toUpperCase()!=='MULTIPLE')throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'فقط اطلاعات چندمقداری دارای ستون‌های جدولی هستند.');
     InformationTypeValidator.validateColumn(data,false);
     var columns=InformationTypeRepository.findColumns(typeId);
-    if(columns.some(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.Code).toLowerCase()===String(data.Code).toLowerCase()&&String(row.Status)!=='DELETED';}))throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'کد ستون تکراری است.');
+    var normalizedCode=String(data.Code).trim().toLowerCase();
+    if(columns.some(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.Code).trim().toLowerCase()===normalizedCode&&String(row.Status)!=='DELETED';}))throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'کد ستون تکراری است.');
     var now=new Date().toISOString();
     var row={ID:'ITC_'+Utilities.getUuid().replace(/-/g,''),TenantID:user.TenantID,InformationTypeID:typeId,Code:String(data.Code).trim(),Name:String(data.Name).trim(),DataType:String(data.DataType).toLowerCase(),IsRequired:data.IsRequired===true,OptionsJSON:JSON.stringify(this._json(data.OptionsJSON,'گزینه‌های ستون',[])),ValidationRuleJSON:JSON.stringify(this._json(data.ValidationRuleJSON,'قواعد ستون',{})),ColumnOrder:Number(data.ColumnOrder || columns.length+1),Status:data.Status || Constants.STATUS.ACTIVE,CreatedAt:now,UpdatedAt:now};
     var created=InformationTypeRepository.insertColumn(row);
@@ -78,7 +79,13 @@ const InformationTypeService = {
     var existing=InformationTypeRepository.findColumnById(columnId);
     if(!existing||String(existing.TenantID)!==String(user.TenantID)||String(existing.InformationTypeID)!==String(typeId))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'ستون اطلاعات پیدا نشد.');
     var patch={UpdatedAt:new Date().toISOString()};
-    ['Name','Code','DataType','IsRequired','ColumnOrder','Status'].forEach(function(key){if(data[key]!==undefined)patch[key]=data[key];});
+    if(data.Code!==undefined){
+      var normalizedCode=String(data.Code).trim().toLowerCase();
+      var duplicate=InformationTypeRepository.findColumns(typeId).some(function(row){return String(row.ID)!==String(columnId)&&String(row.Status)!=='DELETED'&&String(row.Code).trim().toLowerCase()===normalizedCode;});
+      if(duplicate)throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'کد ستون تکراری است.');
+      patch.Code=String(data.Code).trim();
+    }
+    ['Name','DataType','IsRequired','ColumnOrder','Status'].forEach(function(key){if(data[key]!==undefined)patch[key]=data[key];});
     if(data.OptionsJSON!==undefined)patch.OptionsJSON=JSON.stringify(this._json(data.OptionsJSON,'گزینه‌های ستون',[]));
     if(data.ValidationRuleJSON!==undefined)patch.ValidationRuleJSON=JSON.stringify(this._json(data.ValidationRuleJSON,'قواعد ستون',{}));
     var updated=InformationTypeRepository.updateColumn(columnId,patch);
