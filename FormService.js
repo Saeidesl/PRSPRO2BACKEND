@@ -241,6 +241,7 @@ const FormService = {
       var form=FormRepository.findForm(row.FormID);
       return !!form && String(form.Status || 'ACTIVE')==='ACTIVE';
     });
+    if(responses!==undefined&&responses!==null&&!Array.isArray(responses))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فهرست پاسخ فرم‌ها معتبر نیست.');
     var submitted=Array.isArray(responses)?responses:[];
     if(submitted.length>30)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'حداکثر ۳۰ فرم در هر رویداد قابل ثبت است.');
     if(!mappings.length&&submitted.length)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'برای این نوع رویداد فرمی تعریف نشده است.');
