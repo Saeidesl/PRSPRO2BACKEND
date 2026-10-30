@@ -74,10 +74,27 @@ const ProjectInformationService = {
   },
   list: function(projectId,params){
     var user=this._user(params);this._project(projectId,user.TenantID,user);
-    var types=Object.create(null);
-    InformationTypeRepository.findByTenant(user.TenantID).forEach(function(type){types[String(type.ID)]=type;});
-    var rows=ProjectInformationRepository.findByProject(projectId).filter(function(row){var type=types[String(row.InformationTypeID)];return String(row.TenantID)===String(user.TenantID)&&String(row.Status || 'ACTIVE')==='ACTIVE'&&type&&String(type.Status || 'ACTIVE')==='ACTIVE';});
-    rows.forEach(function(row){row.Value=this._parse(row.ValueJSON,null);row.InformationType=types[String(row.InformationTypeID)];},this);
+    var saved=ProjectInformationRepository.findByProject(projectId).filter(function(row){
+      return String(row.TenantID)===String(user.TenantID);
+    });
+    var savedByType=Object.create(null);
+    saved.forEach(function(row){savedByType[String(row.InformationTypeID)]=row;});
+    var definitions=InformationTypeRepository.findByTenant(user.TenantID).filter(function(type){
+      return String(type.Status || 'ACTIVE')==='ACTIVE';
+    });
+    var rows=definitions.map(function(type){
+      var row=savedByType[String(type.ID)];
+      if(!row||String(row.Status || 'ACTIVE')!=='ACTIVE'){
+        row={ID:'',TenantID:user.TenantID,ProjectID:projectId,InformationTypeID:type.ID,ValueJSON:'',Revision:0,Status:'EMPTY',SourceEventID:''};
+      }else{
+        row=Object.assign({},row,{Value:this._parse(row.ValueJSON,null)});
+      }
+      row.InformationType=type;
+      row.Columns=InformationTypeRepository.findColumns(type.ID).filter(function(col){
+        return String(col.Status || 'ACTIVE')==='ACTIVE';
+      });
+      return row;
+    },this);
     return Response.success(rows);
   },
   get: function(projectId,typeId,params){
