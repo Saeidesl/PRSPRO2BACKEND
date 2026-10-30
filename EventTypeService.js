@@ -29,6 +29,8 @@ const EventTypeService = {
     const result = Object.assign({}, eventType);
     const connectionType = String(result.ConnectionType || 'PROJECT').toUpperCase();
     result.ConnectionType = connectionType === 'INDEPENDENT' ? 'INDEPENDENT' : 'PROJECT';
+    delete result.TargetDesignCaseStatus;
+    delete result.TransitionsToProduction;
     const self = this;
 
     this.ARRAY_FIELDS.forEach(function(field) {
@@ -491,6 +493,9 @@ const EventTypeService = {
     }
 
     this._validateReferences_(data, user.TenantID);
+
+    delete data.TargetDesignCaseStatus;
+    delete data.TransitionsToProduction;
 
     const requestedConnectionType = data.ConnectionType !== undefined
       ? data.ConnectionType : existing.ConnectionType;
