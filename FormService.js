@@ -251,7 +251,7 @@ const FormService = {
       fields.forEach(function(field){
         var type=field.InformationType, key=String(type.ID), supplied=Object.prototype.hasOwnProperty.call(values,key), value=supplied?values[key]:undefined;
         allowedTypes[key]=true;
-        var visible=this._isVisible_(field.VisibilityRule || this._parse(field.VisibilityRuleJSON,{}),values);
+        var visible=FormService._isVisible_(field.VisibilityRule || FormService._parse(field.VisibilityRuleJSON,{}),values);
         var required=field.IsRequired===true||String(field.IsRequired).toLowerCase()==='true';
         var empty=value===undefined||value===null||value===''||(Array.isArray(value)&&value.length===0);
         if(!visible) {
