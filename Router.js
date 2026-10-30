@@ -245,7 +245,7 @@ const Router = {
     }
 
     if (path === '/forms') {
-      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'EVENT_TYPE_MANAGE']);
       return FormService.list(params);
     }
     if (path.indexOf('/forms/') === 0) {
