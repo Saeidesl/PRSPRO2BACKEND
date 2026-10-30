@@ -55,3 +55,15 @@ test('new service and repository files contain no direct SpreadsheetApp access',
     assert.doesNotMatch(read(name), /SpreadsheetApp\./);
   });
 });
+
+test('project information excludes deleted definitions and protects the Sheets cell size limit', () => {
+  const service = read('ProjectInformationService.js');
+  assert.match(service, /type\.Status \|\| 'ACTIVE'\)===\s*'ACTIVE'/);
+  assert.match(service, /valueJSON\.length>45000/);
+});
+
+test('information column updates reject duplicate codes within the same type', () => {
+  const service = read('InformationTypeService.js');
+  assert.match(service, /normalizedCode=String\(data\.Code\)\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(service, /کد ستون تکراری است/);
+});
