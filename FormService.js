@@ -154,6 +154,14 @@ const FormService = {
       var duplicate=FormRepository.findFieldsByForm(form.ID).some(function(row){return String(row.ID)!==String(id)&&String(row.InformationTypeID)===String(type.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
       if(duplicate)throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
     }
+    if(data.Status!==undefined&&String(data.Status)!=='ACTIVE') {
+      var dependentField=FormRepository.findFieldsByForm(form.ID).some(function(field){
+        if(String(field.ID)===String(id)||String(field.Status || 'ACTIVE')!=='ACTIVE')return false;
+        var rule=FormService._parse(field.VisibilityRuleJSON,{});
+        return String(rule.fieldId || '')===String(existing.InformationTypeID);
+      });
+      if(dependentField)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'ابتدا شرط نمایش فیلدهای وابسته را اصلاح کنید؛ این فیلد مرجع شرط نمایش است.');
+    }
     var visibilityRule=data.VisibilityRuleJSON!==undefined?this._parse(data.VisibilityRuleJSON,{}):this._parse(existing.VisibilityRuleJSON,{});
     this._validateVisibilityReference_(form.ID,id,visibilityRule,user.TenantID);
     var patch={UpdatedAt:new Date().toISOString()};
