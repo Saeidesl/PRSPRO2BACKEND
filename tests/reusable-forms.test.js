@@ -62,6 +62,19 @@ test('stale form versions and unassigned forms are rejected',()=>{
   assert.throws(()=>h.service.prepareEventResponses('ET1',[{FormID:'F1',FormVersion:3,Values:{I1:'x'}},{FormID:'OTHER',FormVersion:3,Values:{}}],'T1'),/فرم ارسالی به این نوع رویداد متصل نیست/);
 });
 
+test('conditional visibility skips required hidden fields and rejects hidden submitted values',()=>{
+  const h=loadFormService();
+  h.mappings.push({TenantID:'T1',EventTypeID:'ET1',FormID:'F1',IsRequired:true,Status:'ACTIVE'});
+  const dependency={ID:'I2',TenantID:'T1',Name:'نوع',Code:'Kind',Cardinality:'SINGLE',DataType:'text',Status:'ACTIVE',OptionsJSON:'[]',ValidationRuleJSON:'{}'};
+  h.service._definition=()=>[
+    {ID:'FF1',TenantID:'T1',FormID:'F1',InformationTypeID:'I1',FieldOrder:1,IsRequired:true,VisibilityRule:{fieldId:'I2',operator:'EQUALS',value:'خاص'},InformationType:{ID:'I1',TenantID:'T1',Name:'شماره',Code:'Number',Cardinality:'SINGLE',DataType:'text',Status:'ACTIVE',OptionsJSON:'[]',ValidationRuleJSON:'{}'}},
+    {ID:'FF2',TenantID:'T1',FormID:'F1',InformationTypeID:'I2',FieldOrder:2,IsRequired:false,InformationType:dependency}
+  ];
+  const hidden=h.service.prepareEventResponses('ET1',[{FormID:'F1',FormVersion:3,Values:{I1:'',I2:'عمومی'}}],'T1');
+  assert.equal(hidden[0].Values.I1,'');
+  assert.throws(()=>h.service.prepareEventResponses('ET1',[{FormID:'F1',FormVersion:3,Values:{I1:'نباید ثبت شود',I2:'عمومی'}}],'T1'),/فیلد پنهان نباید مقدار ارسال‌شده داشته باشد/);
+});
+
 test('event form response persistence is idempotent per event and form',()=>{
   const h=loadFormService();
   const response={FormID:'F1',FormVersion:3,Values:{I1:'مدل'},DefinitionSnapshot:{ID:'F1',Version:3,Fields:[]}};
