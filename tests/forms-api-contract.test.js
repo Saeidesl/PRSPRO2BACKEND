@@ -24,6 +24,13 @@ test('router exposes form management, event type assignment and event response A
   assert.match(source,/FormService\.getEventResponses/);
 });
 
+test('central information structure and status cannot invalidate active reusable forms',()=>{
+  const source=read('InformationTypeService.js');
+  assert.match(source,/usedInForm/);
+  assert.match(source,/این نوع اطلاعات در فرم فعال استفاده شده است/);
+  assert.match(source,/تغییر تک\/چندمقداری یا نوع داده مجاز نیست/);
+});
+
 test('event creation validates and persists form responses before completing idempotency',()=>{
   const source=read('EventService.js');
   const validate=source.indexOf('FormService.prepareEventResponses');
