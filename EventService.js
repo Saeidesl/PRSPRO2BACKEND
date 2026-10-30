@@ -958,6 +958,24 @@ const EventService = {
       );
     }
 
+    // Validate reusable forms before persisting the event. Required form mappings
+    // are enforced server-side even if the client omits FormResponses.
+    let validatedFormResponses = [];
+    if (typeof FormService !== 'undefined' && FormService &&
+        typeof FormService.prepareEventResponses === 'function') {
+      validatedFormResponses = FormService.prepareEventResponses(
+        eventType.ID,
+        event.FormResponses || [],
+        user.TenantID
+      );
+      if (validatedFormResponses.length && !isProjectEvent) {
+        throw ErrorHandler.create(
+          Constants.ERROR.VALIDATION_ERROR,
+          'فرم‌های اطلاعات پروژه فقط برای رویدادهای متصل به پروژه قابل ثبت هستند.'
+        );
+      }
+    }
+
     const useProjectColors = EventTypeService._toBoolean_(eventType.UseProjectColors);
     const useProjectSizes = EventTypeService._toBoolean_(eventType.UseProjectSizes);
     const trackVariantQuantity = EventTypeService._toBoolean_(eventType.TrackVariantQuantity);
@@ -1084,6 +1102,10 @@ const EventService = {
     }
 
     const created = EventRepository.insert(newEvent);
+
+    if (validatedFormResponses.length) {
+      FormService.saveEventResponses(created, validatedFormResponses, user);
+    }
 
     if (hasDynamicData) {
       const createdData = EventDataRepository.insert({

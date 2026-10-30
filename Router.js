@@ -244,6 +244,18 @@ const Router = {
       return WorkflowService.get(workflowId, params);
     }
 
+    if (path === '/forms') {
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'EVENT_TYPE_MANAGE']);
+      return FormService.list(params);
+    }
+    if (path.indexOf('/forms/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      const parts = path.split('/');
+      const formId = decodeURIComponent(parts[2] || '');
+      if (parts[3] === 'event-types') return FormService.listFormEventTypes(formId, params);
+      return FormService.get(formId, params);
+    }
+
     if (path === '/information-types') {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
       return InformationTypeService.list(params);
@@ -258,7 +270,7 @@ const Router = {
     }
 
     if (path === '/event-types') {
-      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE', 'SYSTEM_SETTINGS']);
       return EventTypeService.list(params);
     }
 
@@ -272,6 +284,9 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مسیر مورد نظر پیدا نشد.');
       }
 
+      if (parts[3] === 'forms') {
+        return FormService.listEventTypeForms(eventTypeId, params);
+      }
       if (parts[3] === 'fields') {
         return EventFieldService.listByEventType(eventTypeId, params);
       }
@@ -298,6 +313,9 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
       }
 
+      if (parts[3] === 'forms') {
+        return FormService.getEventResponses(eventId, params);
+      }
       if (parts[3] === 'data') {
         return EventDataService.getByEventId(eventId, params);
       }
@@ -599,6 +617,19 @@ const Router = {
       return ProjectInformationService.save(decodeURIComponent(projectInformationSaveMatch[1]), decodeURIComponent(projectInformationSaveMatch[2]), body, params);
     }
 
+    if (path === '/forms') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.create(body, params);
+    }
+    if (path.indexOf('/forms/') === 0 && path.split('/')[3] === 'fields') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.addField(decodeURIComponent(path.split('/')[2]), body, params);
+    }
+    if (path.indexOf('/event-types/') === 0 && path.split('/')[3] === 'forms') {
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'SYSTEM_SETTINGS']);
+      return FormService.assignEventType(decodeURIComponent(path.split('/')[2]), body, params);
+    }
+
     if (path === '/event-types') {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.create(body, params);
@@ -749,6 +780,14 @@ const Router = {
       AccessControlService.require(params, 'WORKFLOW_MANAGE');
       return WorkflowService.update(path.split('/')[2], body, params);
     }
+    if (path.indexOf('/forms/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.update(decodeURIComponent(path.split('/')[2]), body, params);
+    }
+    if (path.indexOf('/form-fields/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.updateField(decodeURIComponent(path.split('/')[2]), body, params);
+    }
     if (path.indexOf('/event-types/') === 0) {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.update(path.split('/')[2], body, params);
@@ -868,6 +907,15 @@ const Router = {
       }
 
       return WorkflowStepDepartmentService.remove(assignmentId, params);
+    }
+
+    if (path.indexOf('/form-fields/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.removeField(decodeURIComponent(path.split('/')[2]), params);
+    }
+    if (path.indexOf('/event-type-forms/') === 0) {
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'SYSTEM_SETTINGS']);
+      return FormService.unassignEventType(decodeURIComponent(path.split('/')[2]), params);
     }
 
     if (path.indexOf('/attachments/') === 0) {

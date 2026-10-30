@@ -7,7 +7,7 @@
 
 const APP_CONFIG = {
 
-  VERSION: '1.1.4',
+  VERSION: '1.1.5',
 
   DEFAULT_TENANT: {
     NAME: 'شرکت اصلی',
@@ -106,6 +106,26 @@ const APP_CONFIG = {
     PROJECT_INFORMATION_HISTORY: {
       name: '31_ProjectInformationHistory',
       headers: ['ID','TenantID','ProjectInformationID','ProjectID','InformationTypeID','Revision','Action','OldValueJSON','NewValueJSON','SourceEventID','Reason','ActorUserID','CreatedAt']
+    },
+
+    FORMS: {
+      name: '32_Forms',
+      headers: ['ID','TenantID','Code','Name','Description','Version','Status','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    FORM_FIELDS: {
+      name: '33_FormFields',
+      headers: ['ID','TenantID','FormID','InformationTypeID','FieldOrder','GroupName','LabelOverride','HelpText','IsRequired','VisibilityRuleJSON','Status','CreatedAt','UpdatedAt']
+    },
+
+    EVENT_TYPE_FORMS: {
+      name: '34_EventTypeForms',
+      headers: ['ID','TenantID','EventTypeID','FormID','IsRequired','FieldOrder','Status','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    EVENT_FORM_DATA: {
+      name: '35_EventFormData',
+      headers: ['ID','TenantID','EventID','FormID','FormVersion','ResponseJSON','DefinitionSnapshotJSON','CreatedBy','CreatedAt']
     },
 
     ATTACHMENTS: {
@@ -811,6 +831,9 @@ function applyAllValidations_(ss) {
   setListValidation_(ss, '28_InformationTypes', 10, ['ACTIVE','INACTIVE','DELETED']);
   setListValidation_(ss, '29_InformationTypeColumns', 11, ['ACTIVE','INACTIVE','DELETED']);
   setListValidation_(ss, '30_ProjectInformation', 7, ['ACTIVE','DELETED']);
+  setListValidation_(ss, '32_Forms', 7, ['ACTIVE','INACTIVE','DELETED']);
+  setListValidation_(ss, '33_FormFields', 11, ['ACTIVE','INACTIVE','DELETED']);
+  setListValidation_(ss, '34_EventTypeForms', 7, ['ACTIVE','INACTIVE','DELETED']);
   setListValidation_(ss, '13_Events', 12, ['ACTIVE','VOID']);
   setListValidation_(ss, '15_Attachments', 3, APP_CONFIG.ATTACHMENT_ENTITY_TYPES);
   setListValidation_(ss, '15_Attachments', 8, APP_CONFIG.STORAGE_PROVIDERS);

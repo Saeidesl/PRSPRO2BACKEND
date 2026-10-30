@@ -33,8 +33,14 @@ const InformationTypeService = {
     var cardinality=String(data.Cardinality || existing.Cardinality).toUpperCase();
     var dataType=String(data.DataType || existing.DataType).toLowerCase();
     if(cardinality==='MULTIPLE' && dataType!=='text')throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'برای اطلاعات چندمقداری، نوع داده اصلی باید text باشد.');
-    if((cardinality!==String(existing.Cardinality).toUpperCase() || dataType!==String(existing.DataType).toLowerCase()) && ProjectInformationRepository.getAll().some(function(row){return String(row.InformationTypeID)===String(id);})) {
-      throw ErrorHandler.create(Constants.ERROR.CONFLICT,'ساختار این نوع اطلاعات قبلاً استفاده شده است؛ تغییر تک‌/چندمقداری یا نوع داده مجاز نیست.');
+    var structureChanged=cardinality!==String(existing.Cardinality).toUpperCase() || dataType!==String(existing.DataType).toLowerCase();
+    var usedInProject=ProjectInformationRepository.getAll().some(function(row){return String(row.InformationTypeID)===String(id);});
+    var usedInForm=typeof FormRepository!=='undefined'&&FormRepository.getFields().some(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.InformationTypeID)===String(id)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
+    if(structureChanged&&(usedInProject||usedInForm)) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT,'ساختار این نوع اطلاعات قبلاً در پروژه یا فرم استفاده شده است؛ تغییر تک‌/چندمقداری یا نوع داده مجاز نیست.');
+    }
+    if(data.Status!==undefined&&String(data.Status).toUpperCase()!=='ACTIVE'&&typeof FormRepository!=='undefined'&&FormRepository.getFields().some(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.InformationTypeID)===String(id)&&String(row.Status || 'ACTIVE')==='ACTIVE';})) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT,'این نوع اطلاعات در فرم فعال استفاده شده است؛ ابتدا آن را از فرم‌ها خارج کنید.');
     }
     var patch={UpdatedAt:new Date().toISOString(),Revision:Number(existing.Revision || 1)+1};
     ['Name','Description','Status'].forEach(function(key){if(data[key]!==undefined)patch[key]=data[key];});
@@ -53,6 +59,9 @@ const InformationTypeService = {
   },
   deactivate: function(id,params) {
     var user=this._user(params), existing=this._type(id,user.TenantID);
+    if(typeof FormRepository!=='undefined'&&FormRepository.getFields().some(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.InformationTypeID)===String(id)&&String(row.Status || 'ACTIVE')==='ACTIVE';})) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT,'این نوع اطلاعات در فرم فعال استفاده شده است؛ ابتدا آن را از فرم‌ها خارج کنید.');
+    }
     var updated=InformationTypeRepository.update(id,{Status:'DELETED',UpdatedAt:new Date().toISOString(),Revision:Number(existing.Revision || 1)+1});
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.DELETE,EntityType:'INFORMATION_TYPE',EntityID:id,OldData:existing,NewData:updated,Reason:'حذف منطقی نوع اطلاعات'});
     return Response.success(updated,{message:'نوع اطلاعات به‌صورت منطقی حذف شد.'});
