@@ -89,7 +89,7 @@ const ProjectInformationService = {
     return Response.success(row);
   },
   save: function(projectId,typeId,body,params){
-    var user=this._user(params),project=this._project(projectId,user.TenantID),type=this._type(typeId,user.TenantID);
+    var user=this._user(params),project=this._project(projectId,user.TenantID,user),type=this._type(typeId,user.TenantID);
     if(String(type.Status || 'ACTIVE')!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'نوع اطلاعات غیرفعال است.');
     Validator.object(body,'information');
     var eventId=String(body.SourceEventID || body.EventID || '');
