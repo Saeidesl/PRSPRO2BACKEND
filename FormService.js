@@ -270,9 +270,11 @@ const FormService = {
       if(Number(raw.FormVersion || 0)!==version)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'نسخه فرم تغییر کرده است؛ فرم را دوباره باز کنید و اطلاعات را مجدداً وارد کنید.');
       var fields=this._definition(form,tenantId),values=raw.Values;
       if(!values||typeof values!=='object'||Array.isArray(values))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقادیر فرم معتبر نیستند.');
-      var hasMeaningfulValue=Object.keys(values).some(function(key){
-        var value=values[key];
-        return Array.isArray(value)?value.length>0:(value!==undefined&&value!==null&&value!=='' );
+      var hasMeaningfulValue=fields.some(function(field){
+        var type=field.InformationType,key=String(type.ID),value=values[key];
+        var visible=FormService._isVisible_(field.VisibilityRule || FormService._parse(field.VisibilityRuleJSON,{}),values);
+        var empty=value===undefined||value===null||value===''||(Array.isArray(value)&&value.length===0);
+        return visible&&!empty;
       });
       if((mapping.IsRequired===true||String(mapping.IsRequired).toLowerCase()==='true')&&!hasMeaningfulValue) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فرم الزامی باید حداقل یک مقدار داشته باشد.');
