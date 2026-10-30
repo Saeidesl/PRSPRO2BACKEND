@@ -13,6 +13,7 @@ function loadFormService() {
     AccessControlService: { getCurrentUser: () => ({ ID: 'U1', TenantID: 'T1' }) },
     FormRepository: {
       findMappingsByEventType: () => mappings,
+      findForm: () => ({ ID:'F1', TenantID:'T1', Status:'ACTIVE' }),
       findResponse: (eventId, formId) => responses.find(x => x.EventID === eventId && x.FormID === formId) || null,
       insertResponse: row => { responses.push(row); return row; },
       updateResponse: (id, patch) => { const row=responses.find(x=>x.ID===id); Object.assign(row,patch); return row; },
