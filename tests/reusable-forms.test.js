@@ -59,7 +59,7 @@ test('valid response is validated and returned with immutable definition snapsho
 test('stale form versions and unassigned forms are rejected',()=>{
   const h=loadFormService();h.mappings.push({TenantID:'T1',EventTypeID:'ET1',FormID:'F1',IsRequired:true,Status:'ACTIVE'});
   assert.throws(()=>h.service.prepareEventResponses('ET1',[{FormID:'F1',FormVersion:2,Values:{I1:'x'}}],'T1'),/نسخه فرم تغییر کرده/);
-  assert.throws(()=>h.service.prepareEventResponses('ET1',[{FormID:'OTHER',FormVersion:3,Values:{}}],'T1'),/فرم ارسالی به این نوع رویداد متصل نیست/);
+  assert.throws(()=>h.service.prepareEventResponses('ET1',[{FormID:'F1',FormVersion:3,Values:{I1:'x'}},{FormID:'OTHER',FormVersion:3,Values:{}}],'T1'),/فرم ارسالی به این نوع رویداد متصل نیست/);
 });
 
 test('event form response persistence is idempotent per event and form',()=>{
