@@ -42,6 +42,11 @@ function loadFormService() {
   return {service,mappings,responses,audits};
 }
 
+test('malformed form response collections are rejected',()=>{
+  const h=loadFormService();
+  assert.throws(()=>h.service.prepareEventResponses('ET1',{FormID:'F1'},'T1'),/فهرست پاسخ فرم‌ها معتبر نیست/);
+});
+
 test('required event form cannot be omitted',()=>{
   const h=loadFormService();h.mappings.push({TenantID:'T1',EventTypeID:'ET1',FormID:'F1',IsRequired:true,Status:'ACTIVE'});
   assert.throws(()=>h.service.prepareEventResponses('ET1',[],'T1'),/تکمیل فرم الزامی/);
