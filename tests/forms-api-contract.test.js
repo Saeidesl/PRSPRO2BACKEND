@@ -28,7 +28,7 @@ test('central information structure and status cannot invalidate active reusable
   const source=read('InformationTypeService.js');
   assert.match(source,/usedInForm/);
   assert.match(source,/این نوع اطلاعات در فرم فعال استفاده شده است/);
-  assert.match(source,/تغییر تک\/چندمقداری یا نوع داده مجاز نیست/);
+  assert.match(source,/structureChanged&&\(usedInProject\|\|usedInForm\)/);
 });
 
 test('event creation validates and persists form responses before completing idempotency',()=>{
