@@ -168,6 +168,24 @@ const Router = {
       return ProjectService.list(params);
     }
 
+    const projectInformationHistoryMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)\/history$/);
+    if (projectInformationHistoryMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectInformationService.history(decodeURIComponent(projectInformationHistoryMatch[1]), decodeURIComponent(projectInformationHistoryMatch[2]), params);
+    }
+
+    const projectInformationItemMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)$/);
+    if (projectInformationItemMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectInformationService.get(decodeURIComponent(projectInformationItemMatch[1]), decodeURIComponent(projectInformationItemMatch[2]), params);
+    }
+
+    const projectInformationListMatch = path.match(/^\/projects\/([^/]+)\/information$/);
+    if (projectInformationListMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectInformationService.list(decodeURIComponent(projectInformationListMatch[1]), params);
+    }
+
     if (path.indexOf('/projects/') === 0) {
       const routeParts = path.split('/');
       if (routeParts[3] === 'material-specifications' || routeParts[3] === 'material-calculations') {
@@ -247,6 +265,19 @@ const Router = {
       }
 
       return WorkflowService.get(workflowId, params);
+    }
+
+    if (path === '/information-types') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.list(params);
+    }
+
+    if (path.indexOf('/information-types/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      const parts = path.split('/');
+      const informationTypeId = decodeURIComponent(parts[2] || '');
+      if (parts[3] === 'columns') return InformationTypeService.listColumns(informationTypeId, params);
+      if (parts.length === 3) return InformationTypeService.get(informationTypeId, params);
     }
 
     if (path === '/event-types') {
@@ -599,6 +630,23 @@ const Router = {
       }
     }
 
+    if (path === '/information-types') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.create(body, params);
+    }
+
+    const informationTypeColumnCreateMatch = path.match(/^\/information-types\/([^/]+)\/columns$/);
+    if (informationTypeColumnCreateMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.createColumn(decodeURIComponent(informationTypeColumnCreateMatch[1]), body, params);
+    }
+
+    const projectInformationSaveMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)$/);
+    if (projectInformationSaveMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return ProjectInformationService.save(decodeURIComponent(projectInformationSaveMatch[1]), decodeURIComponent(projectInformationSaveMatch[2]), body, params);
+    }
+
     if (path === '/event-types') {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.create(body, params);
@@ -722,6 +770,18 @@ const Router = {
       return DepartmentService.update(departmentId, body, params);
     }
 
+    const informationTypeColumnUpdateMatch = path.match(/^\/information-types\/([^/]+)\/columns\/([^/]+)$/);
+    if (informationTypeColumnUpdateMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.updateColumn(decodeURIComponent(informationTypeColumnUpdateMatch[1]), decodeURIComponent(informationTypeColumnUpdateMatch[2]), body, params);
+    }
+
+    const informationTypeUpdateMatch = path.match(/^\/information-types\/([^/]+)$/);
+    if (informationTypeUpdateMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.update(decodeURIComponent(informationTypeUpdateMatch[1]), body, params);
+    }
+
     const materialSpecUpdateMatch = path.match(/^\/material-specifications\/([^/]+)$/);
     if (materialSpecUpdateMatch) {
       AccessControlService.require(params, 'PROJECT_EDIT');
@@ -772,6 +832,24 @@ const Router = {
 
   delete: function(path, params) {
     path = String(path || '').trim();
+
+    const projectInformationDeleteMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)$/);
+    if (projectInformationDeleteMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return ProjectInformationService.deactivate(decodeURIComponent(projectInformationDeleteMatch[1]), decodeURIComponent(projectInformationDeleteMatch[2]), params);
+    }
+
+    const informationTypeColumnDeleteMatch = path.match(/^\/information-type-columns\/([^/]+)$/);
+    if (informationTypeColumnDeleteMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.deactivateColumn(decodeURIComponent(informationTypeColumnDeleteMatch[1]), params);
+    }
+
+    const informationTypeDeleteMatch = path.match(/^\/information-types\/([^/]+)$/);
+    if (informationTypeDeleteMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.deactivate(decodeURIComponent(informationTypeDeleteMatch[1]), params);
+    }
 
     var projectDeleteMatch = path.match(/^\/admin\/projects\/([^/]+)$/);
     if (projectDeleteMatch) {
