@@ -252,7 +252,7 @@ const Router = {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
       const parts = path.split('/');
       const formId = decodeURIComponent(parts[2] || '');
-      if (parts[3] === 'fields') return FormService.get(formId, params);
+      if (parts[3] === 'event-types') return FormService.listFormEventTypes(formId, params);
       return FormService.get(formId, params);
     }
 
