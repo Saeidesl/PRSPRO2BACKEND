@@ -54,10 +54,6 @@ const EventTypeValidator = {
     const flagEnabled = function(value) {
       return value === true || String(value).toLowerCase() === 'true';
     };
-    if (connectionType !== 'DESIGN_CASE' && (String(data.TargetDesignCaseStatus || '').trim() !== '' || flagEnabled(data.TransitionsToProduction))) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
-        'تنظیم انتقال پرونده طرح فقط برای نوع رویداد DESIGN_CASE مجاز است.');
-    }
     if (flagEnabled(data.TrackVariantQuantity) &&
         !flagEnabled(data.UseProjectColors) &&
         !flagEnabled(data.UseProjectSizes)) {
