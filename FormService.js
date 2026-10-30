@@ -223,7 +223,7 @@ const FormService = {
     var existing=FormRepository.findMappingByEventTypeAndForm(eventTypeId,form.ID);
     if(existing && String(existing.Status || 'ACTIVE')==='ACTIVE')throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این فرم قبلاً به نوع رویداد متصل شده است.');
     var now=new Date().toISOString();
-    var row={ID:this._id('ETF'),TenantID:user.TenantID,EventTypeID:type.ID,FormID:form.ID,IsRequired:data.IsRequired!==false,FieldOrder:Number(data.FieldOrder || 0),Status:'ACTIVE',CreatedBy:user.ID,CreatedAt:now,UpdatedAt:now};
+    var row={ID:existing?existing.ID:this._id('ETF'),TenantID:user.TenantID,EventTypeID:type.ID,FormID:form.ID,IsRequired:data.IsRequired!==false,FieldOrder:Number(data.FieldOrder || 0),Status:'ACTIVE',CreatedBy:existing?existing.CreatedBy:user.ID,CreatedAt:existing?existing.CreatedAt:now,UpdatedAt:now};
     var created=existing?FormRepository.updateMapping(existing.ID,row):FormRepository.insertMapping(row);
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.CREATE,EntityType:'EVENT_TYPE_FORM',EntityID:created.ID,NewData:created,Reason:'اتصال فرم به نوع رویداد'});
     return Response.success(created,{message:'فرم به نوع رویداد متصل شد.'});
