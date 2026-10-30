@@ -24,9 +24,11 @@ const FormService = {
     });
     fields.forEach(function(field) {
       var type = InformationTypeRepository.findById(field.InformationTypeID);
-      if (!type || String(type.TenantID) !== String(tenantId) || String(type.Status || 'ACTIVE') !== 'ACTIVE') {
-        field.InformationType = null;
-        return;
+      if (!type || String(type.TenantID) !== String(tenantId)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع اطلاعات متصل به فرم پیدا نشد.');
+      }
+      if (String(type.Status || 'ACTIVE') !== 'ACTIVE') {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'یکی از انواع اطلاعات فرم غیرفعال شده است؛ ابتدا فرم را اصلاح کنید.');
       }
       field.InformationType = Object.assign({}, type, {
         Columns: InformationTypeRepository.findColumns(type.ID).filter(function(column) {
@@ -35,7 +37,7 @@ const FormService = {
       });
       delete field.InformationType.ValidationRuleJSON;
     });
-    return fields.filter(function(field) { return !!field.InformationType; });
+    return fields;
   },
   _snapshot: function(form, fields) {
     return {
@@ -159,6 +161,7 @@ const FormService = {
     if(String(type.ConnectionType || 'PROJECT').toUpperCase()==='INDEPENDENT')throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'فرم اطلاعات پروژه فقط به نوع رویداد متصل به پروژه قابل اتصال است.');
     Validator.required(data && data.FormID,'FormID');
     var form=this._form(data.FormID,user.TenantID);
+    if(String(form.Status || 'ACTIVE')!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'فرم غیرفعال است و قابل اتصال نیست.');
     var existing=FormRepository.findMappingByEventTypeAndForm(eventTypeId,form.ID);
     if(existing && String(existing.Status || 'ACTIVE')==='ACTIVE')throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این فرم قبلاً به نوع رویداد متصل شده است.');
     var now=new Date().toISOString();
