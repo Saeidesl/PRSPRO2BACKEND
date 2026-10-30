@@ -26,7 +26,9 @@ test('event types and attachments accept only project or independent/project ent
   assert.doesNotMatch(eventTypeValidator, /DESIGN_CASE|TargetDesignCaseStatus|TransitionsToProduction/);
   assert.match(attachmentValidator, /\['PROJECT', 'EVENT'\]/);
   assert.doesNotMatch(attachmentValidator, /DESIGN_CASE|DesignCase/);
-  assert.doesNotMatch(eventTypeService, /DESIGN_CASE|TargetDesignCaseStatus|TransitionsToProduction/);
+  assert.doesNotMatch(eventTypeService, /DESIGN_CASE/);
+  assert.match(eventTypeService, /delete result\.TargetDesignCaseStatus/);
+  assert.match(eventTypeService, /delete data\.TransitionsToProduction/);
 });
 
 test('legacy design-case sheets are no longer part of active database setup', () => {
