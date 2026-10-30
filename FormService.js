@@ -148,7 +148,11 @@ const FormService = {
   },
   listEventTypeForms: function(eventTypeId, params) {
     var user=this._user(params), eventType=this._eventType(eventTypeId,user.TenantID);
-    var rows=FormRepository.findMappingsByEventType(eventTypeId).filter(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
+    var rows=FormRepository.findMappingsByEventType(eventTypeId).filter(function(row){
+      if(String(row.TenantID)!==String(user.TenantID)||String(row.Status || 'ACTIVE')!=='ACTIVE')return false;
+      var form=FormRepository.findForm(row.FormID);
+      return !!form && String(form.Status || 'ACTIVE')==='ACTIVE';
+    });
     rows.sort(function(a,b){return Number(a.FieldOrder || 0)-Number(b.FieldOrder || 0);});
     return Response.success(rows.map(function(row){
       var form=this._form(row.FormID,user.TenantID);
@@ -178,7 +182,11 @@ const FormService = {
     return Response.success(updated,{message:'اتصال فرم حذف شد.'});
   },
   prepareEventResponses: function(eventTypeId, responses, tenantId) {
-    var mappings=FormRepository.findMappingsByEventType(eventTypeId).filter(function(row){return String(row.TenantID)===String(tenantId)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
+    var mappings=FormRepository.findMappingsByEventType(eventTypeId).filter(function(row){
+      if(String(row.TenantID)!==String(tenantId)||String(row.Status || 'ACTIVE')!=='ACTIVE')return false;
+      var form=FormRepository.findForm(row.FormID);
+      return !!form && String(form.Status || 'ACTIVE')==='ACTIVE';
+    });
     var submitted=Array.isArray(responses)?responses:[];
     if(submitted.length>30)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'حداکثر ۳۰ فرم در هر رویداد قابل ثبت است.');
     if(!mappings.length&&submitted.length)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'برای این نوع رویداد فرمی تعریف نشده است.');
