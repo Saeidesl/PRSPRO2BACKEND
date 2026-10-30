@@ -67,3 +67,12 @@ test('information column updates reject duplicate codes within the same type', (
   assert.match(service, /normalizedCode=String\(data\.Code\)\.trim\(\)\.toLowerCase\(\)/);
   assert.match(service, /کد ستون تکراری است/);
 });
+
+test('project information list exposes active definitions even before a project value is saved', () => {
+  const service = read('ProjectInformationService.js');
+  assert.match(service, /InformationTypeRepository\.findByTenant\(user\.TenantID\)/);
+  assert.match(service, /row\.InformationType=type/);
+  assert.match(service, /row\.Columns=InformationTypeRepository\.findColumns\(type\.ID\)/);
+  assert.match(service, /Status:'EMPTY'/);
+  assert.match(service, /savedByType\[String\(row\.InformationTypeID\)\]=row/);
+});
