@@ -36,7 +36,7 @@ const FormService = {
         })
       });
       delete field.InformationType.ValidationRuleJSON;
-      field.VisibilityRule = this._parse(field.VisibilityRuleJSON, {});
+      field.VisibilityRule = FormService._parse(field.VisibilityRuleJSON, {});
     });
     return fields;
   },
@@ -71,7 +71,7 @@ const FormService = {
           ID: field.ID, InformationTypeID: field.InformationTypeID, FieldOrder: Number(field.FieldOrder || 0),
           GroupName: field.GroupName || '', LabelOverride: field.LabelOverride || '', HelpText: field.HelpText || '',
           IsRequired: field.IsRequired === true || String(field.IsRequired).toLowerCase() === 'true',
-          VisibilityRule: this._parse(field.VisibilityRuleJSON, {}),
+          VisibilityRule: FormService._parse(field.VisibilityRuleJSON, {}),
           InformationType: field.InformationType
         };
       })
