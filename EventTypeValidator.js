@@ -41,10 +41,10 @@ const EventTypeValidator = {
 
   validateFields_: function(data) {
     if (data.ConnectionType !== undefined && data.ConnectionType !== null && data.ConnectionType !== '') {
-      Validator.enum(data.ConnectionType, ['PROJECT', 'INDEPENDENT', 'DESIGN_CASE'], 'ConnectionType');
+      Validator.enum(data.ConnectionType, ['PROJECT', 'INDEPENDENT'], 'ConnectionType');
     }
 
-    if (['INDEPENDENT','DESIGN_CASE'].indexOf(String(data.ConnectionType || '').toUpperCase()) !== -1 &&
+    if (String(data.ConnectionType || '').toUpperCase() === 'INDEPENDENT' &&
         [data.UseProjectColors, data.UseProjectSizes, data.TrackVariantQuantity].some(function(value) {
           return value === true || String(value).toLowerCase() === 'true';
         })) {
@@ -54,18 +54,6 @@ const EventTypeValidator = {
     const flagEnabled = function(value) {
       return value === true || String(value).toLowerCase() === 'true';
     };
-    const connectionType = String(data.ConnectionType || '').toUpperCase();
-    if (connectionType === 'DESIGN_CASE' &&
-        (flagEnabled(data.MovesProjectToStep) || String(data.TargetProjectStatus || '').trim() !== '' ||
-         String(data.TargetStepStatus || '').trim() !== '' ||
-         flagEnabled(data.UseProjectColors) || flagEnabled(data.UseProjectSizes) || flagEnabled(data.TrackVariantQuantity))) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
-        'نوع رویداد پرونده طرح نمی‌تواند تنظیمات تغییر مرحله پروژه تولید یا رنگ/سایز تولید را داشته باشد.');
-    }
-    if (connectionType !== 'DESIGN_CASE' && (String(data.TargetDesignCaseStatus || '').trim() !== '' || flagEnabled(data.TransitionsToProduction))) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
-        'تنظیم انتقال پرونده طرح فقط برای نوع رویداد DESIGN_CASE مجاز است.');
-    }
     if (flagEnabled(data.TrackVariantQuantity) &&
         !flagEnabled(data.UseProjectColors) &&
         !flagEnabled(data.UseProjectSizes)) {
@@ -158,7 +146,6 @@ const EventTypeValidator = {
 
     [
       'MovesProjectToStep',
-      'TransitionsToProduction',
       'AllowAttachments',
       'AllowVoid',
       'IsWorkCompletion'

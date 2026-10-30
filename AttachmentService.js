@@ -39,7 +39,6 @@ const AttachmentService = {
       : (type === 'EVENT' ? EventRepository.findById(attachment.EntityID) : null);
     if (!entity || String(entity.TenantID) !== String(user.TenantID)) return false;
     if (type === 'PROJECT') return ProjectService._isProjectAvailableToUser_(entity, user);
-    if (type === 'DESIGN_CASE') return true;
     if (type === 'EVENT' && entity.ProjectID) {
       var project = ProjectRepository.findById(entity.ProjectID);
       return !!project && String(project.TenantID) === String(user.TenantID) &&
@@ -220,8 +219,6 @@ const AttachmentService = {
           entityId
         );
 
-    } else if (String(entityType) === 'DESIGN_CASE') {
-      entity = DesignCaseRepository.findById(entityId);
     } else {
 
       throw ErrorHandler.create(
@@ -335,9 +332,6 @@ const AttachmentService = {
 
       }
 
-    } else if (String(data.EntityType) === 'DESIGN_CASE') {
-      entity = DesignCaseRepository.findById(data.EntityID);
-      if (!entity) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پرونده طرح مورد نظر پیدا نشد.');
     } else {
 
       throw ErrorHandler.create(
@@ -375,7 +369,6 @@ const AttachmentService = {
     // Project files receive a canonical, server-generated name. The project
     // code is taken from the authorized project record, never from client input.
     const isProjectAttachment = String(data.EntityType).toUpperCase() === 'PROJECT';
-    const isDesignCaseAttachment = String(data.EntityType).toUpperCase() === 'DESIGN_CASE';
     const mimeType = String(data.MimeType || '').toLowerCase();
     const normalizedType = String(data.AttachmentType ||
       (mimeType.indexOf('image/') === 0 ? 'PROFILE' : 'DOCUMENT')).trim().toUpperCase();
@@ -440,7 +433,7 @@ const AttachmentService = {
         now,
 
       AttachmentType:
-        (isProjectAttachment || isDesignCaseAttachment) ? normalizedType : '',
+        isProjectAttachment ? normalizedType : '',
 
       Status:
         Constants.STATUS.ACTIVE
@@ -452,15 +445,6 @@ const AttachmentService = {
       AttachmentRepository.insert(
         attachment
       );
-
-    if (isDesignCaseAttachment && mimeType.indexOf('image/') === 0 &&
-        typeof DesignCaseRepository !== 'undefined') {
-      DesignCaseRepository.update(entity.ID, {
-        PrimaryImageAttachmentID: created.ID,
-        UpdatedAt: now
-      });
-    }
-
 
     AuditService.log({
 
