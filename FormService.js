@@ -52,14 +52,13 @@ const FormService = {
     if (operator === 'NOT_EQUALS') return empty || String(value) !== String(rule.value);
     return true;
   },
-  _validateVisibilityReference_: function(formId, fieldId, rule, tenantId, fieldOrder) {
+  _validateVisibilityReference_: function(formId, fieldId, rule, tenantId) {
     if (!rule || !rule.fieldId) return;
     var fields = FormRepository.findFieldsByForm(formId);
     var valid = fields.some(function(field) {
       return String(field.TenantID) === String(tenantId) &&
         String(field.Status || 'ACTIVE') === 'ACTIVE' &&
         String(field.InformationTypeID) === String(rule.fieldId) &&
-        String(field.ID) !== String(fieldId || '') &&
         String(field.ID) !== String(fieldId || '');
     });
     if (!valid) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فیلد مرجع شرط نمایش باید یکی از فیلدهای فعال دیگر همین فرم باشد.');
@@ -126,7 +125,7 @@ const FormService = {
     if(!type||String(type.TenantID)!==String(user.TenantID)||String(type.Status || 'ACTIVE')!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع اطلاعات فعال پیدا نشد.');
     if(FormRepository.findFieldsByForm(formId).some(function(row){return String(row.InformationTypeID)===String(type.ID)&&String(row.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
     var visibilityRule=this._parse(data.VisibilityRuleJSON,{});
-    this._validateVisibilityReference_(formId,'',visibilityRule,user.TenantID,Number(data.FieldOrder || FormRepository.findFieldsByForm(formId).length+1));
+    this._validateVisibilityReference_(formId,'',visibilityRule,user.TenantID);
     var now=new Date().toISOString();
     var row={ID:this._id('FF'),TenantID:user.TenantID,FormID:form.ID,InformationTypeID:type.ID,FieldOrder:Number(data.FieldOrder || FormRepository.findFieldsByForm(formId).length+1),GroupName:String(data.GroupName || ''),LabelOverride:String(data.LabelOverride || ''),HelpText:String(data.HelpText || ''),IsRequired:data.IsRequired===true,VisibilityRuleJSON:JSON.stringify(data.VisibilityRuleJSON || {}),Status:data.Status || 'ACTIVE',CreatedAt:now,UpdatedAt:now};
     var created=FormRepository.insertField(row);
@@ -146,7 +145,7 @@ const FormService = {
       if(duplicate)throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این نوع اطلاعات قبلاً به فرم اضافه شده است.');
     }
     var visibilityRule=data.VisibilityRuleJSON!==undefined?this._parse(data.VisibilityRuleJSON,{}):this._parse(existing.VisibilityRuleJSON,{});
-    this._validateVisibilityReference_(form.ID,id,visibilityRule,user.TenantID,Number(data.FieldOrder !== undefined ? data.FieldOrder : existing.FieldOrder));
+    this._validateVisibilityReference_(form.ID,id,visibilityRule,user.TenantID);
     var patch={UpdatedAt:new Date().toISOString()};
     ['InformationTypeID','FieldOrder','GroupName','LabelOverride','HelpText','IsRequired','Status'].forEach(function(key){if(data[key]!==undefined)patch[key]=data[key];});
     if(data.VisibilityRuleJSON!==undefined)patch.VisibilityRuleJSON=JSON.stringify(data.VisibilityRuleJSON);
