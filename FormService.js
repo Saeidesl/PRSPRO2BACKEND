@@ -140,6 +140,14 @@ const FormService = {
     var form=this._form(existing.FormID,user.TenantID);
     FormValidator.validateField(data,true);
     if(data.InformationTypeID!==undefined) {
+      if(String(data.InformationTypeID)!==String(existing.InformationTypeID)) {
+        var referenced=FormRepository.findFieldsByForm(form.ID).some(function(field){
+          if(String(field.ID)===String(id)||String(field.Status || 'ACTIVE')!=='ACTIVE')return false;
+          var rule=FormService._parse(field.VisibilityRuleJSON,{});
+          return String(rule.fieldId || '')===String(existing.InformationTypeID);
+        });
+        if(referenced)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'ابتدا شرط نمایش فیلدهای وابسته را اصلاح کنید؛ این فیلد مرجع شرط نمایش است.');
+      }
       var type=InformationTypeRepository.findById(data.InformationTypeID);
       if(!type||String(type.TenantID)!==String(user.TenantID)||String(type.Status)!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع اطلاعات فعال پیدا نشد.');
       if(String(type.Cardinality).toUpperCase()==='MULTIPLE'&&!InformationTypeRepository.findColumns(type.ID).some(function(column){return String(column.TenantID)===String(user.TenantID)&&String(column.Status || 'ACTIVE')==='ACTIVE';}))throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'ابتدا ستون‌های نوع اطلاعات جدولی را تعریف کنید.');
