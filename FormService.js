@@ -157,7 +157,14 @@ const FormService = {
   removeField: function(id, params) {
     var user=this._user(params), existing=FormRepository.findField(id);
     if(!existing||String(existing.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'فیلد فرم پیدا نشد.');
-    var form=this._form(existing.FormID,user.TenantID), now=new Date().toISOString();
+    var form=this._form(existing.FormID,user.TenantID);
+    var dependent=FormRepository.findFieldsByForm(form.ID).some(function(field){
+      if(String(field.ID)===String(id)||String(field.Status || 'ACTIVE')!=='ACTIVE')return false;
+      var rule=FormService._parse(field.VisibilityRuleJSON,{});
+      return String(rule.fieldId || '')===String(existing.InformationTypeID);
+    });
+    if(dependent)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'ابتدا شرط نمایش فیلدهای وابسته را اصلاح کنید؛ این فیلد مرجع شرط نمایش است.');
+    var now=new Date().toISOString();
     var updated=FormRepository.updateField(id,{Status:'DELETED',UpdatedAt:now});
     FormRepository.updateForm(form.ID,{Version:Number(form.Version || 1)+1,UpdatedAt:now});
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.DELETE,EntityType:'FORM_FIELD',EntityID:id,OldData:existing,NewData:updated,Reason:'حذف منطقی فیلد فرم'});
