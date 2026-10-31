@@ -223,6 +223,44 @@ const ProjectService = {
     });
   },
 
+  validateDraftProjectCodeFromEvent: function(projectId, code, tenantId) {
+    const value = String(code || '').trim();
+    if (!value || value.length > 100) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کد پروژه معتبر نیست.');
+    }
+    const project = ProjectRepository.findById(projectId);
+    if (!project || String(project.TenantID) !== String(tenantId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
+    }
+    if (String(project.RecordState || 'ACTIVE').toUpperCase() !== 'DRAFT') {
+      if (String(project.ProjectCode || '').trim().toLowerCase() === value.toLowerCase()) return true;
+      throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'کد پروژه فقط پیش از تکمیل پرونده و از طریق رویداد مجاز قابل ثبت است.');
+    }
+    if (String(project.ProjectCode || '').trim() && String(project.ProjectCode).trim().toLowerCase() !== value.toLowerCase()) {
+      throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'کد پروژه قبلاً در این پرونده ثبت شده و قابل جایگزینی نیست.');
+    }
+    const duplicate = ProjectRepository.getAll().some(function(item) {
+      return String(item.TenantID) === String(tenantId) && String(item.ID) !== String(projectId) &&
+        String(item.ProjectCode || '').trim().toLowerCase() === value.toLowerCase();
+    });
+    if (duplicate) throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
+    return true;
+  },
+
+  assignDraftProjectCodeFromEvent: function(projectId, code, eventId, user) {
+    const value = String(code || '').trim();
+    this.validateDraftProjectCodeFromEvent(projectId, value, user.TenantID);
+    const project = ProjectRepository.findById(projectId);
+    if (String(project.ProjectCode || '').trim()) return project;
+    const updated = ProjectRepository.update(projectId, {ProjectCode:value, UpdatedAt:new Date().toISOString()});
+    AuditService.log({
+      TenantID:user.TenantID, UserID:user.ID, Action:Constants.ACTION.UPDATE,
+      EntityType:Constants.ENTITY.PROJECT, EntityID:projectId, OldData:project, NewData:updated,
+      Reason:'ثبت کد پروژه از فرم رویداد ' + String(eventId || '')
+    });
+    return updated;
+  },
+
   list: function(params) {
 
     const user =
@@ -246,9 +284,37 @@ const ProjectService = {
         return true;
       });
 
-    return Response.success(
-      tenantProjects
-    );
+    // Build the project-card projection in bulk to avoid per-card API calls.
+    const cardTypes = (typeof InformationTypeRepository !== 'undefined'
+      ? InformationTypeRepository.findByTenant(user.TenantID) : []).filter(function(type) {
+        return String(type.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+          (type.ShowOnCard === true || String(type.ShowOnCard).toLowerCase() === 'true');
+      });
+    if (cardTypes.length && typeof ProjectInformationRepository !== 'undefined') {
+      const typeById = Object.create(null);
+      cardTypes.forEach(function(type) { typeById[String(type.ID)] = type; });
+      const projectIds = Object.create(null);
+      tenantProjects.forEach(function(project) { projectIds[String(project.ID)] = true; project.CardInformation = []; });
+      (ProjectInformationRepository.getAll() || []).forEach(function(row) {
+        const projectId = String(row.ProjectID || '');
+        const type = typeById[String(row.InformationTypeID || '')];
+        if (!type || !projectIds[projectId] || String(row.TenantID) !== String(user.TenantID) ||
+            String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
+        let value = row.ValueJSON;
+        if (typeof value === 'string') { try { value = JSON.parse(value); } catch (error) {} }
+        if (value === null || value === undefined || value === '' ||
+            (Array.isArray(value) && !value.length)) return;
+        const columns = InformationTypeRepository.findColumns(type.ID).filter(function(column) {
+          return String(column.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        });
+        tenantProjects.find(function(project) { return String(project.ID) === projectId; }).CardInformation.push({
+          InformationTypeID:type.ID, Name:type.Name, DataType:type.DataType,
+          Cardinality:type.Cardinality, Value:value, Columns:columns
+        });
+      });
+    }
+
+    return Response.success(tenantProjects);
 
   },
 
