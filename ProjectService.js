@@ -239,7 +239,7 @@ const ProjectService = {
     });
   },
 
-  validateDraftProjectCodeFromEvent: function(projectId, code, tenantId) {
+  validateProjectCodeFromEvent: function(projectId, code, tenantId) {
     const value = String(code || '').trim();
     if (!value || value.length > 100) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کد پروژه معتبر نیست.');
@@ -251,7 +251,7 @@ const ProjectService = {
     return true;
   },
 
-  assignDraftProjectCodeFromEvent: function(projectId, code, eventId, user) {
+  updateProjectCodeFromEvent: function(projectId, code, eventId, user) {
     const value = String(code || '').trim();
     const lock = LockService.getScriptLock();
     lock.waitLock(30000);
@@ -266,7 +266,7 @@ const ProjectService = {
           String(event.ProjectID) !== String(projectId)) {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مرتبط با این پروژه پیدا نشد.');
       }
-      this.validateDraftProjectCodeFromEvent(projectId, value, user.TenantID);
+      this.validateProjectCodeFromEvent(projectId, value, user.TenantID);
       if (String(project.ProjectCode || '').trim().toLowerCase() === value.toLowerCase()) return project;
       const duplicate = ProjectRepository.getAll().some(function(item) {
         return String(item.TenantID) === String(user.TenantID) &&
