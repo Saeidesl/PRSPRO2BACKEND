@@ -54,12 +54,28 @@ test('draft events never change project workflow or business status implicitly',
   assert.match(source, /RecordState[\s\S]{0,150}DRAFT[\s\S]{0,80}return changes/);
 });
 
-test('project code from an event is validated and assigned only once while draft', () => {
+test('project code from an event updates the same project in active and legacy draft states', () => {
   const service = read('ProjectService.js');
   const forms = read('FormService.js');
-  assert.match(service, /validateDraftProjectCodeFromEvent/);
-  assert.match(service, /assignDraftProjectCodeFromEvent/);
-  assert.ok(forms.includes("String(type.Code || '').toUpperCase() === 'PROJECT_CODE'"));
+  assert.match(service, /validateProjectCodeFromEvent/);
+  assert.match(service, /updateProjectCodeFromEvent/);
+  assert.match(service, /String\(project\.TenantID\)[\s\S]{0,250}String\(event\.ProjectID\)/);
+  assert.match(service, /toLowerCase\(\)/);
+  assert.match(forms, /PROJECT_CODE/);
+  assert.match(forms, /ProjectService\.updateProjectCodeFromEvent/);
+});
+
+test('project creation enforces atomic case-insensitive tenant-scoped code uniqueness', () => {
+  const service = read('ProjectService.js');
+  const createStart = service.indexOf('  create: function(project, params)');
+  const updateStart = service.indexOf('  update: function(id, data, params)');
+  const createSource = service.slice(createStart, updateStart);
+  assert.match(createSource, /const createLock = LockService\.getScriptLock\(\)/);
+  assert.match(createSource, /createLock\.waitLock\(30000\)/);
+  assert.match(createSource, /String\(item\.TenantID\) === String\(tenantId\)/);
+  assert.match(createSource, /toLowerCase\(\)/);
+  assert.match(createSource, /ProjectRepository\.insert\(newProject\)/);
+  assert.match(createSource, /createLock\.releaseLock\(\)/);
 });
 
 test('project cards receive only active central information explicitly enabled for card display', () => {
