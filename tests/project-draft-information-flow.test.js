@@ -28,6 +28,15 @@ test('existing project API creates drafts and completes them in place', () => {
   assert.match(source, /duplicateCode/);
 });
 
+test('create-only users can list and retrieve only their own drafts and complete them', () => {
+  const service = read('ProjectService.js');
+  const router = read('Router.js');
+  assert.match(service, /!canViewAllProjects[\s\S]{0,350}RecordState[\s\S]{0,120}DRAFT[\s\S]{0,120}CreatedBy/);
+  assert.match(router, /requireAny\(params, \['PROJECT_VIEW', 'PROJECT_CREATE'\]\)/);
+  assert.match(router, /projectByIdMatch[\s\S]{0,500}PROJECT_CREATE/);
+  assert.match(router, /projectUpdateMatch[\s\S]{0,600}PROJECT_CREATE/);
+});
+
 test('draft projects cannot receive production events before completion', () => {
   const source = read('EventService.js');
   assert.match(source, /project\.RecordState[\s\S]{0,250}پیش‌نویس پروژه/);
