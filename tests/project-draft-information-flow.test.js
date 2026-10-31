@@ -39,9 +39,40 @@ test('create-only users can list and retrieve only their own drafts and complete
   assert.match(router, /projectUpdateMatch[\s\S]{0,600}PROJECT_CREATE/);
 });
 
-test('draft projects cannot receive production events before completion', () => {
+test('only event types explicitly enabled can be recorded on drafts', () => {
   const source = read('EventService.js');
-  assert.match(source, /project\.RecordState[\s\S]{0,250}پیش‌نویس پروژه/);
+  const typeService = read('EventTypeService.js');
+  const validator = read('EventTypeValidator.js');
+  assert.match(source, /project\.RecordState[\s\S]{0,220}eventType\.AllowOnDraft/);
+  assert.match(typeService, /result\.AllowOnDraft = this\._toBoolean_/);
+  assert.match(validator, /Validator\.boolean\(data\.AllowOnDraft, 'AllowOnDraft'\)/);
+  assert.match(validator, /رویداد مستقل نمی‌تواند روی پیش‌نویس/);
+});
+
+test('draft events never change project workflow or business status implicitly', () => {
+  const source = read('EventService.js');
+  assert.match(source, /RecordState[\s\S]{0,150}DRAFT[\s\S]{0,80}return changes/);
+});
+
+test('project code from an event is validated and assigned only once while draft', () => {
+  const service = read('ProjectService.js');
+  const forms = read('FormService.js');
+  assert.match(service, /validateDraftProjectCodeFromEvent/);
+  assert.match(service, /assignDraftProjectCodeFromEvent/);
+  assert.match(forms, /Code \\|\\| ''\\)\\.toUpperCase\\(\\) === 'PROJECT_CODE'/);
+});
+
+test('project cards receive only active central information explicitly enabled for card display', () => {
+  const service = read('ProjectService.js');
+  const typeService = read('InformationTypeService.js');
+  assert.match(service, /type\.ShowOnCard/);
+  assert.match(service, /CardInformation/);
+  assert.match(typeService, /ShowOnCard/);
+});
+
+test('approved image references may use an existing PROFILE attachment without duplicating the file', () => {
+  const service = read('ProjectInformationService.js');
+  assert.match(service, /type==='image'.*AttachmentType.*PROFILE/);
 });
 
 test('event form responses update current project information and retain source event', () => {
