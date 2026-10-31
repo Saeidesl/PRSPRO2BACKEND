@@ -248,15 +248,6 @@ const ProjectService = {
     if (!project || String(project.TenantID) !== String(tenantId)) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
     }
-    if (String(project.RecordState || 'ACTIVE').toUpperCase() !== 'DRAFT') {
-      if (String(project.ProjectCode || '').trim().toLowerCase() === value.toLowerCase()) return true;
-      throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'کد پروژه فقط پیش از تکمیل پرونده و از طریق رویداد مجاز قابل ثبت است.');
-    }
-    const duplicate = ProjectRepository.getAll().some(function(item) {
-      return String(item.TenantID) === String(tenantId) && String(item.ID) !== String(projectId) &&
-        String(item.ProjectCode || '').trim().toLowerCase() === value.toLowerCase();
-    });
-    if (duplicate) throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
     return true;
   },
 
@@ -265,14 +256,36 @@ const ProjectService = {
     const lock = LockService.getScriptLock();
     lock.waitLock(30000);
     try {
-      this.validateDraftProjectCodeFromEvent(projectId, value, user.TenantID);
       const project = ProjectRepository.findById(projectId);
+      if (!project || String(project.TenantID) !== String(user.TenantID) ||
+          !this._isProjectAvailableToUser_(project, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
+      }
+      const event = EventRepository.findById(eventId);
+      if (!event || String(event.TenantID) !== String(user.TenantID) ||
+          String(event.ProjectID) !== String(projectId)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مرتبط با این پروژه پیدا نشد.');
+      }
+      this.validateDraftProjectCodeFromEvent(projectId, value, user.TenantID);
       if (String(project.ProjectCode || '').trim().toLowerCase() === value.toLowerCase()) return project;
-      const updated = ProjectRepository.update(projectId, {ProjectCode:value, UpdatedAt:new Date().toISOString()});
+      const duplicate = ProjectRepository.getAll().some(function(item) {
+        return String(item.TenantID) === String(user.TenantID) &&
+          String(item.ID) !== String(projectId) &&
+          String(item.ProjectCode || '').trim().toLowerCase() === value.toLowerCase();
+      });
+      if (duplicate) {
+        throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
+      }
+      const updated = ProjectRepository.update(projectId, {
+        ProjectCode: value,
+        UpdatedAt: new Date().toISOString()
+      });
       AuditService.log({
         TenantID:user.TenantID, UserID:user.ID, Action:Constants.ACTION.UPDATE,
-        EntityType:Constants.ENTITY.PROJECT, EntityID:projectId, OldData:project, NewData:updated,
-        Reason:'ثبت کد پروژه از فرم رویداد ' + String(eventId || '')
+        EntityType:Constants.ENTITY.PROJECT, EntityID:projectId,
+        OldData:{ProjectCode:project.ProjectCode || ''},
+        NewData:{ProjectCode:value},
+        Reason:'ویرایش کد پروژه از فرم رویداد ' + String(eventId || '')
       });
       return updated;
     } finally {
