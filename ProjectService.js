@@ -169,6 +169,21 @@ const ProjectService = {
       return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
     });
 
+    // Read-only workflow choices are included for users editing projects.
+    // This endpoint is already protected by PROJECT_VIEW and remains tenant-scoped.
+    const workflows = (WorkflowRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    }).map(function(item) {
+      return {
+        ID: item.ID,
+        Name: item.Name || item.Title || item.Code || String(item.ID),
+        Code: item.Code || '',
+        Version: item.Version || 1,
+        Status: item.Status || 'ACTIVE'
+      };
+    });
+
     const workflowSteps = (WorkflowStepRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
         String(item.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
@@ -199,6 +214,7 @@ const ProjectService = {
       users: users,
       departments: departments,
       eventTypes: eventTypes,
+      workflows: workflows,
       workflowSteps: workflowSteps,
       projectStatuses: projectStatuses
     });
