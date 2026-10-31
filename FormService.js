@@ -313,6 +313,14 @@ const FormService = {
           return;
         }
         clean[key]=ProjectInformationService._validate(type,type.Columns || [],value,validationContext);
+        if (String(type.Code || '').toUpperCase() === 'PROJECT_CODE') {
+          if (String(type.DataType || '').toLowerCase() !== 'text' ||
+              String(type.Cardinality || 'SINGLE').toUpperCase() !== 'SINGLE' ||
+              !projectId) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع اطلاعات PROJECT_CODE باید متن تک‌مقداری و متصل به پروژه باشد.');
+          }
+          ProjectService.validateDraftProjectCodeFromEvent(projectId, clean[key], tenantId);
+        }
       });
       Object.keys(values).forEach(function(key){if(!allowedTypes[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات خارج از فرم ارسال شده است: '+key);});
       validated.push({FormID:form.ID,FormVersion:version,Values:clean,DefinitionSnapshot:this._snapshot(form,fields)});
@@ -333,6 +341,11 @@ const FormService = {
         Object.keys(response.Values || {}).forEach(function(typeId) {
           var value = response.Values[typeId];
           if (FormService._isEmptyValue_(value)) return;
+          var informationType = InformationTypeRepository.findById(typeId);
+          if (informationType && String(informationType.Code || '').toUpperCase() === 'PROJECT_CODE') {
+            ProjectService.assignDraftProjectCodeFromEvent(event.ProjectID, value, event.ID, user);
+            return;
+          }
           ProjectInformationService.save(event.ProjectID, typeId, {
             Value: value,
             SourceEventID: event.ID,
