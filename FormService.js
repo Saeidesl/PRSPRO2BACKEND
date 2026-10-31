@@ -285,7 +285,7 @@ const FormService = {
       var hasMeaningfulValue=fields.some(function(field){
         var type=field.InformationType,key=String(type.ID),value=values[key];
         var visible=FormService._isVisible_(field.VisibilityRule || FormService._parse(field.VisibilityRuleJSON,{}),values);
-        var empty=this._isEmptyValue_(value);
+        var empty=FormService._isEmptyValue_(value);
         return visible&&!empty;
       });
       if((mapping.IsRequired===true||String(mapping.IsRequired).toLowerCase()==='true')&&!hasMeaningfulValue) {
