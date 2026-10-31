@@ -29,7 +29,7 @@ const InformationTypeService = {
   },
   update: function(id,data,params) {
     var user=this._user(params), existing=this._type(id,user.TenantID);
-    InformationTypeValidator.validateDefinition(data,true);
+    InformationTypeValidator.validateDefinition(Object.assign({},existing,data),true);
     var cardinality=String(data.Cardinality || existing.Cardinality).toUpperCase();
     var dataType=String(data.DataType || existing.DataType).toLowerCase();
     var structureChanged=cardinality!==String(existing.Cardinality).toUpperCase() || dataType!==String(existing.DataType).toLowerCase();
