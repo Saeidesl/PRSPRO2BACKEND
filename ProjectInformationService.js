@@ -146,6 +146,11 @@ const ProjectInformationService = {
     if(valueJSON.length>45000)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'حجم اطلاعات بیش از ظرفیت مجاز یک سلول صفحه‌گسترده است. لطفاً اطلاعات را در چند بخش ثبت کنید.');
     var existing=ProjectInformationRepository.findAnyByProjectAndType(projectId,typeId);
     var wasActive=existing&&String(existing.Status || 'ACTIVE')==='ACTIVE';
+    // Idempotent replay of the same event/value must not create duplicate revisions.
+    if(wasActive && eventId && String(existing.SourceEventID || '')===eventId &&
+       String(existing.ValueJSON || '')===valueJSON) {
+      return Response.success(Object.assign({},existing,{Value:value}));
+    }
     var now=new Date().toISOString(),oldValue=wasActive?this._parse(existing.ValueJSON,null):null;
     var revision=existing?Number(existing.Revision || 1)+1:1,current;
     if(existing)current=ProjectInformationRepository.update(existing.ID,{ValueJSON:valueJSON,Revision:revision,SourceEventID:eventId||existing.SourceEventID||'',UpdatedBy:user.ID,UpdatedAt:now,Status:'ACTIVE'});
