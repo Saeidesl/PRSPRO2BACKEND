@@ -95,6 +95,13 @@ test('required single-row tabular fields are validated as objects in reusable fo
   }], 'T1'), /فرم الزامی باید حداقل یک مقدار داشته باشد|تکمیل «اطلاعات تک‌مقداری جدولی» الزامی است/);
 });
 
+test('visibility rules treat empty single-row objects as empty values', () => {
+  const h = loadServices();
+  assert.equal(h.forms._isVisible_({ fieldId: 'I1', operator: 'FILLED' }, { I1: { Name: '', Quantity: '' } }), false);
+  assert.equal(h.forms._isVisible_({ fieldId: 'I1', operator: 'EMPTY' }, { I1: { Name: '', Quantity: '' } }), true);
+  assert.equal(h.forms._isVisible_({ fieldId: 'I1', operator: 'FILLED' }, { I1: { Name: 'نمونه', Quantity: 2 } }), true);
+});
+
 test('the same multi-row type stores independent row counts for separate projects', () => {
   const h = loadServices();
   const five = Array.from({ length: 5 }, (_, i) => ({ Name: 'P1-' + i, Quantity: i + 1 }));
