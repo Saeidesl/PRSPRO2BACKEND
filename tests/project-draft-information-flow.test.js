@@ -59,7 +59,8 @@ test('project code from an event updates the same project in active and legacy d
   const forms = read('FormService.js');
   assert.match(service, /validateProjectCodeFromEvent/);
   assert.match(service, /updateProjectCodeFromEvent/);
-  assert.match(service, /String\(project\.TenantID\)[\s\S]{0,250}String\(event\.ProjectID\)/);
+  assert.match(service, /String\(event\.ProjectID\) !== String\(projectId\)/);
+  assert.match(service, /String\(project\.TenantID\) !== String\(user\.TenantID\)/);
   assert.match(service, /toLowerCase\(\)/);
   assert.match(forms, /PROJECT_CODE/);
   assert.match(forms, /ProjectService\.updateProjectCodeFromEvent/);
