@@ -98,6 +98,8 @@ const ProjectValidator = {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'وضعیت چرخه عمر پروژه معتبر نیست.');
     }
     if (requestedState === 'ACTIVE') {
+      Validator.required(data.Title, 'Title');
+      Validator.string(data.Title, 'Title');
       Validator.required(data.ProjectCode, 'ProjectCode');
       Validator.string(data.ProjectCode, 'ProjectCode');
       Validator.required(data.WorkflowID, 'WorkflowID');
