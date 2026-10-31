@@ -297,14 +297,14 @@ const FormService = {
         allowedTypes[key]=true;
         var visible=FormService._isVisible_(field.VisibilityRule || FormService._parse(field.VisibilityRuleJSON,{}),values);
         var required=field.IsRequired===true||String(field.IsRequired).toLowerCase()==='true';
-        var empty=this._isEmptyValue_(value);
+        var empty=FormService._isEmptyValue_(value);
         if(!visible) {
           if(!empty) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فیلد پنهان نباید مقدار ارسال‌شده داشته باشد: '+(field.LabelOverride||type.Name));
-          clean[key]=this._emptyValueForType_(type);
+          clean[key]=FormService._emptyValueForType_(type);
           return;
         }
         if(empty&&required)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تکمیل «'+(field.LabelOverride||type.Name)+'» الزامی است.');
-        if(empty){clean[key]=this._emptyValueForType_(type);return;}
+        if(empty){clean[key]=FormService._emptyValueForType_(type);return;}
         clean[key]=ProjectInformationService._validate(type,type.Columns || [],value);
       });
       Object.keys(values).forEach(function(key){if(!allowedTypes[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات خارج از فرم ارسال شده است: '+key);});
