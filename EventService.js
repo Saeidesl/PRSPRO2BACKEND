@@ -157,6 +157,8 @@ const EventService = {
 
   _getConfiguredChanges_: function(project, event, eventType, tenantId) {
     const changes = {};
+    // Draft events collect information only; lifecycle/workflow transitions wait for explicit completion.
+    if (project && String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') return changes;
 
     const targetDepartmentId =
       eventType.TargetDepartmentID || '';
