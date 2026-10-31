@@ -230,7 +230,7 @@ const Router = {
 
     if (path === '/workflows') {
       // Project creators need read-only workflow choices during project creation.
-      this.requireAny(params, ['WORKFLOW_MANAGE', 'PROJECT_CREATE']);
+      this.requireAny(params, ['WORKFLOW_MANAGE', 'PROJECT_CREATE', 'SYSTEM_SETTINGS']);
       return WorkflowService.list(params);
     }
 
