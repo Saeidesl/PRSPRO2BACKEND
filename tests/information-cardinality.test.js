@@ -52,6 +52,24 @@ function loadServices() {
   return { projectInfo, forms, mappings, singleType, multiType, columns, form, stored, history };
 }
 
+test('information type validation keeps base data type independent from cardinality', () => {
+  const context = {
+    ErrorHandler: { create: (_code, message) => new Error(message) },
+    Constants: { ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR' }, STATUS: { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' } },
+    Validator: {
+      object: value => { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('object required'); },
+      required: (value, label) => { if (value === undefined || value === null || value === '') throw new Error(label + ' required'); },
+      string: value => { if (typeof value !== 'string') throw new Error('string required'); },
+      enum: (value, allowed, label) => { if (!allowed.includes(value)) throw new Error(label + ' invalid'); },
+      boolean: value => { if (typeof value !== 'boolean') throw new Error('boolean required'); }
+    },
+    String, Array, Object, JSON, Number, isFinite, RegExp
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'InformationTypeValidator.js'), 'utf8') + '\\nthis.__validator=InformationTypeValidator;', context);
+  assert.equal(context.__validator.validateDefinition({ Name: 'جدول نمونه', Code: 'TABLE_SAMPLE', Cardinality: 'MULTIPLE', DataType: 'number' }, false), true);
+  assert.equal(context.__validator.validateDefinition({ Name: 'اطلاعات تکی', Code: 'SINGLE_SAMPLE', Cardinality: 'SINGLE', DataType: 'text' }, false), true);
+});
+
 test('single cardinality supports one structured row while retaining scalar compatibility', () => {
   const h = loadServices();
   assert.equal(h.projectInfo._validate({ Cardinality: 'SINGLE', DataType: 'text', ValidationRuleJSON: '{}', OptionsJSON: '[]' }, [], 'نمونه'), 'نمونه');
