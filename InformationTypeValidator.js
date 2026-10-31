@@ -1,5 +1,5 @@
 const InformationTypeValidator = {
-  DATA_TYPES: ['text', 'number', 'date', 'datetime', 'boolean', 'select', 'textarea'],
+  DATA_TYPES: ['text', 'number', 'date', 'datetime', 'boolean', 'select', 'textarea', 'image', 'file'],
   CARDINALITIES: ['SINGLE', 'MULTIPLE'],
 
   parseJson: function(value, label, fallback) {
