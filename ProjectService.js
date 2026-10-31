@@ -249,16 +249,22 @@ const ProjectService = {
 
   assignDraftProjectCodeFromEvent: function(projectId, code, eventId, user) {
     const value = String(code || '').trim();
-    this.validateDraftProjectCodeFromEvent(projectId, value, user.TenantID);
-    const project = ProjectRepository.findById(projectId);
-    if (String(project.ProjectCode || '').trim()) return project;
-    const updated = ProjectRepository.update(projectId, {ProjectCode:value, UpdatedAt:new Date().toISOString()});
-    AuditService.log({
-      TenantID:user.TenantID, UserID:user.ID, Action:Constants.ACTION.UPDATE,
-      EntityType:Constants.ENTITY.PROJECT, EntityID:projectId, OldData:project, NewData:updated,
-      Reason:'ثبت کد پروژه از فرم رویداد ' + String(eventId || '')
-    });
-    return updated;
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    try {
+      this.validateDraftProjectCodeFromEvent(projectId, value, user.TenantID);
+      const project = ProjectRepository.findById(projectId);
+      if (String(project.ProjectCode || '').trim()) return project;
+      const updated = ProjectRepository.update(projectId, {ProjectCode:value, UpdatedAt:new Date().toISOString()});
+      AuditService.log({
+        TenantID:user.TenantID, UserID:user.ID, Action:Constants.ACTION.UPDATE,
+        EntityType:Constants.ENTITY.PROJECT, EntityID:projectId, OldData:project, NewData:updated,
+        Reason:'ثبت کد پروژه از فرم رویداد ' + String(eventId || '')
+      });
+      return updated;
+    } finally {
+      lock.releaseLock();
+    }
   },
 
   list: function(params) {
