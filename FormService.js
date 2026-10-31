@@ -258,7 +258,8 @@ const FormService = {
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.DELETE,EntityType:'EVENT_TYPE_FORM',EntityID:id,OldData:row,NewData:updated,Reason:'قطع اتصال فرم از نوع رویداد'});
     return Response.success(updated,{message:'اتصال فرم حذف شد.'});
   },
-  prepareEventResponses: function(eventTypeId, responses, tenantId) {
+  prepareEventResponses: function(eventTypeId, responses, tenantId, projectId) {
+    var validationContext=projectId?{projectId:String(projectId),tenantId:String(tenantId)}:null;
     var mappings=FormRepository.findMappingsByEventType(eventTypeId).filter(function(row){
       if(String(row.TenantID)!==String(tenantId)||String(row.Status || 'ACTIVE')!=='ACTIVE')return false;
       var form=FormRepository.findForm(row.FormID);
@@ -307,11 +308,11 @@ const FormService = {
         if(empty){
           var hasColumns=Array.isArray(type.Columns)&&type.Columns.some(function(column){return String(column.Status || 'ACTIVE')==='ACTIVE';});
           clean[key]=hasColumns&&supplied&&value!==null&&value!==undefined&&value!==''
-            ? ProjectInformationService._validate(type,type.Columns,value)
+            ? ProjectInformationService._validate(type,type.Columns,value,validationContext)
             : FormService._emptyValueForType_(type);
           return;
         }
-        clean[key]=ProjectInformationService._validate(type,type.Columns || [],value);
+        clean[key]=ProjectInformationService._validate(type,type.Columns || [],value,validationContext);
       });
       Object.keys(values).forEach(function(key){if(!allowedTypes[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات خارج از فرم ارسال شده است: '+key);});
       validated.push({FormID:form.ID,FormVersion:version,Values:clean,DefinitionSnapshot:this._snapshot(form,fields)});
