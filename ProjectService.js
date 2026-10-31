@@ -233,12 +233,17 @@ const ProjectService = {
     const projects =
       ProjectRepository.getAll();
 
+    const canViewAllProjects = AccessControlService.isAdmin(user) ||
+      PermissionService.hasPermission(user.ID, 'PROJECT_VIEW', user);
     const tenantProjects =
       projects.filter(function(project) {
-
-        return String(project.TenantID) === String(user.TenantID) &&
-          ProjectService._isProjectAvailableToUser_(project, user);
-
+        if (String(project.TenantID) !== String(user.TenantID) ||
+            !ProjectService._isProjectAvailableToUser_(project, user)) return false;
+        if (!canViewAllProjects) {
+          return String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT' &&
+            String(project.CreatedBy || '') === String(user.ID || '');
+        }
+        return true;
       });
 
     return Response.success(
