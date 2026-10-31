@@ -82,13 +82,13 @@ const ProjectInformationService = {
       return clean;
     };
     if(cardinality==='SINGLE'){
-      if(isEmpty(value))return {};
+      if(isEmpty(value)&&(!value||typeof value!=='object'||Array.isArray(value)))return {};
       if(!value||typeof value!=='object'||Array.isArray(value))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'اطلاعات تک‌مقداری جدولی باید به‌صورت یک ردیف ارسال شود.');
       return validateRow(value,1);
     }
     if(!Array.isArray(value))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'اطلاعات چندمقداری باید به‌صورت فهرست ردیف‌ها ارسال شود.');
     if(value.length>500)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'حداکثر ۵۰۰ ردیف در هر ثبت مجاز است.');
-    return value.filter(function(row){return !isEmpty(row);}).map(function(row,index){return validateRow(row,index+1);});
+    return value.map(function(row,index){return validateRow(row,index+1);}).filter(function(row){return !isEmpty(row);});
   },
   list: function(projectId,params){
     var user=this._user(params);this._project(projectId,user.TenantID,user);
