@@ -771,7 +771,7 @@ const Router = {
       return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
     }
 
-    const projectUpdateMatch = path.match(/^\\/projects\\/([^/]+)$/);
+    const projectUpdateMatch = path.match(/^\/projects\/([^/]+)$/);
     if (projectUpdateMatch) {
       try {
         AccessControlService.require(params, 'PROJECT_EDIT');
