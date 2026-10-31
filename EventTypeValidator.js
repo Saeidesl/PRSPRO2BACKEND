@@ -44,6 +44,13 @@ const EventTypeValidator = {
       Validator.enum(data.ConnectionType, ['PROJECT', 'INDEPENDENT'], 'ConnectionType');
     }
 
+    if (data.AllowOnDraft !== undefined) Validator.boolean(data.AllowOnDraft, 'AllowOnDraft');
+
+    if (String(data.ConnectionType || '').toUpperCase() === 'INDEPENDENT' &&
+        (data.AllowOnDraft === true || String(data.AllowOnDraft).toLowerCase() === 'true')) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد مستقل نمی‌تواند روی پیش‌نویس پروژه ثبت شود.');
+    }
+
     if (String(data.ConnectionType || '').toUpperCase() === 'INDEPENDENT' &&
         [data.UseProjectColors, data.UseProjectSizes, data.TrackVariantQuantity].some(function(value) {
           return value === true || String(value).toLowerCase() === 'true';
