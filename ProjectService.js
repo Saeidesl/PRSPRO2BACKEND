@@ -317,6 +317,38 @@ const ProjectService = {
 
     }
 
+    if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') {
+      const now = new Date().toISOString();
+      const draft = {
+        ID: 'PRJ_' + Utilities.getUuid().replace(/-/g, ''),
+        TenantID: tenantId,
+        ProjectCode: '',
+        Title: String(project.Title || '').trim(),
+        Description: String(project.Description || ''),
+        WorkflowID: '',
+        WorkflowVersion: '',
+        CurrentStepID: '',
+        CurrentStepStatus: '',
+        Status: '',
+        Quantity: '',
+        ColorSizeJSON: JSON.stringify({ colors: [], sizes: [] }),
+        AvailableDepartmentIDs: JSON.stringify([]),
+        AllowedUserIDs: JSON.stringify([]),
+        NotifyEnabled: true,
+        RecordState: 'DRAFT',
+        CreatedBy: user.ID,
+        CreatedAt: this._normalizeCreatedAt_(project.CreatedAt, now),
+        UpdatedAt: now
+      };
+      const createdDraft = ProjectRepository.insert(draft);
+      AuditService.log({
+        TenantID: tenantId, UserID: user.ID, Action: Constants.ACTION.CREATE,
+        EntityType: Constants.ENTITY.PROJECT, EntityID: draft.ID,
+        OldData: null, NewData: createdDraft, Reason: 'ایجاد پیش‌نویس پروژه'
+      });
+      return Response.success(createdDraft, { message: 'پیش‌نویس پروژه ایجاد شد.' });
+    }
+
     /*
      * ProjectCode فقط داخل Tenant جاری باید یکتا باشد.
      */
@@ -526,7 +558,10 @@ const ProjectService = {
         this._normalizeCreatedAt_(project.CreatedAt, now),
 
       UpdatedAt:
-        now
+        now,
+
+      RecordState:
+        'ACTIVE'
 
     };
 
@@ -612,9 +647,27 @@ const ProjectService = {
       );
     }
 
-    // کد پروژه و گردش‌کار پس از ایجاد هویت ثابت پروژه هستند.
+    const isDraft = String(existing.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT';
+    const completesDraft = isDraft && String(data.RecordState || '').toUpperCase() === 'ACTIVE';
+
+    if (!isDraft && data.RecordState !== undefined &&
+        String(data.RecordState).toUpperCase() !== 'ACTIVE') {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'پروژه تکمیل‌شده دوباره به پیش‌نویس تبدیل نمی‌شود.');
+    }
+
+    if (completesDraft) {
+      const code = String(data.ProjectCode || '').trim();
+      const duplicateCode = ProjectRepository.getAll().some(function(item) {
+        return String(item.TenantID) === String(user.TenantID) &&
+          String(item.ID) !== String(id) &&
+          code && String(item.ProjectCode || '').trim().toLowerCase() === code.toLowerCase();
+      });
+      if (duplicateCode) throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
+    }
+
+    // کد پروژه و گردش‌کار پس از تکمیل هویت پروژه ثابت هستند.
     if (
-      data.ProjectCode !== undefined &&
+      !isDraft && data.ProjectCode !== undefined &&
       String(data.ProjectCode).trim() !== String(existing.ProjectCode || '').trim()
     ) {
       throw ErrorHandler.create(
@@ -624,7 +677,7 @@ const ProjectService = {
     }
 
     if (
-      data.WorkflowID !== undefined &&
+      !isDraft && data.WorkflowID !== undefined &&
       String(data.WorkflowID || '').trim() !== String(existing.WorkflowID || '').trim()
     ) {
       throw ErrorHandler.create(
@@ -634,6 +687,11 @@ const ProjectService = {
     }
 
     const updateData = {};
+
+    if (isDraft && data.ProjectCode !== undefined) {
+      updateData.ProjectCode = String(data.ProjectCode || '').trim();
+    }
+    if (completesDraft) updateData.RecordState = 'ACTIVE';
 
     if (data.WorkflowID !== undefined) {
       const requestedWorkflowId = String(data.WorkflowID || '').trim();
