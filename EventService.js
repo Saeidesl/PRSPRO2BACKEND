@@ -157,6 +157,8 @@ const EventService = {
 
   _getConfiguredChanges_: function(project, event, eventType, tenantId) {
     const changes = {};
+    // Draft events collect information only; lifecycle/workflow transitions wait for explicit completion.
+    if (project && String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') return changes;
 
     const targetDepartmentId =
       eventType.TargetDepartmentID || '';
@@ -877,8 +879,9 @@ const EventService = {
         );
       }
       this._checkProjectAvailability_(project, user);
-      if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') {
-        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'ابتدا اطلاعات پایه و گردش‌کار پیش‌نویس پروژه را تکمیل کنید؛ سپس امکان ثبت رویداد فراهم می‌شود.');
+      if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT' &&
+          !EventTypeService._toBoolean_(eventType.AllowOnDraft)) {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این نوع رویداد برای ثبت روی پیش‌نویس مجاز نشده است.');
       }
     }
 

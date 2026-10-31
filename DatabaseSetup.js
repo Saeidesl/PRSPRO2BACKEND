@@ -7,7 +7,7 @@
 
 const APP_CONFIG = {
 
-  VERSION: '1.1.6',
+  VERSION: '1.1.7',
 
   DEFAULT_TENANT: {
     NAME: 'شرکت اصلی',
@@ -70,7 +70,7 @@ const APP_CONFIG = {
 
     EVENT_TYPES: {
       name: '11_EventTypes',
-      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion']
+      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion','AllowOnDraft']
     },
 
     EVENT_FIELDS: {
@@ -90,7 +90,7 @@ const APP_CONFIG = {
 
     INFORMATION_TYPES: {
       name: '28_InformationTypes',
-      headers: ['ID','TenantID','Code','Name','Description','Cardinality','DataType','ValidationRuleJSON','OptionsJSON','Status','Revision','CreatedBy','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','Code','Name','Description','Cardinality','DataType','ValidationRuleJSON','OptionsJSON','Status','Revision','CreatedBy','CreatedAt','UpdatedAt','ShowOnCard']
     },
 
     INFORMATION_TYPE_COLUMNS: {
