@@ -760,26 +760,8 @@ const ProjectService = {
       throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'پروژه تکمیل‌شده دوباره به پیش‌نویس تبدیل نمی‌شود.');
     }
 
-    if (isDraft && data.ProjectCode !== undefined && String(data.ProjectCode || '').trim()) {
-      const code = String(data.ProjectCode || '').trim();
-      const duplicateCode = ProjectRepository.getAll().some(function(item) {
-        return String(item.TenantID) === String(user.TenantID) &&
-          String(item.ID) !== String(id) &&
-          code && String(item.ProjectCode || '').trim().toLowerCase() === code.toLowerCase();
-      });
-      if (duplicateCode) throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
-    }
-
-    // کد پروژه و گردش‌کار پس از تکمیل هویت پروژه ثابت هستند.
-    if (
-      !isDraft && data.ProjectCode !== undefined &&
-      String(data.ProjectCode).trim() !== String(existing.ProjectCode || '').trim()
-    ) {
-      throw ErrorHandler.create(
-        Constants.ERROR.VALIDATION_ERROR,
-        'کد پروژه پس از ایجاد قابل تغییر نیست.'
-      );
-    }
+    // کد موقت و کد قطعی یک فیلد واحد هستند و در هر زمان قابل تغییرند.
+    // یکتایی نهایی درست پیش از نوشتن و درون قفل بررسی می‌شود.
 
     if (
       !isDraft && data.WorkflowID !== undefined &&
@@ -793,7 +775,7 @@ const ProjectService = {
 
     const updateData = {};
 
-    if (isDraft && data.ProjectCode !== undefined) {
+    if (data.ProjectCode !== undefined) {
       updateData.ProjectCode = String(data.ProjectCode || '').trim();
     }
     if (completesDraft) updateData.RecordState = 'ACTIVE';
@@ -974,11 +956,28 @@ const ProjectService = {
         typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
       GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
     }
-    const updated =
-      ProjectRepository.update(
-        id,
-        updateData
-      );
+    let updated;
+    const changesProjectCode = Object.prototype.hasOwnProperty.call(updateData, 'ProjectCode') &&
+      String(updateData.ProjectCode || '').trim().toLowerCase() !==
+        String(existing.ProjectCode || '').trim().toLowerCase();
+    const codeLock = changesProjectCode ? LockService.getScriptLock() : null;
+    if (codeLock) codeLock.waitLock(30000);
+    try {
+      if (changesProjectCode) {
+        const requestedCode = String(updateData.ProjectCode || '').trim();
+        const duplicateCode = ProjectRepository.getAll().some(function(item) {
+          return String(item.TenantID) === String(user.TenantID) &&
+            String(item.ID) !== String(id) &&
+            String(item.ProjectCode || '').trim().toLowerCase() === requestedCode.toLowerCase();
+        });
+        if (duplicateCode) {
+          throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
+        }
+      }
+      updated = ProjectRepository.update(id, updateData);
+    } finally {
+      if (codeLock) codeLock.releaseLock();
+    }
 
     AuditService.log({
 
