@@ -16,9 +16,18 @@ const ProjectInformationService = {
     if(!type||String(type.TenantID)!==String(tenantId))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع اطلاعات پیدا نشد.');
     return type;
   },
-  _scalar: function(value,dataType,rules,options,label){
+  _scalar: function(value,dataType,rules,options,label,context){
     if(value===undefined||value===null||value==='')return '';
     var type=String(dataType || 'text').toLowerCase(), text=String(value);
+    if(type==='image'||type==='file'){
+      if(!value||typeof value!=='object'||Array.isArray(value))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,label+' باید از طریق انتخاب و بارگذاری فایل ثبت شود.');
+      var id=String(value.AttachmentID || value.ID || ''), attachment=AttachmentRepository.findById(id);
+      var projectId=context&&String(context.projectId || ''), tenantId=context&&String(context.tenantId || '');
+      if(!attachment||String(attachment.TenantID)!==tenantId||String(attachment.EntityType).toUpperCase()!=='PROJECT'||String(attachment.EntityID)!==projectId||String(attachment.AttachmentType || '').toUpperCase()!=='INFORMATION'||String(attachment.Status || 'ACTIVE').toUpperCase()!=='ACTIVE')throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'فایل انتخاب‌شده به این پروژه تعلق ندارد یا قابل استفاده نیست.');
+      var mime=String(attachment.MimeType || '').toLowerCase();
+      if(!AttachmentValidator.FILE_TYPES[mime]||(type==='image'&&mime.indexOf('image/')!==0))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,type==='image'?'برای این فیلد فقط تصویر مجاز است.':'نوع فایل انتخاب‌شده مجاز نیست.');
+      return {AttachmentID:String(attachment.ID),FileName:String(attachment.FileName || ''),MimeType:mime,FileSize:Number(attachment.FileSize || 0),AttachmentType:'INFORMATION'};
+    }
     if(type==='text'||type==='textarea'||type==='select'){
       if(rules.minLength!==undefined&&text.length<Number(rules.minLength))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,label+' کوتاه‌تر از حد مجاز است.');
       if(rules.maxLength!==undefined&&text.length>Number(rules.maxLength))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,label+' طولانی‌تر از حد مجاز است.');
@@ -52,7 +61,7 @@ const ProjectInformationService = {
     }
     throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع داده پشتیبانی نمی‌شود: '+type);
   },
-  _validate: function(type,columns,value){
+  _validate: function(type,columns,value,context){
     var cardinality=String(type.Cardinality || 'SINGLE').toUpperCase();
     var active=(columns || []).filter(function(col){return String(col.Status || 'ACTIVE')==='ACTIVE';});
     var hasColumns=active.length>0;
@@ -64,7 +73,7 @@ const ProjectInformationService = {
     };
     if(!hasColumns){
       if(cardinality==='MULTIPLE')throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'برای اطلاعات چندمقداری باید حداقل یک ستون تعریف شود.');
-      return this._scalar(value,type.DataType,this._parse(type.ValidationRuleJSON,{}),this._parse(type.OptionsJSON,[]),type.Name || 'مقدار');
+      return this._scalar(value,type.DataType,this._parse(type.ValidationRuleJSON,{}),this._parse(type.OptionsJSON,[]),type.Name || 'مقدار',context);
     }
     var validateRow=function(row,index){
       if(!row||typeof row!=='object'||Array.isArray(row))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ردیف '+index+' معتبر نیست.');
@@ -74,7 +83,7 @@ const ProjectInformationService = {
         if(hasAnyValue&&(col.IsRequired===true||String(col.IsRequired).toLowerCase()==='true')&&isEmpty(item)){
           throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقدار «'+col.Name+'» در ردیف '+index+' الزامی است.');
         }
-        clean[key]=ProjectInformationService._scalar(item,col.DataType,ProjectInformationService._parse(col.ValidationRuleJSON,{}),ProjectInformationService._parse(col.OptionsJSON,[]),col.Name);
+        clean[key]=ProjectInformationService._scalar(item,col.DataType,ProjectInformationService._parse(col.ValidationRuleJSON,{}),ProjectInformationService._parse(col.OptionsJSON,[]),col.Name,context);
       });
       Object.keys(row).forEach(function(key){
         if(!active.some(function(col){return String(col.Code)===key;}))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ستون ناشناخته در ردیف '+index+': '+key);
@@ -132,7 +141,7 @@ const ProjectInformationService = {
       var event=EventRepository.findById(eventId);
       if(!event||String(event.TenantID)!==String(user.TenantID)||String(event.ProjectID || '')!==String(projectId))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'رویداد مرتبط با این پرونده پیدا نشد.');
     }
-    var value=this._validate(type,InformationTypeRepository.findColumns(typeId),body.Value);
+    var value=this._validate(type,InformationTypeRepository.findColumns(typeId),body.Value,{projectId:project.ID,tenantId:user.TenantID});
     var valueJSON=JSON.stringify(value);
     if(valueJSON.length>45000)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'حجم اطلاعات بیش از ظرفیت مجاز یک سلول صفحه‌گسترده است. لطفاً اطلاعات را در چند بخش ثبت کنید.');
     var existing=ProjectInformationRepository.findAnyByProjectAndType(projectId,typeId);
