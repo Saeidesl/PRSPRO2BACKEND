@@ -7,6 +7,12 @@ const test = require('node:test');
 
 function loadServices() {
   const mappings = [];
+  const stored = new Map();
+  const history = [];
+  const columns = [
+    { ID: 'C1', Code: 'Name', Name: 'نام', DataType: 'text', IsRequired: true, Status: 'ACTIVE', OptionsJSON: '[]', ValidationRuleJSON: '{}' },
+    { ID: 'C2', Code: 'Quantity', Name: 'تعداد', DataType: 'number', IsRequired: true, Status: 'ACTIVE', OptionsJSON: '[]', ValidationRuleJSON: '{}' }
+  ];
   const form = { ID: 'F1', TenantID: 'T1', Code: 'TABULAR', Name: 'فرم جدولی', Version: 2, Status: 'ACTIVE' };
   const context = {
     ErrorHandler: { create: (_code, message) => new Error(message) },
@@ -15,15 +21,20 @@ function loadServices() {
       findMappingsByEventType: () => mappings,
       findForm: () => form
     },
-    InformationTypeRepository: { findById: () => null, findColumns: () => [] },
+    InformationTypeRepository: { findById: () => null, findColumns: () => columns },
+    ProjectInformationRepository: {
+      findAnyByProjectAndType: (projectId, typeId) => stored.get(projectId + '|' + typeId) || null,
+      insert: row => { stored.set(row.ProjectID + '|' + row.InformationTypeID, row); return row; },
+      update: (id, patch) => { const row = Array.from(stored.values()).find(item => item.ID === id); Object.assign(row, patch); return row; },
+      insertHistory: row => { history.push(row); return row; }
+    },
+    Validator: { object: value => { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('object required'); } },
+    Response: { success: (data, meta) => ({ data, meta }) },
+    AuditService: { log: () => {} },
     Date, Object, String, Array, JSON, Number, isFinite
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'ProjectInformationService.js'), 'utf8') + '\nthis.__projectInfo=ProjectInformationService;', context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'FormService.js'), 'utf8') + '\nthis.__forms=FormService;', context);
-  const columns = [
-    { ID: 'C1', Code: 'Name', Name: 'نام', DataType: 'text', IsRequired: true, Status: 'ACTIVE', OptionsJSON: '[]', ValidationRuleJSON: '{}' },
-    { ID: 'C2', Code: 'Quantity', Name: 'تعداد', DataType: 'number', IsRequired: true, Status: 'ACTIVE', OptionsJSON: '[]', ValidationRuleJSON: '{}' }
-  ];
   const singleType = { ID: 'I1', TenantID: 'T1', Name: 'اطلاعات تک‌مقداری جدولی', Code: 'SINGLE_TABLE', Cardinality: 'SINGLE', DataType: 'text', Status: 'ACTIVE', Columns: columns };
   const multiType = { ID: 'I2', TenantID: 'T1', Name: 'اطلاعات چندمقداری', Code: 'MULTI_TABLE', Cardinality: 'MULTIPLE', DataType: 'number', Status: 'ACTIVE', Columns: columns };
   const fields = [
@@ -31,9 +42,14 @@ function loadServices() {
     { ID: 'FF2', TenantID: 'T1', FormID: 'F1', InformationTypeID: 'I2', FieldOrder: 2, IsRequired: true, InformationType: multiType }
   ];
   const forms = context.__forms;
+  const projectInfo = context.__projectInfo;
+  projectInfo._user = () => ({ TenantID: 'T1', ID: 'U1' });
+  projectInfo._project = projectId => ({ ID: projectId, TenantID: 'T1' });
+  projectInfo._type = typeId => typeId === 'I1' ? singleType : multiType;
+  projectInfo._id = prefix => prefix + '_' + Math.random().toString(36).slice(2);
   forms._form = () => form;
   forms._definition = () => fields;
-  return { projectInfo: context.__projectInfo, forms, mappings, singleType, multiType, columns, form };
+  return { projectInfo, forms, mappings, singleType, multiType, columns, form, stored, history };
 }
 
 test('single cardinality supports one structured row while retaining scalar compatibility', () => {
@@ -79,10 +95,16 @@ test('required single-row tabular fields are validated as objects in reusable fo
   }], 'T1'), /فرم الزامی باید حداقل یک مقدار داشته باشد|تکمیل «اطلاعات تک‌مقداری جدولی» الزامی است/);
 });
 
-test('the same multi-row type can store different row counts without cross-project coupling', () => {
+test('the same multi-row type stores independent row counts for separate projects', () => {
   const h = loadServices();
-  const five = h.projectInfo._validate(h.multiType, h.columns, Array.from({ length: 5 }, (_, i) => ({ Name: 'P1-' + i, Quantity: i + 1 })));
-  const eight = h.projectInfo._validate(h.multiType, h.columns, Array.from({ length: 8 }, (_, i) => ({ Name: 'P2-' + i, Quantity: i + 1 })));
-  assert.equal(five.length, 5);
-  assert.equal(eight.length, 8);
+  const five = Array.from({ length: 5 }, (_, i) => ({ Name: 'P1-' + i, Quantity: i + 1 }));
+  const eight = Array.from({ length: 8 }, (_, i) => ({ Name: 'P2-' + i, Quantity: i + 1 }));
+  h.projectInfo.save('P1', 'I2', { Value: five }, {});
+  h.projectInfo.save('P2', 'I2', { Value: eight }, {});
+  const savedFive = JSON.parse(h.stored.get('P1|I2').ValueJSON);
+  const savedEight = JSON.parse(h.stored.get('P2|I2').ValueJSON);
+  assert.equal(savedFive.length, 5);
+  assert.equal(savedEight.length, 8);
+  assert.equal(h.stored.size, 2);
+  assert.equal(h.history.length, 2);
 });
