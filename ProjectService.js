@@ -298,24 +298,33 @@ const ProjectService = {
       });
     if (cardTypes.length && typeof ProjectInformationRepository !== 'undefined') {
       const typeById = Object.create(null);
-      cardTypes.forEach(function(type) { typeById[String(type.ID)] = type; });
-      const projectIds = Object.create(null);
-      tenantProjects.forEach(function(project) { projectIds[String(project.ID)] = true; project.CardInformation = []; });
+      const columnsByType = Object.create(null);
+      cardTypes.forEach(function(type) {
+        const typeId = String(type.ID);
+        typeById[typeId] = type;
+        columnsByType[typeId] = InformationTypeRepository.findColumns(type.ID).filter(function(column) {
+          return String(column.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        });
+      });
+      const projectById = Object.create(null);
+      tenantProjects.forEach(function(project) {
+        projectById[String(project.ID)] = project;
+        project.CardInformation = [];
+      });
       (ProjectInformationRepository.getAll() || []).forEach(function(row) {
         const projectId = String(row.ProjectID || '');
-        const type = typeById[String(row.InformationTypeID || '')];
-        if (!type || !projectIds[projectId] || String(row.TenantID) !== String(user.TenantID) ||
+        const typeId = String(row.InformationTypeID || '');
+        const project = projectById[projectId];
+        const type = typeById[typeId];
+        if (!project || !type || String(row.TenantID) !== String(user.TenantID) ||
             String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
         let value = row.ValueJSON;
         if (typeof value === 'string') { try { value = JSON.parse(value); } catch (error) {} }
         if (value === null || value === undefined || value === '' ||
             (Array.isArray(value) && !value.length)) return;
-        const columns = InformationTypeRepository.findColumns(type.ID).filter(function(column) {
-          return String(column.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-        });
-        tenantProjects.find(function(project) { return String(project.ID) === projectId; }).CardInformation.push({
+        project.CardInformation.push({
           InformationTypeID:type.ID, Name:type.Name, DataType:type.DataType,
-          Cardinality:type.Cardinality, Value:value, Columns:columns
+          Cardinality:type.Cardinality, Value:value, Columns:columnsByType[typeId] || []
         });
       });
     }
