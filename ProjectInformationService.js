@@ -53,24 +53,42 @@ const ProjectInformationService = {
     throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع داده پشتیبانی نمی‌شود: '+type);
   },
   _validate: function(type,columns,value){
-    if(String(type.Cardinality || 'SINGLE').toUpperCase()==='SINGLE'){
+    var cardinality=String(type.Cardinality || 'SINGLE').toUpperCase();
+    var active=(columns || []).filter(function(col){return String(col.Status || 'ACTIVE')==='ACTIVE';});
+    var hasColumns=active.length>0;
+    var isEmpty=function(item){
+      if(item===undefined||item===null||item==='')return true;
+      if(Array.isArray(item))return item.length===0||!item.some(function(entry){return !isEmpty(entry);});
+      if(typeof item==='object')return Object.keys(item).length===0||Object.keys(item).every(function(key){return isEmpty(item[key]);});
+      return false;
+    };
+    if(!hasColumns){
+      if(cardinality==='MULTIPLE')throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'برای اطلاعات چندمقداری باید حداقل یک ستون تعریف شود.');
       return this._scalar(value,type.DataType,this._parse(type.ValidationRuleJSON,{}),this._parse(type.OptionsJSON,[]),type.Name || 'مقدار');
+    }
+    var validateRow=function(row,index){
+      if(!row||typeof row!=='object'||Array.isArray(row))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ردیف '+index+' معتبر نیست.');
+      var clean={},hasAnyValue=active.some(function(col){return !isEmpty(row[String(col.Code)]);});
+      active.forEach(function(col){
+        var key=String(col.Code),item=row[key];
+        if(hasAnyValue&&(col.IsRequired===true||String(col.IsRequired).toLowerCase()==='true')&&isEmpty(item)){
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقدار «'+col.Name+'» در ردیف '+index+' الزامی است.');
+        }
+        clean[key]=ProjectInformationService._scalar(item,col.DataType,ProjectInformationService._parse(col.ValidationRuleJSON,{}),ProjectInformationService._parse(col.OptionsJSON,[]),col.Name);
+      });
+      Object.keys(row).forEach(function(key){
+        if(!active.some(function(col){return String(col.Code)===key;}))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ستون ناشناخته در ردیف '+index+': '+key);
+      });
+      return clean;
+    };
+    if(cardinality==='SINGLE'){
+      if(isEmpty(value)&&(!value||typeof value!=='object'||Array.isArray(value)))return {};
+      if(!value||typeof value!=='object'||Array.isArray(value))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'اطلاعات تک‌مقداری جدولی باید به‌صورت یک ردیف ارسال شود.');
+      return validateRow(value,1);
     }
     if(!Array.isArray(value))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'اطلاعات چندمقداری باید به‌صورت فهرست ردیف‌ها ارسال شود.');
     if(value.length>500)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'حداکثر ۵۰۰ ردیف در هر ثبت مجاز است.');
-    var active=columns.filter(function(col){return String(col.Status || 'ACTIVE')==='ACTIVE';});
-    if(!active.length)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'برای این نوع اطلاعات هنوز ستونی تعریف نشده است.');
-    return value.map(function(row,index){
-      if(!row||typeof row!=='object'||Array.isArray(row))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ردیف '+(index+1)+' معتبر نیست.');
-      var clean={};
-      active.forEach(function(col){
-        var key=String(col.Code), item=row[key];
-        if((col.IsRequired===true||String(col.IsRequired).toLowerCase()==='true')&&(item===undefined||item===null||item===''))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقدار «'+col.Name+'» در ردیف '+(index+1)+' الزامی است.');
-        clean[key]=ProjectInformationService._scalar(item,col.DataType,ProjectInformationService._parse(col.ValidationRuleJSON,{}),ProjectInformationService._parse(col.OptionsJSON,[]),col.Name);
-      });
-      Object.keys(row).forEach(function(key){if(!active.some(function(col){return String(col.Code)===key;}))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ستون ناشناخته در ردیف '+(index+1)+': '+key);});
-      return clean;
-    });
+    return value.map(function(row,index){return validateRow(row,index+1);}).filter(function(row){return !isEmpty(row);});
   },
   list: function(projectId,params){
     var user=this._user(params);this._project(projectId,user.TenantID,user);

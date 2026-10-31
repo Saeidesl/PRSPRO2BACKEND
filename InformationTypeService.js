@@ -32,7 +32,6 @@ const InformationTypeService = {
     InformationTypeValidator.validateDefinition(data,true);
     var cardinality=String(data.Cardinality || existing.Cardinality).toUpperCase();
     var dataType=String(data.DataType || existing.DataType).toLowerCase();
-    if(cardinality==='MULTIPLE' && dataType!=='text')throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'برای اطلاعات چندمقداری، نوع داده اصلی باید text باشد.');
     var structureChanged=cardinality!==String(existing.Cardinality).toUpperCase() || dataType!==String(existing.DataType).toLowerCase();
     var usedInProject=ProjectInformationRepository.getAll().some(function(row){return String(row.InformationTypeID)===String(id);});
     var usedInForm=typeof FormRepository!=='undefined'&&FormRepository.getFields().some(function(row){return String(row.TenantID)===String(user.TenantID)&&String(row.InformationTypeID)===String(id)&&String(row.Status || 'ACTIVE')==='ACTIVE';});
@@ -72,7 +71,6 @@ const InformationTypeService = {
   },
   createColumn: function(typeId,data,params) {
     var user=this._user(params), type=this._type(typeId,user.TenantID);
-    if(String(type.Cardinality).toUpperCase()!=='MULTIPLE')throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'فقط اطلاعات چندمقداری دارای ستون‌های جدولی هستند.');
     InformationTypeValidator.validateColumn(data,false);
     var columns=InformationTypeRepository.findColumns(typeId);
     var normalizedCode=String(data.Code).trim().toLowerCase();
