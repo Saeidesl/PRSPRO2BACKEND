@@ -65,7 +65,7 @@ test('information type validation keeps base data type independent from cardinal
     },
     String, Array, Object, JSON, Number, isFinite, RegExp
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'InformationTypeValidator.js'), 'utf8') + '\\nthis.__validator=InformationTypeValidator;', context);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'InformationTypeValidator.js'), 'utf8') + '\nthis.__validator=InformationTypeValidator;', context);
   assert.equal(context.__validator.validateDefinition({ Name: 'جدول نمونه', Code: 'TABLE_SAMPLE', Cardinality: 'MULTIPLE', DataType: 'number' }, false), true);
   assert.equal(context.__validator.validateDefinition({ Name: 'اطلاعات تکی', Code: 'SINGLE_SAMPLE', Cardinality: 'SINGLE', DataType: 'text' }, false), true);
 });
