@@ -16,6 +16,7 @@ test('project validator accepts a title-only draft and requires completion field
   const source = read('ProjectValidator.js');
   assert.match(source, /RecordState[^\n]*DRAFT/);
   assert.match(source, /requestedState === 'ACTIVE'/);
+  assert.match(source, /Validator\.required\(data\.Title, 'Title'\)/);
   assert.match(source, /برای تکمیل پروژه حداقل یک واحد مجاز انتخاب کنید/);
 });
 
