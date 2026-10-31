@@ -22,7 +22,7 @@ const InformationTypeService = {
     var code=String(data.Code).trim();
     if(InformationTypeRepository.findByCode(user.TenantID,code))throw ErrorHandler.create(Constants.ERROR.DUPLICATE,'این کد اطلاعات قبلاً ثبت شده است.');
     var now=new Date().toISOString();
-    var row={ID:this._id(),TenantID:user.TenantID,Code:code,Name:String(data.Name).trim(),Description:String(data.Description || ''),Cardinality:String(data.Cardinality).toUpperCase(),DataType:String(data.DataType).toLowerCase(),ValidationRuleJSON:JSON.stringify(this._json(data.ValidationRuleJSON,'قواعد اعتبارسنجی',{})),OptionsJSON:JSON.stringify(this._json(data.OptionsJSON,'گزینه‌ها',[])),Status:data.Status || Constants.STATUS.ACTIVE,Revision:1,CreatedBy:user.ID,CreatedAt:now,UpdatedAt:now};
+    var row={ID:this._id(),TenantID:user.TenantID,Code:code,Name:String(data.Name).trim(),Description:String(data.Description || ''),Cardinality:String(data.Cardinality).toUpperCase(),DataType:String(data.DataType).toLowerCase(),ValidationRuleJSON:JSON.stringify(this._json(data.ValidationRuleJSON,'قواعد اعتبارسنجی',{})),OptionsJSON:JSON.stringify(this._json(data.OptionsJSON,'گزینه‌ها',[])),Status:data.Status || Constants.STATUS.ACTIVE,ShowOnCard:data.ShowOnCard===true,Revision:1,CreatedBy:user.ID,CreatedAt:now,UpdatedAt:now};
     var created=InformationTypeRepository.insert(row);
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.CREATE,EntityType:'INFORMATION_TYPE',EntityID:created.ID,NewData:created,Reason:'تعریف نوع اطلاعات مرکزی'});
     return Response.success(created,{message:'نوع اطلاعات ایجاد شد.'});
@@ -42,7 +42,7 @@ const InformationTypeService = {
       throw ErrorHandler.create(Constants.ERROR.CONFLICT,'این نوع اطلاعات در فرم فعال استفاده شده است؛ ابتدا آن را از فرم‌ها خارج کنید.');
     }
     var patch={UpdatedAt:new Date().toISOString(),Revision:Number(existing.Revision || 1)+1};
-    ['Name','Description','Status'].forEach(function(key){if(data[key]!==undefined)patch[key]=data[key];});
+    ['Name','Description','Status','ShowOnCard'].forEach(function(key){if(data[key]!==undefined)patch[key]=data[key];});
     if(data.Cardinality!==undefined)patch.Cardinality=cardinality;
     if(data.DataType!==undefined)patch.DataType=dataType;
     if(data.ValidationRuleJSON!==undefined)patch.ValidationRuleJSON=JSON.stringify(this._json(data.ValidationRuleJSON,'قواعد اعتبارسنجی',{}));
