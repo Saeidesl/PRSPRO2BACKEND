@@ -88,3 +88,13 @@ test('replaying the same event value does not create another project information
   assert.match(source, /existing\.SourceEventID[\s\S]{0,150}existing\.ValueJSON/);
   assert.match(source, /return Response\.success\(Object\.assign\(\{\},existing/);
 });
+
+
+test('project dashboard lookups include active tenant workflows for project editing', () => {
+  const source = read('ProjectService.js');
+  const router = read('Router.js');
+  assert.match(source, /const workflows = \(WorkflowRepository\.getAll\(\) \|\| \[\]\)\.filter/);
+  assert.match(source, /String\(item\.TenantID\) === tenantId[\s\S]{0,120}String\(item\.Status \|\| 'ACTIVE'\)\.toUpperCase\(\) === 'ACTIVE'/);
+  assert.match(source, /workflows: workflows/);
+  assert.match(router, /path === '\/project-dashboard\/lookups'[\s\S]{0,120}PROJECT_VIEW[\s\S]{0,100}dashboardLookups/);
+});
