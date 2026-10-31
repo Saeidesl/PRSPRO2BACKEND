@@ -145,6 +145,23 @@ const Router = {
       return ProjectService.list(params);
     }
 
+    const projectByIdMatch = path.match(/^\/projects\/([^/]+)$/);
+    if (projectByIdMatch) {
+      try {
+        AccessControlService.require(params, 'PROJECT_VIEW');
+      } catch (permissionError) {
+        const currentUser = AccessControlService.getCurrentUser(params || {});
+        const draft = ProjectRepository.findById(decodeURIComponent(projectByIdMatch[1]));
+        if (!draft || String(draft.TenantID) !== String(currentUser.TenantID) ||
+            String(draft.RecordState || '').toUpperCase() !== 'DRAFT' ||
+            String(draft.CreatedBy || '') !== String(currentUser.ID || '')) {
+          throw permissionError;
+        }
+        AccessControlService.require(params, 'PROJECT_CREATE');
+      }
+      return ProjectService.get(decodeURIComponent(projectByIdMatch[1]), params);
+    }
+
     const projectInformationHistoryMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)\/history$/);
     if (projectInformationHistoryMatch) {
       AccessControlService.require(params, 'PROJECT_VIEW');
