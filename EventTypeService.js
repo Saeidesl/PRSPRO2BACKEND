@@ -49,6 +49,7 @@ const EventTypeService = {
     result.UseProjectSizes = this._toBoolean_(result.UseProjectSizes);
     result.TrackVariantQuantity = this._toBoolean_(result.TrackVariantQuantity);
     result.IsWorkCompletion = this._toBoolean_(result.IsWorkCompletion);
+    result.AllowOnDraft = this._toBoolean_(result.AllowOnDraft);
 
     return result;
   },
@@ -72,7 +73,8 @@ const EventTypeService = {
       'UseProjectColors',
       'UseProjectSizes',
       'TrackVariantQuantity',
-      'IsWorkCompletion'
+      'IsWorkCompletion',
+      'AllowOnDraft'
     ].forEach(function(field) {
       if (result[field] !== undefined) {
         result[field] = self._toBoolean_(result[field]);
@@ -421,6 +423,7 @@ const EventTypeService = {
       UseProjectColors: this._toBoolean_(data.UseProjectColors),
       UseProjectSizes: this._toBoolean_(data.UseProjectSizes),
       TrackVariantQuantity: this._toBoolean_(data.TrackVariantQuantity),
+      AllowOnDraft: this._toBoolean_(data.AllowOnDraft),
       Status: data.Status || Constants.STATUS.ACTIVE,
       CreatedAt: now,
       UpdatedAt: now
