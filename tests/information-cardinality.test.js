@@ -16,7 +16,7 @@ function loadServices() {
   const form = { ID: 'F1', TenantID: 'T1', Code: 'TABULAR', Name: 'فرم جدولی', Version: 2, Status: 'ACTIVE' };
   const context = {
     ErrorHandler: { create: (_code, message) => new Error(message) },
-    Constants: { ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR', NOT_FOUND: 'NOT_FOUND', CONFLICT: 'CONFLICT', INVALID_OPERATION: 'INVALID_OPERATION' } },
+    Constants: { ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR', NOT_FOUND: 'NOT_FOUND', CONFLICT: 'CONFLICT', INVALID_OPERATION: 'INVALID_OPERATION' }, ACTION: { CREATE: 'CREATE', UPDATE: 'UPDATE', DELETE: 'DELETE' } },
     FormRepository: {
       findMappingsByEventType: () => mappings,
       findForm: () => form
