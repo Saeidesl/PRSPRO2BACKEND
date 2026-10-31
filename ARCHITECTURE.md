@@ -50,3 +50,13 @@
 - `ProjectInformationService.save` ثبت دوباره همان مقدار با همان `SourceEventID` را idempotent می‌کند تا در retry، revision تکراری ایجاد نشود. مقدار جاری در `30_ProjectInformation` و تاریخچه تغییر در `31_ProjectInformationHistory` باقی می‌ماند.
 - تست‌های رگرسیون در `tests/project-draft-information-flow.test.js` و به‌روزرسانی قرارداد `tests/forms-api-contract.test.js` اضافه شده‌اند. تغییرات در PR #78 نگهداری می‌شوند؛ تا زمان تأیید و انتشار staging، روی Apps Script تولید deploy نمی‌شوند.
 
+
+
+## 2026-10-31 — تصمیم محصول: رویدادهای پیش از تکمیل پروژه
+
+- EventService._createUnlocked_ در حال حاضر ثبت رویداد روی RecordState=DRAFT را رد می‌کند. این رفتار باید با گزینه tenant-scoped نوع رویداد AllowOnDraft (پیش‌فرض false) جایگزین شود؛ صرفاً رویدادهای PROJECT مجاز و دارای کنترل دسترسی کامل می‌توانند روی پیش‌نویس ثبت شوند.
+- EventTypeService و EventTypeValidator مسئول اعتبارسنجی و ذخیره گزینه جدید روی 11_EventTypes خواهند بود؛ DatabaseSetup.js تغییر ستون را افزایشی انجام می‌دهد.
+- FormService.saveEventResponses نقطه اتصال پاسخ فرم به اطلاعات جاری/تاریخچه است. برای فیلدهای اصلی پروژه باید نگاشت معنایی کنترل‌شده (مانند ProjectCode) افزوده شود؛ کد باید از اعتبارسنجی و یکتایی Tenant در سرویس پروژه عبور کند.
+- تصویر نمایه باید به AttachmentID موجود در 15_Attachments و متعلق به همان پروژه اشاره کند؛ از کپی فایل یا اعتماد به metadata ارسالی کلاینت اجتناب شود. AttachmentService.listProjectImages باید با انتخاب صریح تصویر مورد استفاده در کارت یکپارچه شود.
+- کارت پروژه باید فیلدهای نمایشی قابل تنظیم را از مقادیر جاری پرونده بخواند؛ snapshot رویداد، SourceEventID، تاریخچه، idempotency و tenant isolation حفظ شوند.
+- ثبت رویداد نباید RecordState یا گردش‌کار را خودکار فعال/تغییر دهد. اجرای تغییرات و آزمون فقط در staging انجام می‌شود؛ انتشار تولید نیازمند تأیید جداگانه کاربر است.
