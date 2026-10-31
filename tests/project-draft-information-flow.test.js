@@ -59,7 +59,7 @@ test('project code from an event is validated and assigned only once while draft
   const forms = read('FormService.js');
   assert.match(service, /validateDraftProjectCodeFromEvent/);
   assert.match(service, /assignDraftProjectCodeFromEvent/);
-  assert.match(forms, /Code \\|\\| ''\\)\\.toUpperCase\\(\\) === 'PROJECT_CODE'/);
+  assert.ok(forms.includes("String(type.Code || '').toUpperCase() === 'PROJECT_CODE'"));
 });
 
 test('project cards receive only active central information explicitly enabled for card display', () => {
