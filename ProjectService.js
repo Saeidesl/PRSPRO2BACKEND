@@ -345,6 +345,9 @@ const ProjectService = {
         CreatedAt: this._normalizeCreatedAt_(project.CreatedAt, now),
         UpdatedAt: now
       };
+      if (typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+        GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+      }
       const createdDraft = ProjectRepository.insert(draft);
       AuditService.log({
         TenantID: tenantId, UserID: user.ID, Action: Constants.ACTION.CREATE,
@@ -570,6 +573,9 @@ const ProjectService = {
 
     };
 
+    if (typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+      GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+    }
     const created =
       ProjectRepository.insert(
         newProject
@@ -870,6 +876,10 @@ const ProjectService = {
     updateData.UpdatedAt =
       new Date().toISOString();
 
+    if (updateData.RecordState !== undefined &&
+        typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+      GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+    }
     const updated =
       ProjectRepository.update(
         id,
