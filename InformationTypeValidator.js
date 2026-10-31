@@ -43,6 +43,12 @@ const InformationTypeValidator = {
       if (!Array.isArray(options) || options.length > 500) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست گزینه‌ها معتبر نیست.');
     }
     if (data.ValidationRuleJSON !== undefined) this.validateRules(this.parseJson(data.ValidationRuleJSON, 'قواعد اعتبارسنجی', {}), 'قواعد اعتبارسنجی');
+    if (data.ShowOnCard !== undefined) Validator.boolean(data.ShowOnCard, 'ShowOnCard');
+    if (String(data.Code || '').toUpperCase() === 'PROJECT_CODE') {
+      if (String(data.DataType || 'text').toLowerCase() !== 'text' || String(data.Cardinality || 'SINGLE').toUpperCase() !== 'SINGLE') {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع اطلاعات PROJECT_CODE باید متن تک‌مقداری باشد.');
+      }
+    }
     if (data.Status !== undefined) Validator.enum(data.Status, [Constants.STATUS.ACTIVE, Constants.STATUS.INACTIVE], 'Status');
     return true;
   },
