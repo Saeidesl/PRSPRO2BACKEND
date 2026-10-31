@@ -233,12 +233,17 @@ const ProjectService = {
     const projects =
       ProjectRepository.getAll();
 
+    const canViewAllProjects = AccessControlService.isAdmin(user) ||
+      PermissionService.hasPermission(user.ID, 'PROJECT_VIEW', user);
     const tenantProjects =
       projects.filter(function(project) {
-
-        return String(project.TenantID) === String(user.TenantID) &&
-          ProjectService._isProjectAvailableToUser_(project, user);
-
+        if (String(project.TenantID) !== String(user.TenantID) ||
+            !ProjectService._isProjectAvailableToUser_(project, user)) return false;
+        if (!canViewAllProjects) {
+          return String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT' &&
+            String(project.CreatedBy || '') === String(user.ID || '');
+        }
+        return true;
       });
 
     return Response.success(
@@ -315,6 +320,41 @@ const ProjectService = {
         'Tenant کاربر مشخص نیست.'
       );
 
+    }
+
+    if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') {
+      const now = new Date().toISOString();
+      const draft = {
+        ID: 'PRJ_' + Utilities.getUuid().replace(/-/g, ''),
+        TenantID: tenantId,
+        ProjectCode: '',
+        Title: String(project.Title || '').trim(),
+        Description: String(project.Description || ''),
+        WorkflowID: '',
+        WorkflowVersion: '',
+        CurrentStepID: '',
+        CurrentStepStatus: '',
+        Status: '',
+        Quantity: '',
+        ColorSizeJSON: JSON.stringify({ colors: [], sizes: [] }),
+        AvailableDepartmentIDs: JSON.stringify([]),
+        AllowedUserIDs: JSON.stringify([]),
+        NotifyEnabled: true,
+        RecordState: 'DRAFT',
+        CreatedBy: user.ID,
+        CreatedAt: this._normalizeCreatedAt_(project.CreatedAt, now),
+        UpdatedAt: now
+      };
+      if (typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+        GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+      }
+      const createdDraft = ProjectRepository.insert(draft);
+      AuditService.log({
+        TenantID: tenantId, UserID: user.ID, Action: Constants.ACTION.CREATE,
+        EntityType: Constants.ENTITY.PROJECT, EntityID: draft.ID,
+        OldData: null, NewData: createdDraft, Reason: 'ایجاد پیش‌نویس پروژه'
+      });
+      return Response.success(createdDraft, { message: 'پیش‌نویس پروژه ایجاد شد.' });
     }
 
     /*
@@ -526,10 +566,16 @@ const ProjectService = {
         this._normalizeCreatedAt_(project.CreatedAt, now),
 
       UpdatedAt:
-        now
+        now,
+
+      RecordState:
+        'ACTIVE'
 
     };
 
+    if (typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+      GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+    }
     const created =
       ProjectRepository.insert(
         newProject
@@ -612,9 +658,27 @@ const ProjectService = {
       );
     }
 
-    // کد پروژه و گردش‌کار پس از ایجاد هویت ثابت پروژه هستند.
+    const isDraft = String(existing.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT';
+    const completesDraft = isDraft && String(data.RecordState || '').toUpperCase() === 'ACTIVE';
+
+    if (!isDraft && data.RecordState !== undefined &&
+        String(data.RecordState).toUpperCase() !== 'ACTIVE') {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'پروژه تکمیل‌شده دوباره به پیش‌نویس تبدیل نمی‌شود.');
+    }
+
+    if (completesDraft) {
+      const code = String(data.ProjectCode || '').trim();
+      const duplicateCode = ProjectRepository.getAll().some(function(item) {
+        return String(item.TenantID) === String(user.TenantID) &&
+          String(item.ID) !== String(id) &&
+          code && String(item.ProjectCode || '').trim().toLowerCase() === code.toLowerCase();
+      });
+      if (duplicateCode) throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
+    }
+
+    // کد پروژه و گردش‌کار پس از تکمیل هویت پروژه ثابت هستند.
     if (
-      data.ProjectCode !== undefined &&
+      !isDraft && data.ProjectCode !== undefined &&
       String(data.ProjectCode).trim() !== String(existing.ProjectCode || '').trim()
     ) {
       throw ErrorHandler.create(
@@ -624,7 +688,7 @@ const ProjectService = {
     }
 
     if (
-      data.WorkflowID !== undefined &&
+      !isDraft && data.WorkflowID !== undefined &&
       String(data.WorkflowID || '').trim() !== String(existing.WorkflowID || '').trim()
     ) {
       throw ErrorHandler.create(
@@ -634,6 +698,11 @@ const ProjectService = {
     }
 
     const updateData = {};
+
+    if (isDraft && data.ProjectCode !== undefined) {
+      updateData.ProjectCode = String(data.ProjectCode || '').trim();
+    }
+    if (completesDraft) updateData.RecordState = 'ACTIVE';
 
     if (data.WorkflowID !== undefined) {
       const requestedWorkflowId = String(data.WorkflowID || '').trim();
@@ -807,6 +876,10 @@ const ProjectService = {
     updateData.UpdatedAt =
       new Date().toISOString();
 
+    if (updateData.RecordState !== undefined &&
+        typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+      GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+    }
     const updated =
       ProjectRepository.update(
         id,

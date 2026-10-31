@@ -9,6 +9,13 @@ const ProjectValidator = {
       );
     }
 
+    if (String(data.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') {
+      Validator.required(data.Title, 'Title');
+      Validator.string(data.Title, 'Title');
+      if (data.Description !== undefined && data.Description !== null) Validator.string(data.Description, 'Description');
+      return true;
+    }
+
     Validator.required(
       data.ProjectCode,
       'ProjectCode'
@@ -84,6 +91,22 @@ const ProjectValidator = {
         Constants.ERROR.VALIDATION_ERROR,
         'اطلاعاتی برای ویرایش پروژه ارسال نشده است.'
       );
+    }
+
+    const requestedState = String(data.RecordState || '').trim().toUpperCase();
+    if (requestedState && ['DRAFT', 'ACTIVE'].indexOf(requestedState) === -1) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'وضعیت چرخه عمر پروژه معتبر نیست.');
+    }
+    if (requestedState === 'ACTIVE') {
+      Validator.required(data.Title, 'Title');
+      Validator.string(data.Title, 'Title');
+      Validator.required(data.ProjectCode, 'ProjectCode');
+      Validator.string(data.ProjectCode, 'ProjectCode');
+      Validator.required(data.WorkflowID, 'WorkflowID');
+      Validator.id(data.WorkflowID, 'WorkflowID');
+      if (!Array.isArray(data.AvailableDepartmentIDs) || !data.AvailableDepartmentIDs.length) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای تکمیل پروژه حداقل یک واحد مجاز انتخاب کنید.');
+      }
     }
 
     if (data.ProjectCode !== undefined) {

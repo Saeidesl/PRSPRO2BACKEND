@@ -39,3 +39,14 @@
 - `FormService.js`, `EventService.js`: پاسخ فرم و ثبت رویداد.
 - `AttachmentService.js`, `AttachmentValidator.js`, `StorageRepository.js`, `GoogleDriveStorage.js`: ذخیره امن فایل.
 - `DatabaseSetup.js`: شیت‌ها و سرستون‌ها.
+
+## 2026-10-31 — چرخه عمر پیش‌نویس پروژه و همگام‌سازی پاسخ فرم
+
+- `08_Projects.RecordState`: وضعیت چرخه عمر را مستقل از `Status` تجاری/قابل تنظیم کارخانه نگه می‌دارد؛ `DRAFT` برای ایجاد اولیه و `ACTIVE` برای پروژه تکمیل‌شده است. رکوردهای قدیمی بدون مقدار این ستون فعال تلقی می‌شوند.
+- `POST /projects` همان مسیر ایجاد است و با `RecordState=DRAFT` فقط عنوان را می‌پذیرد؛ کد، گردش‌کار، مرحله، واحدها و کاربران تا زمان تکمیل خالی می‌مانند. payload کامل قبلی بدون تغییر رفتار، پروژه فعال می‌سازد.
+- `PUT /projects/:id` همان مسیر تکمیل است؛ فقط پیش‌نویس می‌تواند یک‌بار به فعال تبدیل شود. هنگام تکمیل، یکتایی کد، گردش‌کار فعال و مرحله اول، واحدهای مجاز و سایر قواعد فعلی اعتبارسنجی می‌شوند؛ کد و گردش‌کار بعد از فعال‌شدن ثابت‌اند.
+- `Router.js` برای کاربر دارای `PROJECT_CREATE`، فهرست را فقط به پیش‌نویس‌های ساخته‌شده توسط خودش محدود می‌کند و دریافت/تکمیل همان پیش‌نویس را مجاز می‌سازد. ثبت رویداد برای پیش‌نویس در `EventService.js` رد می‌شود.
+- `FormService.saveEventResponses(event, responses, user, params)` snapshot پاسخ را در `34_EventFormData` حفظ می‌کند و مقدارهای غیرخالی فرم را با `SourceEventID` به `ProjectInformationService.save` می‌فرستد؛ مقدارهای خالی ناخواسته مقدار قبلی را پاک نمی‌کنند.
+- `ProjectInformationService.save` ثبت دوباره همان مقدار با همان `SourceEventID` را idempotent می‌کند تا در retry، revision تکراری ایجاد نشود. مقدار جاری در `30_ProjectInformation` و تاریخچه تغییر در `31_ProjectInformationHistory` باقی می‌ماند.
+- تست‌های رگرسیون در `tests/project-draft-information-flow.test.js` و به‌روزرسانی قرارداد `tests/forms-api-contract.test.js` اضافه شده‌اند. تغییرات در PR #78 نگهداری می‌شوند؛ تا زمان تأیید و انتشار staging، روی Apps Script تولید deploy نمی‌شوند.
+
