@@ -44,7 +44,7 @@ const FormService = {
     rule = rule || {};
     if (!rule.fieldId) return true;
     var value = values[String(rule.fieldId)];
-    var empty = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
+    var empty = FormService._isEmptyValue_(value);
     var operator = String(rule.operator || '').toUpperCase();
     if (operator === 'FILLED') return !empty;
     if (operator === 'EMPTY') return empty;
