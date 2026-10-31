@@ -339,7 +339,7 @@ const FormService = {
           var informationType = InformationTypeRepository.findById(typeId);
           if (!informationType) return;
           if (String(informationType.Code || '').toUpperCase() === 'PROJECT_CODE') {
-            ProjectService.assignDraftProjectCodeFromEvent(event.ProjectID, value, event.ID, user);
+            ProjectService.updateProjectCodeFromEvent(event.ProjectID, value, event.ID, user);
             return;
           }
           ProjectInformationService.save(event.ProjectID, typeId, {
