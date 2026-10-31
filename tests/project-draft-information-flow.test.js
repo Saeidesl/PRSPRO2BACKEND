@@ -22,7 +22,7 @@ test('project validator accepts a title-only draft and requires completion field
 test('existing project API creates drafts and completes them in place', () => {
   const source = read('ProjectService.js');
   assert.match(source, /RecordState:\s*'DRAFT'/);
-  assert.match(source, /ensureColumn\\('08_Projects', 'RecordState'\\)/);
+  assert.match(source, /ensureColumn\('08_Projects', 'RecordState'\)/);
   assert.match(source, /ProjectRepository\.insert\(draft\)/);
   assert.match(source, /const completesDraft = isDraft/);
   assert.match(source, /updateData\.RecordState = 'ACTIVE'/);
