@@ -304,7 +304,13 @@ const FormService = {
           return;
         }
         if(empty&&required)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تکمیل «'+(field.LabelOverride||type.Name)+'» الزامی است.');
-        if(empty){clean[key]=FormService._emptyValueForType_(type);return;}
+        if(empty){
+          var hasColumns=Array.isArray(type.Columns)&&type.Columns.some(function(column){return String(column.Status || 'ACTIVE')==='ACTIVE';});
+          clean[key]=hasColumns&&supplied&&value!==null&&value!==undefined&&value!==''
+            ? ProjectInformationService._validate(type,type.Columns,value)
+            : FormService._emptyValueForType_(type);
+          return;
+        }
         clean[key]=ProjectInformationService._validate(type,type.Columns || [],value);
       });
       Object.keys(values).forEach(function(key){if(!allowedTypes[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات خارج از فرم ارسال شده است: '+key);});
