@@ -141,7 +141,7 @@ const Router = {
     }
 
     if (path === '/projects') {
-      AccessControlService.require(params, 'PROJECT_VIEW');
+      this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_CREATE']);
       return ProjectService.list(params);
     }
 
@@ -771,9 +771,21 @@ const Router = {
       return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
     }
 
-    if (path.indexOf('/projects/') === 0) {
-      AccessControlService.require(params, 'PROJECT_EDIT');
-      return ProjectService.update(path.split('/')[2], body, params);
+    const projectUpdateMatch = path.match(/^\\/projects\\/([^/]+)$/);
+    if (projectUpdateMatch) {
+      try {
+        AccessControlService.require(params, 'PROJECT_EDIT');
+      } catch (permissionError) {
+        const currentUser = AccessControlService.getCurrentUser(params || {});
+        const draft = ProjectRepository.findById(decodeURIComponent(projectUpdateMatch[1]));
+        if (!draft || String(draft.TenantID) !== String(currentUser.TenantID) ||
+            String(draft.RecordState || '').toUpperCase() !== 'DRAFT' ||
+            String(draft.CreatedBy || '') !== String(currentUser.ID || '')) {
+          throw permissionError;
+        }
+        AccessControlService.require(params, 'PROJECT_CREATE');
+      }
+      return ProjectService.update(decodeURIComponent(projectUpdateMatch[1]), body, params);
     }
 
     if (path.indexOf('/workflows/') === 0) {
