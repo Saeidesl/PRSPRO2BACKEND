@@ -464,31 +464,8 @@ const ProjectService = {
       return Response.success(createdDraft, { message: 'پیش‌نویس پروژه ایجاد شد.' });
     }
 
-    /*
-     * ProjectCode فقط داخل Tenant جاری باید یکتا باشد.
-     */
-
-    const existingProjects =
-      ProjectRepository.getAll();
-
-    const duplicate =
-      existingProjects.some(function(item) {
-
-        return String(item.TenantID) ===
-          String(tenantId) &&
-          String(item.ProjectCode) ===
-          String(project.ProjectCode).trim();
-
-      });
-
-    if (duplicate) {
-
-      throw ErrorHandler.create(
-        Constants.ERROR.DUPLICATE,
-        'کد پروژه قبلاً در این Tenant ثبت شده است.'
-      );
-
-    }
+    // Duplicate validation is performed atomically with insertion below,
+    // using the same case-insensitive tenant-scoped rule as project updates.
 
     // Reading the workflow list in one range is faster than scanning the ID
     // column and then reading the matching row separately.
@@ -683,10 +660,25 @@ const ProjectService = {
     if (typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
       GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
     }
-    const created =
-      ProjectRepository.insert(
-        newProject
-      );
+    let created;
+    const createLock = LockService.getScriptLock();
+    createLock.waitLock(30000);
+    try {
+      const requestedCode = String(newProject.ProjectCode || '').trim().toLowerCase();
+      const duplicateCode = ProjectRepository.getAll().some(function(item) {
+        return String(item.TenantID) === String(tenantId) &&
+          String(item.ProjectCode || '').trim().toLowerCase() === requestedCode;
+      });
+      if (duplicateCode) {
+        throw ErrorHandler.create(
+          Constants.ERROR.DUPLICATE,
+          'کد پروژه قبلاً در این Tenant ثبت شده است.'
+        );
+      }
+      created = ProjectRepository.insert(newProject);
+    } finally {
+      createLock.releaseLock();
+    }
 
     AuditService.log({
 
