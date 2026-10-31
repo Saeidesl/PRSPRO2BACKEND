@@ -52,6 +52,18 @@ const FormService = {
     if (operator === 'NOT_EQUALS') return empty || String(value) !== String(rule.value);
     return true;
   },
+  _isEmptyValue_: function(value) {
+    if(value===undefined||value===null||value==='')return true;
+    if(Array.isArray(value))return value.length===0||!value.some(function(item){return !FormService._isEmptyValue_(item);});
+    if(typeof value==='object')return Object.keys(value).length===0||Object.keys(value).every(function(key){return FormService._isEmptyValue_(value[key]);});
+    return false;
+  },
+  _emptyValueForType_: function(type) {
+    var cardinality=String(type.Cardinality || 'SINGLE').toUpperCase();
+    var hasColumns=Array.isArray(type.Columns)&&type.Columns.some(function(column){return String(column.Status || 'ACTIVE')==='ACTIVE';});
+    if(hasColumns)return cardinality==='MULTIPLE'?[]:{};
+    return cardinality==='MULTIPLE'?[]:'';
+  },
   _validateVisibilityReference_: function(formId, fieldId, rule, tenantId, fieldOrder) {
     if (!rule || !rule.fieldId) return;
     var fields = FormRepository.findFieldsByForm(formId);
@@ -273,7 +285,7 @@ const FormService = {
       var hasMeaningfulValue=fields.some(function(field){
         var type=field.InformationType,key=String(type.ID),value=values[key];
         var visible=FormService._isVisible_(field.VisibilityRule || FormService._parse(field.VisibilityRuleJSON,{}),values);
-        var empty=value===undefined||value===null||value===''||(Array.isArray(value)&&value.length===0);
+        var empty=this._isEmptyValue_(value);
         return visible&&!empty;
       });
       if((mapping.IsRequired===true||String(mapping.IsRequired).toLowerCase()==='true')&&!hasMeaningfulValue) {
@@ -285,14 +297,14 @@ const FormService = {
         allowedTypes[key]=true;
         var visible=FormService._isVisible_(field.VisibilityRule || FormService._parse(field.VisibilityRuleJSON,{}),values);
         var required=field.IsRequired===true||String(field.IsRequired).toLowerCase()==='true';
-        var empty=value===undefined||value===null||value===''||(Array.isArray(value)&&value.length===0);
+        var empty=this._isEmptyValue_(value);
         if(!visible) {
           if(!empty) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فیلد پنهان نباید مقدار ارسال‌شده داشته باشد: '+(field.LabelOverride||type.Name));
-          clean[key]=String(type.Cardinality).toUpperCase()==='MULTIPLE'?[]:'';
+          clean[key]=this._emptyValueForType_(type);
           return;
         }
         if(empty&&required)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تکمیل «'+(field.LabelOverride||type.Name)+'» الزامی است.');
-        if(empty){clean[key]=String(type.Cardinality).toUpperCase()==='MULTIPLE'?[]:'';return;}
+        if(empty){clean[key]=this._emptyValueForType_(type);return;}
         clean[key]=ProjectInformationService._validate(type,type.Columns || [],value);
       });
       Object.keys(values).forEach(function(key){if(!allowedTypes[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات خارج از فرم ارسال شده است: '+key);});
