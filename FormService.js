@@ -320,13 +320,26 @@ const FormService = {
     Object.keys(byId).forEach(function(id){if(!allowed[id])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فرم ارسالی به این نوع رویداد متصل نیست.');});
     return validated;
   },
-  saveEventResponses: function(event, responses, user) {
+  saveEventResponses: function(event, responses, user, params) {
     (responses || []).forEach(function(response){
       var existing=FormRepository.findResponse(event.ID,response.FormID);
       var now=new Date().toISOString();
       var row={ID:existing?existing.ID:this._id('EFR'),TenantID:user.TenantID,EventID:event.ID,FormID:response.FormID,FormVersion:response.FormVersion,ResponseJSON:JSON.stringify(response.Values),DefinitionSnapshotJSON:JSON.stringify(response.DefinitionSnapshot),CreatedBy:user.ID,CreatedAt:now};
       if(existing)FormRepository.updateResponse(existing.ID,row);else FormRepository.insertResponse(row);
       AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.CREATE,EntityType:'EVENT_FORM_DATA',EntityID:event.ID,NewData:row,Reason:'ثبت پاسخ فرم متصل به رویداد'});
+      // Keep the event snapshot and also update the project's current central
+      // information. Empty/omitted values do not erase a previously saved value.
+      if (event.ProjectID && typeof ProjectInformationService !== 'undefined') {
+        Object.keys(response.Values || {}).forEach(function(typeId) {
+          var value = response.Values[typeId];
+          if (FormService._isEmptyValue_(value)) return;
+          ProjectInformationService.save(event.ProjectID, typeId, {
+            Value: value,
+            SourceEventID: event.ID,
+            Reason: 'به‌روزرسانی اطلاعات پروژه از فرم رویداد'
+          }, params || {});
+        });
+      }
     },this);
   },
   getEventResponses: function(eventId, params) {
