@@ -35,7 +35,7 @@ test('event creation validates and persists form responses before completing ide
   const source=read('EventService.js');
   const validate=source.indexOf('FormService.prepareEventResponses');
   const insert=source.indexOf('const created = EventRepository.insert(newEvent)');
-  const persist=source.indexOf('FormService.saveEventResponses(created, validatedFormResponses, user)');
+  const persist=source.indexOf('FormService.saveEventResponses(created, validatedFormResponses, user, requestParams)');
   const complete=source.indexOf("IdempotencyStatus: 'COMPLETED'",persist);
   assert.ok(validate>0&&insert>validate&&persist>insert&&complete>persist);
 });
