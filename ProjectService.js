@@ -236,9 +236,6 @@ const ProjectService = {
       if (String(project.ProjectCode || '').trim().toLowerCase() === value.toLowerCase()) return true;
       throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'کد پروژه فقط پیش از تکمیل پرونده و از طریق رویداد مجاز قابل ثبت است.');
     }
-    if (String(project.ProjectCode || '').trim() && String(project.ProjectCode).trim().toLowerCase() !== value.toLowerCase()) {
-      throw ErrorHandler.create(Constants.ERROR.CONFLICT, 'کد پروژه قبلاً در این پرونده ثبت شده و قابل جایگزینی نیست.');
-    }
     const duplicate = ProjectRepository.getAll().some(function(item) {
       return String(item.TenantID) === String(tenantId) && String(item.ID) !== String(projectId) &&
         String(item.ProjectCode || '').trim().toLowerCase() === value.toLowerCase();
@@ -254,7 +251,7 @@ const ProjectService = {
     try {
       this.validateDraftProjectCodeFromEvent(projectId, value, user.TenantID);
       const project = ProjectRepository.findById(projectId);
-      if (String(project.ProjectCode || '').trim()) return project;
+      if (String(project.ProjectCode || '').trim().toLowerCase() === value.toLowerCase()) return project;
       const updated = ProjectRepository.update(projectId, {ProjectCode:value, UpdatedAt:new Date().toISOString()});
       AuditService.log({
         TenantID:user.TenantID, UserID:user.ID, Action:Constants.ACTION.UPDATE,
@@ -747,7 +744,7 @@ const ProjectService = {
       throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'پروژه تکمیل‌شده دوباره به پیش‌نویس تبدیل نمی‌شود.');
     }
 
-    if (completesDraft) {
+    if (isDraft && data.ProjectCode !== undefined && String(data.ProjectCode || '').trim()) {
       const code = String(data.ProjectCode || '').trim();
       const duplicateCode = ProjectRepository.getAll().some(function(item) {
         return String(item.TenantID) === String(user.TenantID) &&
