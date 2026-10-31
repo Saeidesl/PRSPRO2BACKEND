@@ -38,9 +38,6 @@ const InformationTypeValidator = {
     }
     if (!isUpdate || data.Cardinality !== undefined) Validator.enum(String(data.Cardinality || '').toUpperCase(), this.CARDINALITIES, 'Cardinality');
     if (!isUpdate || data.DataType !== undefined) Validator.enum(String(data.DataType || '').toLowerCase(), this.DATA_TYPES, 'DataType');
-    if (data.Cardinality && String(data.Cardinality).toUpperCase() === 'MULTIPLE' && data.DataType && String(data.DataType).toLowerCase() !== 'text') {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای اطلاعات چندمقداری، نوع داده اصلی باید text باشد و نوع ستون‌ها جداگانه تعیین می‌شود.');
-    }
     if (data.OptionsJSON !== undefined) {
       var options = this.parseJson(data.OptionsJSON, 'گزینه‌ها', []);
       if (!Array.isArray(options) || options.length > 500) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست گزینه‌ها معتبر نیست.');
