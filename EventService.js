@@ -877,6 +877,9 @@ const EventService = {
         );
       }
       this._checkProjectAvailability_(project, user);
+      if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'ابتدا اطلاعات پایه و گردش‌کار پیش‌نویس پروژه را تکمیل کنید؛ سپس امکان ثبت رویداد فراهم می‌شود.');
+      }
     }
 
     if (!isAdmin) {
@@ -1105,7 +1108,7 @@ const EventService = {
     const created = EventRepository.insert(newEvent);
 
     if (validatedFormResponses.length) {
-      FormService.saveEventResponses(created, validatedFormResponses, user);
+      FormService.saveEventResponses(created, validatedFormResponses, user, requestParams);
     }
 
     if (hasDynamicData) {
