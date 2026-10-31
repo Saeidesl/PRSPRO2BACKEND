@@ -966,7 +966,8 @@ const EventService = {
       validatedFormResponses = FormService.prepareEventResponses(
         eventType.ID,
         event.FormResponses || [],
-        user.TenantID
+        user.TenantID,
+        project ? project.ID : ''
       );
       if (validatedFormResponses.length && !isProjectEvent) {
         throw ErrorHandler.create(
