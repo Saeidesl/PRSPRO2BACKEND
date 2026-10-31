@@ -95,6 +95,8 @@ test('empty tabular rows are ignored and unknown columns are rejected', () => {
   const rows = h.projectInfo._validate(h.multiType, h.columns, [{ Name: '', Quantity: '' }, { Name: 'نمونه', Quantity: 3 }]);
   assert.equal(rows.length, 1);
   assert.throws(() => h.projectInfo._validate(h.singleType, h.columns, { Name: 'نمونه', Quantity: 2, Unexpected: 'x' }), /ستون ناشناخته/);
+  assert.throws(() => h.projectInfo._validate(h.singleType, h.columns, { Unexpected: '' }), /ستون ناشناخته/);
+  assert.throws(() => h.projectInfo._validate(h.multiType, h.columns, [{ Unexpected: '' }]), /ستون ناشناخته/);
 });
 
 test('required single-row tabular fields are validated as objects in reusable form responses', () => {
