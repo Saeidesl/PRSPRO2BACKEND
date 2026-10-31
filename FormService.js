@@ -313,9 +313,9 @@ const FormService = {
           return;
         }
         clean[key]=ProjectInformationService._validate(type,type.Columns || [],value,validationContext);
-        if (String(type.Code || '').toUpperCase() === 'PROJECT_CODE') {
-          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کد پروژه فقط از فیلد کد پروژه در فرم ایجاد یا ویرایش قابل ثبت است.');
-        }
+        // PROJECT_CODE is a supported event-form field. Its value is applied
+        // to the canonical project record in saveEventResponses, never to the
+        // generic ProjectInformation projection.
       });
       Object.keys(values).forEach(function(key){if(!allowedTypes[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات خارج از فرم ارسال شده است: '+key);});
       validated.push({FormID:form.ID,FormVersion:version,Values:clean,DefinitionSnapshot:this._snapshot(form,fields)});
@@ -337,7 +337,11 @@ const FormService = {
           var value = response.Values[typeId];
           if (FormService._isEmptyValue_(value)) return;
           var informationType = InformationTypeRepository.findById(typeId);
-          if (informationType && String(informationType.Code || '').toUpperCase() === 'PROJECT_CODE') return;
+          if (!informationType) return;
+          if (String(informationType.Code || '').toUpperCase() === 'PROJECT_CODE') {
+            ProjectService.assignDraftProjectCodeFromEvent(event.ProjectID, value, event.ID, user);
+            return;
+          }
           ProjectInformationService.save(event.ProjectID, typeId, {
             Value: value,
             SourceEventID: event.ID,
