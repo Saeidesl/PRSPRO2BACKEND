@@ -53,6 +53,15 @@ const Router = {
   get: function(path, params) {
     path = String(path || '').trim();
 
+    if (path === '/print-templates') {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return PrintTemplateService.list(params);
+    }
+    if (path.indexOf('/print-templates/') === 0 && path.split('/').length === 3) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return PrintTemplateService.get(decodeURIComponent(path.split('/')[2] || ''), params);
+    }
+
     if (path === '/auth/me') {
       return AuthService.me(params);
     }
@@ -487,6 +496,11 @@ const Router = {
     path = String(path || '').trim();
     body = body || {};
 
+    if (path === '/print-templates') {
+      this.requireAny(params, ['PROJECT_EDIT', 'SYSTEM_SETTINGS']);
+      return PrintTemplateService.create(body, params);
+    }
+
     if (path === '/auth/login') {
       return AuthService.login(body, params);
     }
@@ -742,6 +756,11 @@ const Router = {
   put: function(path, body, params) {
     path = String(path || '').trim();
     body = body || {};
+
+    if (path.indexOf('/print-templates/') === 0) {
+      this.requireAny(params, ['PROJECT_EDIT', 'SYSTEM_SETTINGS']);
+      return PrintTemplateService.update(decodeURIComponent(path.split('/')[2] || ''), body, params);
+    }
 
     if (path.indexOf('/project-statuses/') === 0 && path.split('/').length === 3) {
       AccessControlService.require(params, 'PROJECT_STATUS_MANAGE');
