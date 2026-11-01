@@ -61,5 +61,8 @@ test('form amendment uses optimistic concurrency and idempotent replay under the
   assert.match(service,/currentResponse\.UpdatedAt/);
   assert.match(service,/LastAmendmentEventID/);
   assert.match(service,/این رویداد اصلاحی قبلاً با مقادیر دیگری ثبت شده است/);
-  assert.match(service,/این اصلاحیه قبلاً با موفقیت اعمال شده است/);
+  assert.match(service,/var isReplay=String\(currentResponse\.LastAmendmentEventID/);
+  assert.match(service,/var updated=isReplay\?currentResponse:FormRepository\.updateResponse/);
+  assert.match(service,/Even on replay, finish project-information synchronization/);
+  assert.match(service,/if\(!isReplay\)AuditService\.log/);
 });
