@@ -388,18 +388,33 @@ const FormService = {
       // for the same amendment event safely idempotent.
       var currentResponse=FormRepository.findResponse(eventId,formId);
       if(!currentResponse||String(currentResponse.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'پاسخ فرم ثبت‌شده پیدا نشد.');
+      var oldValues=this._parse(currentResponse.ResponseJSON,{});
+      var projectCodeChanged=Object.create(null);
+      // The project's current code is authoritative when the amendment leaves
+      // the old PROJECT_CODE response untouched. This prevents an old form
+      // snapshot (for example 3100) from reverting a project now coded 3101.
+      fields.forEach(function(field){
+        var type=field.InformationType,key=String(type.ID);
+        if(String(type.Code||'').toUpperCase()!=='PROJECT_CODE')return;
+        var next=clean[key],previous=oldValues[key];
+        if(String(next===undefined||next===null?'':next).trim()===String(previous===undefined||previous===null?'':previous).trim()){
+          clean[key]=String(project.ProjectCode||'');
+        } else {
+          projectCodeChanged[key]=true;
+        }
+      });
       var cleanJSON=JSON.stringify(clean);
       var isReplay=String(currentResponse.LastAmendmentEventID||'')===String(amendment.ID);
       if(isReplay&&String(currentResponse.ResponseJSON||'')!==cleanJSON)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'این رویداد اصلاحی قبلاً با مقادیر دیگری ثبت شده است.');
       var expectedUpdatedAt=String(body.ExpectedUpdatedAt||'');
       if(!isReplay&&expectedUpdatedAt&&String(currentResponse.UpdatedAt||'')!==expectedUpdatedAt)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'پاسخ فرم پس از بازشدن شما تغییر کرده است؛ فرم را دوباره بارگذاری کنید.');
-      var now=new Date().toISOString(),oldValues=this._parse(currentResponse.ResponseJSON,{});
+      var now=new Date().toISOString();
       // Even on replay, finish project-information synchronization: an earlier
       // request may have saved the response and failed halfway through the sync.
       var updated=isReplay?currentResponse:FormRepository.updateResponse(currentResponse.ID,{ResponseJSON:cleanJSON,FormVersion:version,UpdatedBy:user.ID,UpdatedAt:now,LastAmendmentEventID:amendment.ID});
       fields.forEach(function(field){
         var type=field.InformationType,key=String(type.ID),next=clean[key],current=ProjectInformationRepository.findAnyByProjectAndType(project.ID,type.ID);
-        if(String(type.Code||'').toUpperCase()==='PROJECT_CODE'){if(!FormService._isEmptyValue_(next))ProjectService.updateProjectCodeFromEvent(project.ID,next,amendment.ID,user,true);return;}
+        if(String(type.Code||'').toUpperCase()==='PROJECT_CODE'){if(projectCodeChanged[key]&&!FormService._isEmptyValue_(next))ProjectService.updateProjectCodeFromEvent(project.ID,next,amendment.ID,user,true);return;}
         if(FormService._isEmptyValue_(next)){if(current&&String(current.Status||'ACTIVE')==='ACTIVE')ProjectInformationService.deactivate(project.ID,type.ID,params,{SourceEventID:amendment.ID,Reason:'حذف مقدار از طریق اصلاح فرم رویداد مبنا '+event.ID});return;}
         ProjectInformationService.save(project.ID,type.ID,{Value:next,SourceEventID:amendment.ID,Reason:'اصلاح پاسخ فرم رویداد مبنا '+event.ID},params||{});
       });
