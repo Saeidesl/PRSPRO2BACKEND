@@ -44,7 +44,7 @@ test('event creation validates and persists form responses before completing ide
 test('event form amendment endpoint is permission guarded and validates amendment event and tenant',()=>{
   const router=read('Router.js');
   const service=read('FormService.js');
-  assert.match(router,/events\\/\(\[\^\/\]\+\)\\/forms/);
+  assert.ok(router.includes("/^\\/events\\/([^/]+)\\/forms\\/([^/]+)$/"));
   assert.match(router,/AccessControlService\.require\(params, 'EVENT_EDIT'\)/);
   assert.match(router,/FormService\.updateEventFormResponse/);
   assert.match(service,/updateEventFormResponse: function/);
