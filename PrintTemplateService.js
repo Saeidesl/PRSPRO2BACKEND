@@ -30,32 +30,32 @@ const PrintTemplateService = {
     data = data || {};
     var name = String(data.Name || '').trim();
     if (!name || name.length > this.MAX_NAME_LENGTH) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'نام قالب باید بین ۱ تا ۱۰۰ نویسه باشد.');
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام قالب باید بین ۱ تا ۱۰۰ نویسه باشد.');
     }
 
     var template = data.Template;
     if (typeof template === 'string') {
       try { template = JSON.parse(template); } catch (error) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'ساختار قالب معتبر نیست.');
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ساختار قالب معتبر نیست.');
       }
     }
     if (!template || typeof template !== 'object' || Array.isArray(template) ||
         Number(template.version) !== 1 || !Array.isArray(template.elements) ||
         template.elements.length > this.MAX_ELEMENTS) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'ساختار یا نسخه قالب معتبر نیست.');
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ساختار یا نسخه قالب معتبر نیست.');
     }
 
     var allowed = ['project', 'project-fields', 'text', 'line', 'form', 'form-field'];
     template.elements.forEach(function(item) {
       if (!item || typeof item !== 'object' || allowed.indexOf(String(item.type || '')) < 0) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'یکی از اجزای قالب معتبر نیست.');
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'یکی از اجزای قالب معتبر نیست.');
       }
       if ((item.type === 'form' || item.type === 'form-field') &&
           (!item.formId || !item.formDefinition || typeof item.formDefinition !== 'object')) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'تعریف یکی از فرم‌های قالب کامل نیست.');
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تعریف یکی از فرم‌های قالب کامل نیست.');
       }
       if (item.type === 'form-field' && !item.fieldKey) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'شناسه فیلد قالب مشخص نیست.');
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه فیلد قالب مشخص نیست.');
       }
     });
 
@@ -65,7 +65,7 @@ const PrintTemplateService = {
       elements: template.elements
     });
     if (json.length > this.MAX_TEMPLATE_LENGTH) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION, 'حجم قالب بیش از حد مجاز است؛ تعداد تصاویر و اجزای قالب را بررسی کن.');
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'حجم قالب بیش از حد مجاز است؛ تعداد تصاویر و اجزای قالب را بررسی کن.');
     }
     return {Name: name, TemplateJSON: json, Version: 1};
   },
