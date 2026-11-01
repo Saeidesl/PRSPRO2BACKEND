@@ -97,6 +97,14 @@ const Router = {
       return ProjectStatusService.list(params);
     }
 
+    const printTemplateMatch = path.match(/^\/print-templates(?:\/([^/]+))?$/);
+    if (printTemplateMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return printTemplateMatch[1]
+        ? PrintTemplateService.get(decodeURIComponent(printTemplateMatch[1]), params)
+        : PrintTemplateService.list(params);
+    }
+
     if (path === '/departments') {
       this.requireAny(params, [
         'DEPARTMENT_MANAGE',
@@ -500,6 +508,11 @@ const Router = {
       return ProjectStatusService.create(body, params);
     }
 
+    if (path === '/print-templates') {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return PrintTemplateService.create(body, params);
+    }
+
     if (path === '/departments') {
       AccessControlService.require(params, 'DEPARTMENT_MANAGE');
       return DepartmentService.create(body, params);
@@ -748,6 +761,12 @@ const Router = {
       return ProjectStatusService.update(path.split('/')[2], body, params);
     }
 
+    const printTemplateUpdateMatch = path.match(/^\/print-templates\/([^/]+)$/);
+    if (printTemplateUpdateMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return PrintTemplateService.update(decodeURIComponent(printTemplateUpdateMatch[1]), body, params);
+    }
+
     if (path.indexOf('/roles/') === 0 && path.split('/').length === 3) {
       AccessControlService.require(params, 'ROLE_MANAGE');
       const roleId = path.split('/')[2];
@@ -852,6 +871,12 @@ const Router = {
 
   delete: function(path, params) {
     path = String(path || '').trim();
+
+    const printTemplateDeleteMatch = path.match(/^\/print-templates\/([^/]+)$/);
+    if (printTemplateDeleteMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return PrintTemplateService.remove(decodeURIComponent(printTemplateDeleteMatch[1]), params);
+    }
 
     const projectInformationDeleteMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)$/);
     if (projectInformationDeleteMatch) {
