@@ -128,6 +128,11 @@ const APP_CONFIG = {
       headers: ['ID','TenantID','EventID','FormID','FormVersion','ResponseJSON','DefinitionSnapshotJSON','CreatedBy','CreatedAt']
     },
 
+    PRINT_TEMPLATES: {
+      name: '36_PrintTemplates',
+      headers: ['ID','TenantID','Name','Version','TemplateJSON','Status','CreatedBy','CreatedAt','UpdatedBy','UpdatedAt']
+    },
+
     ATTACHMENTS: {
       name: '15_Attachments',
       headers: ['ID','TenantID','EntityType','EntityID','FileName','MimeType','FileSize','StorageProvider','StorageKey','UploadedBy','UploadedAt','Status','AttachmentType']
