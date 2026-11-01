@@ -378,8 +378,19 @@ const FormService = {
     Object.keys(values).forEach(function(key){if(!allowed[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فیلد خارج از فرم ارسال شده است.');});
     var lock=LockService.getScriptLock();lock.waitLock(30000);
     try {
-      var now=new Date().toISOString(),oldValues=this._parse(existing.ResponseJSON,{});
-      var updated=FormRepository.updateResponse(existing.ID,{ResponseJSON:JSON.stringify(clean),FormVersion:version,UpdatedBy:user.ID,UpdatedAt:now,LastAmendmentEventID:amendment.ID});
+      // Re-read under the lock: reject stale edits and make a repeated PUT
+      // for the same amendment event safely idempotent.
+      var currentResponse=FormRepository.findResponse(eventId,formId);
+      if(!currentResponse||String(currentResponse.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'پاسخ فرم ثبت‌شده پیدا نشد.');
+      var cleanJSON=JSON.stringify(clean);
+      if(String(currentResponse.LastAmendmentEventID||'')===String(amendment.ID)){
+        if(String(currentResponse.ResponseJSON||'')!==cleanJSON)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'این رویداد اصلاحی قبلاً با مقادیر دیگری ثبت شده است.');
+        return Response.success(Object.assign({},currentResponse,{Values:clean,AmendmentEventID:amendment.ID}),{message:'این اصلاحیه قبلاً با موفقیت اعمال شده است.'});
+      }
+      var expectedUpdatedAt=String(body.ExpectedUpdatedAt||'');
+      if(expectedUpdatedAt&&String(currentResponse.UpdatedAt||'')!==expectedUpdatedAt)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'پاسخ فرم پس از بازشدن شما تغییر کرده است؛ فرم را دوباره بارگذاری کنید.');
+      var now=new Date().toISOString(),oldValues=this._parse(currentResponse.ResponseJSON,{});
+      var updated=FormRepository.updateResponse(currentResponse.ID,{ResponseJSON:cleanJSON,FormVersion:version,UpdatedBy:user.ID,UpdatedAt:now,LastAmendmentEventID:amendment.ID});
       fields.forEach(function(field){
         var type=field.InformationType,key=String(type.ID),next=clean[key],current=ProjectInformationRepository.findAnyByProjectAndType(project.ID,type.ID);
         if(String(type.Code||'').toUpperCase()==='PROJECT_CODE'){if(!FormService._isEmptyValue_(next))ProjectService.updateProjectCodeFromEvent(project.ID,next,amendment.ID,user,true);return;}
