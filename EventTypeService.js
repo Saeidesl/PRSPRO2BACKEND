@@ -3,8 +3,7 @@ const EventTypeService = {
   ARRAY_FIELDS: [
     'AllowedDepartmentIDs',
     'AllowedUserIDs',
-    'AvailableDepartmentIDs',
-    'AmendableFormIDs'
+    'AvailableDepartmentIDs'
   ],
 
   _toBoolean_: function(value) {
@@ -51,6 +50,7 @@ const EventTypeService = {
     result.TrackVariantQuantity = this._toBoolean_(result.TrackVariantQuantity);
     result.IsWorkCompletion = this._toBoolean_(result.IsWorkCompletion);
     result.AllowOnDraft = this._toBoolean_(result.AllowOnDraft);
+    result.AmendableFormIDs = this._parseArray_(result.AmendableFormIDs);
     result.IsFormAmendment = this._toBoolean_(result.IsFormAmendment);
 
     return result;
@@ -67,6 +67,7 @@ const EventTypeService = {
         );
       }
     });
+    if (result.AmendableFormIDs !== undefined) result.AmendableFormIDs = JSON.stringify(this._parseArray_(result.AmendableFormIDs));
 
     [
       'MovesProjectToStep',
