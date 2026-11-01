@@ -52,3 +52,14 @@ test('event form amendment endpoint is permission guarded and validates amendmen
   assert.match(service,/LastAmendmentEventID/);
   assert.match(service,/اصلاح پاسخ فرم از طریق رویداد اصلاحی/);
 });
+
+
+test('form amendment uses optimistic concurrency and idempotent replay under the lock',()=>{
+  const service=read('FormService.js');
+  assert.match(service,/var currentResponse=FormRepository\.findResponse\(eventId,formId\)/);
+  assert.match(service,/body\.ExpectedUpdatedAt/);
+  assert.match(service,/currentResponse\.UpdatedAt/);
+  assert.match(service,/LastAmendmentEventID/);
+  assert.match(service,/این رویداد اصلاحی قبلاً با مقادیر دیگری ثبت شده است/);
+  assert.match(service,/این اصلاحیه قبلاً با موفقیت اعمال شده است/);
+});
