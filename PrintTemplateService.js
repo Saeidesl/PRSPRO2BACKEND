@@ -64,7 +64,7 @@ const PrintTemplateService = {
       var border = String(style.border || '0');
       var background = String(style.background || '#ffffff');
       item.style = {
-        border: border === '0' || /^\\d{1,2}px solid #[0-9a-f]{3,8}$/i.test(border) ? border : '0',
+        border: border === '0' || /^\d{1,2}px solid #[0-9a-f]{3,8}$/i.test(border) ? border : '0',
         padding: Math.max(0, Math.min(60, Number(style.padding) || 0)),
         background: /^#[0-9a-f]{3,8}$/i.test(background) ? background : '#ffffff',
         fontSize: Math.max(8, Math.min(48, Number(style.fontSize) || 13)),
