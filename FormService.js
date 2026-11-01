@@ -382,8 +382,8 @@ const FormService = {
       var updated=FormRepository.updateResponse(existing.ID,{ResponseJSON:JSON.stringify(clean),FormVersion:version,UpdatedBy:user.ID,UpdatedAt:now,LastAmendmentEventID:amendment.ID});
       fields.forEach(function(field){
         var type=field.InformationType,key=String(type.ID),next=clean[key],current=ProjectInformationRepository.findAnyByProjectAndType(project.ID,type.ID);
-        if(String(type.Code||'').toUpperCase()==='PROJECT_CODE'){if(!FormService._isEmptyValue_(next))ProjectService.updateProjectCodeFromEvent(project.ID,next,amendment.ID,user);return;}
-        if(FormService._isEmptyValue_(next)){if(current&&String(current.Status||'ACTIVE')==='ACTIVE')ProjectInformationService.deactivate(project.ID,type.ID,params);return;}
+        if(String(type.Code||'').toUpperCase()==='PROJECT_CODE'){if(!FormService._isEmptyValue_(next))ProjectService.updateProjectCodeFromEvent(project.ID,next,amendment.ID,user,true);return;}
+        if(FormService._isEmptyValue_(next)){if(current&&String(current.Status||'ACTIVE')==='ACTIVE')ProjectInformationService.deactivate(project.ID,type.ID,params,{SourceEventID:amendment.ID,Reason:'حذف مقدار از طریق اصلاح فرم رویداد مبنا '+event.ID});return;}
         ProjectInformationService.save(project.ID,type.ID,{Value:next,SourceEventID:amendment.ID,Reason:'اصلاح پاسخ فرم رویداد مبنا '+event.ID},params||{});
       });
       AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.UPDATE,EntityType:'EVENT_FORM_DATA',EntityID:existing.ID,OldData:{EventID:event.ID,Values:oldValues},NewData:{EventID:event.ID,FormID:formId,Values:clean,AmendmentEventID:amendment.ID},Reason:'اصلاح پاسخ فرم از طریق رویداد اصلاحی'});
