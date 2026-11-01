@@ -39,3 +39,16 @@ test('event creation validates and persists form responses before completing ide
   const complete=source.indexOf("IdempotencyStatus: 'COMPLETED'",persist);
   assert.ok(validate>0&&insert>validate&&persist>insert&&complete>persist);
 });
+
+
+test('event form amendment endpoint is permission guarded and validates amendment event and tenant',()=>{
+  const router=read('Router.js');
+  const service=read('FormService.js');
+  assert.match(router,/events\\/\(\[\^\/\]\+\)\\/forms/);
+  assert.match(router,/AccessControlService\.require\(params, 'EVENT_EDIT'\)/);
+  assert.match(router,/FormService\.updateEventFormResponse/);
+  assert.match(service,/updateEventFormResponse: function/);
+  assert.match(service,/AmendmentEventID/);
+  assert.match(service,/LastAmendmentEventID/);
+  assert.match(service,/اصلاح پاسخ فرم از طریق رویداد اصلاحی/);
+});
