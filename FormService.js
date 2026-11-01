@@ -360,7 +360,13 @@ const FormService = {
     if(!amendment||String(amendment.TenantID)!==String(user.TenantID)||String(amendment.ProjectID)!==String(event.ProjectID))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ابتدا باید رویداد اصلاحی همین پروژه ثبت شده باشد.');
     var amendmentType=EventTypeRepository.findById(amendment.EventTypeID);
     var markerText=((amendmentType&&amendmentType.Code)||'')+' '+((amendmentType&&amendmentType.Name)||'');
-    if(!/(EDIT|UPDATE|AMEND|ویرایش|اصلاح)/i.test(markerText))throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED,'نوع رویداد برای اصلاح فرم مشخص نشده است.');
+    var explicitlyConfigured=!!(amendmentType&&(amendmentType.IsFormAmendment===true||String(amendmentType.IsFormAmendment).toLowerCase()==='true'));
+    var legacyMarker=/(EDIT|UPDATE|AMEND|ویرایش|اصلاح)/i.test(markerText);
+    if(!explicitlyConfigured&&!legacyMarker)throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED,'نوع رویداد برای اصلاح فرم مشخص نشده است.');
+    if(explicitlyConfigured){
+      var allowedFormIds=EventTypeService._parseArray_(amendmentType.AmendableFormIDs);
+      if(allowedFormIds.map(String).indexOf(String(formId))===-1)throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED,'این فرم در تنظیمات نوع رویداد برای اصلاح مجاز نشده است.');
+    }
     var existing=FormRepository.findResponse(eventId,formId);
     if(!existing||String(existing.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'پاسخ فرم ثبت‌شده پیدا نشد.');
     var form=this._form(formId,user.TenantID),fields=this._definition(form,user.TenantID),version=Number(form.Version||1);
