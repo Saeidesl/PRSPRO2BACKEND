@@ -66,3 +66,19 @@ test('form amendment uses optimistic concurrency and idempotent replay under the
   assert.match(service,/Even on replay, finish project-information synchronization/);
   assert.match(service,/if\(!isReplay\)AuditService\.log/);
 });
+
+
+test('explicit amendment configuration persists and server enforces allowed reusable forms',()=>{
+  const service=read('EventTypeService.js');
+  const validator=read('EventTypeValidator.js');
+  const db=read('DatabaseSetup.js');
+  const forms=read('FormService.js');
+  assert.match(service,/IsFormAmendment/);
+  assert.match(service,/AmendableFormIDs/);
+  assert.match(service,/_validateAmendableForms_/);
+  assert.match(validator,/IsFormAmendment/);
+  assert.match(db,/IsFormAmendment','AmendableFormIDs/);
+  assert.match(forms,/explicitlyConfigured/);
+  assert.match(forms,/این فرم در تنظیمات نوع رویداد برای اصلاح مجاز نشده است/);
+  assert.match(forms,/legacyMarker/);
+});

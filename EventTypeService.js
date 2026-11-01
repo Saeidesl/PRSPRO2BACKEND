@@ -50,6 +50,8 @@ const EventTypeService = {
     result.TrackVariantQuantity = this._toBoolean_(result.TrackVariantQuantity);
     result.IsWorkCompletion = this._toBoolean_(result.IsWorkCompletion);
     result.AllowOnDraft = this._toBoolean_(result.AllowOnDraft);
+    result.AmendableFormIDs = this._parseArray_(result.AmendableFormIDs);
+    result.IsFormAmendment = this._toBoolean_(result.IsFormAmendment);
 
     return result;
   },
@@ -65,6 +67,7 @@ const EventTypeService = {
         );
       }
     });
+    if (result.AmendableFormIDs !== undefined) result.AmendableFormIDs = JSON.stringify(this._parseArray_(result.AmendableFormIDs));
 
     [
       'MovesProjectToStep',
@@ -74,7 +77,8 @@ const EventTypeService = {
       'UseProjectSizes',
       'TrackVariantQuantity',
       'IsWorkCompletion',
-      'AllowOnDraft'
+      'AllowOnDraft',
+      'IsFormAmendment'
     ].forEach(function(field) {
       if (result[field] !== undefined) {
         result[field] = self._toBoolean_(result[field]);
@@ -82,6 +86,31 @@ const EventTypeService = {
     });
 
     return result;
+  },
+
+  _validateAmendableForms_: function(data, tenantId) {
+    const enabled = this._toBoolean_(data.IsFormAmendment);
+    const ids = this._parseArray_(data.AmendableFormIDs);
+    if (!enabled && ids.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای انتخاب فرم‌های قابل اصلاح، ابتدا گزینه رویداد اصلاحی را فعال کنید.');
+    }
+    if (!enabled) return;
+    if (String(data.ConnectionType || 'PROJECT').toUpperCase() !== 'PROJECT') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد اصلاح فرم باید به پروژه متصل باشد.');
+    }
+    if (!ids.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'حداقل یک فرم مجاز برای اصلاح انتخاب کنید.');
+    }
+    const unique = {};
+    ids.forEach(function(id) {
+      Validator.id(id, 'AmendableFormIDs');
+      if (unique[String(id)]) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فرم تکراری در فهرست اصلاح انتخاب شده است.');
+      unique[String(id)] = true;
+      const form = FormRepository.findForm(id);
+      if (!form || String(form.TenantID) !== String(tenantId) || String(form.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'یکی از فرم‌های انتخاب‌شده معتبر یا فعال نیست.');
+      }
+    });
   },
 
   _validateDepartmentReference_: function(id, tenantId, fieldName) {
@@ -386,6 +415,7 @@ const EventTypeService = {
     }
 
     this._validateReferences_(data, user.TenantID);
+    this._validateAmendableForms_(data, user.TenantID);
 
     const now = new Date().toISOString();
 
@@ -424,6 +454,8 @@ const EventTypeService = {
       UseProjectSizes: this._toBoolean_(data.UseProjectSizes),
       TrackVariantQuantity: this._toBoolean_(data.TrackVariantQuantity),
       AllowOnDraft: this._toBoolean_(data.AllowOnDraft),
+      IsFormAmendment: this._toBoolean_(data.IsFormAmendment),
+      AmendableFormIDs: this._parseArray_(data.AmendableFormIDs),
       Status: data.Status || Constants.STATUS.ACTIVE,
       CreatedAt: now,
       UpdatedAt: now
@@ -495,7 +527,8 @@ const EventTypeService = {
       }
     }
 
-    this._validateReferences_(data, user.TenantID);
+    this._validateReferences_(Object.assign({}, this._normalize_(existing), data), user.TenantID);
+    this._validateAmendableForms_(Object.assign({}, this._normalize_(existing), data), user.TenantID);
 
     delete data.TargetDesignCaseStatus;
     delete data.TransitionsToProduction;
