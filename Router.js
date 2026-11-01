@@ -57,7 +57,7 @@ const Router = {
       AccessControlService.require(params, 'PROJECT_VIEW');
       return PrintTemplateService.list(params);
     }
-    if (path.indexOf('/print-templates/') === 0) {
+    if (path.indexOf('/print-templates/') === 0 && path.split('/').length === 3) {
       AccessControlService.require(params, 'PROJECT_VIEW');
       return PrintTemplateService.get(decodeURIComponent(path.split('/')[2] || ''), params);
     }
