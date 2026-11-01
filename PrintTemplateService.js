@@ -57,6 +57,42 @@ const PrintTemplateService = {
       if (item.type === 'form-field' && !item.fieldKey) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه فیلد قالب مشخص نیست.');
       }
+      item.id = String(item.id || '').slice(0, 100);
+      item.text = String(item.text || '').slice(0, 3000);
+      item.title = String(item.title || '').slice(0, 200);
+      var style = item.style && typeof item.style === 'object' ? item.style : {};
+      var border = String(style.border || '0');
+      var background = String(style.background || '#ffffff');
+      item.style = {
+        border: border === '0' || /^\\d{1,2}px solid #[0-9a-f]{3,8}$/i.test(border) ? border : '0',
+        padding: Math.max(0, Math.min(60, Number(style.padding) || 0)),
+        background: /^#[0-9a-f]{3,8}$/i.test(background) ? background : '#ffffff',
+        fontSize: Math.max(8, Math.min(48, Number(style.fontSize) || 13)),
+        align: ['right','left','center','justify'].indexOf(String(style.align || 'right')) >= 0 ? String(style.align || 'right') : 'right'
+      };
+      if (item.innerLayout && typeof item.innerLayout === 'object') {
+        Object.keys(item.innerLayout).forEach(function(key) {
+          var layout = item.innerLayout[key] || {};
+          item.innerLayout[key] = {
+            width: Math.max(40, Math.min(700, Number(layout.width) || 280)),
+            x: Math.max(-300, Math.min(300, Number(layout.x) || 0)),
+            y: Math.max(-300, Math.min(300, Number(layout.y) || 0))
+          };
+        });
+      }
+      if (item.tableLayout && typeof item.tableLayout === 'object') {
+        Object.keys(item.tableLayout).forEach(function(key) {
+          var layout = item.tableLayout[key] || {};
+          var columns = {};
+          Object.keys(layout.columns || {}).forEach(function(code) {
+            columns[String(code).slice(0, 100)] = Math.max(5, Math.min(100, Number(layout.columns[code]) || 5));
+          });
+          item.tableLayout[key] = {
+            width: Math.max(25, Math.min(100, Number(layout.width) || 100)),
+            columns: columns
+          };
+        });
+      }
     });
 
     var json = JSON.stringify({
