@@ -822,7 +822,7 @@ const Router = {
       return EventTypeService.update(path.split('/')[2], body, params);
     }
 
-    const eventFormUpdateMatch = path.match(/^\\/events\\/([^/]+)\\/forms\\/([^/]+)$/);
+    const eventFormUpdateMatch = path.match(/^\/events\/([^/]+)\/forms\/([^/]+)$/);
     if (eventFormUpdateMatch) {
       AccessControlService.require(params, 'EVENT_EDIT');
       return FormService.updateEventFormResponse(decodeURIComponent(eventFormUpdateMatch[1]), decodeURIComponent(eventFormUpdateMatch[2]), body, params);
