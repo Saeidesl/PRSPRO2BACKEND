@@ -45,6 +45,8 @@ const EventTypeValidator = {
     }
 
     if (data.AllowOnDraft !== undefined) Validator.boolean(data.AllowOnDraft, 'AllowOnDraft');
+    if (data.IsFormAmendment !== undefined) Validator.boolean(data.IsFormAmendment, 'IsFormAmendment');
+    if (data.AmendableFormIDs !== undefined && !Array.isArray(data.AmendableFormIDs)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست فرم‌های مجاز باید آرایه باشد.');
 
     if (String(data.ConnectionType || '').toUpperCase() === 'INDEPENDENT' &&
         (data.AllowOnDraft === true || String(data.AllowOnDraft).toLowerCase() === 'true')) {
