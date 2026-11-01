@@ -87,7 +87,7 @@ test('explicit amendment configuration persists and server enforces allowed reus
 test('amendment preserves the current project code when the saved form still contains its previous code',()=>{
   const service=read('FormService.js');
   assert.match(service,/var projectCodeChanged=Object\.create\(null\)/);
-  assert.match(service,/var previous=oldValues\[key\]/);
+  assert.match(service,/previous=oldValues\[key\]/);
   assert.match(service,/clean\[key\]=String\(project\.ProjectCode\|\|''\)/);
   assert.match(service,/projectCodeChanged\[key\]&&!FormService\._isEmptyValue_\(next\)/);
 });
