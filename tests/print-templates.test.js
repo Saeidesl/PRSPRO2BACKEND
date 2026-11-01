@@ -74,7 +74,7 @@ test('print template service persists, updates and soft-deletes tenant-owned lay
     Number,
     Error
   };
-  vm.runInNewContext(serviceSource, sandbox);
+  vm.runInNewContext(serviceSource + '\\nthis.PrintTemplateService = PrintTemplateService;', sandbox);
   const service = sandbox.PrintTemplateService;
   const created = service.create({Name:'گزارش تولید',Layout:{version:2,orientation:'portrait',elements:[{type:'text',text:'نمونه'}]}},{});
   assert.equal(created.success,true);
@@ -114,7 +114,7 @@ test('print template service rejects malformed layouts, oversized payloads and d
     Utilities:{getUuid:()=> 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'},
     Date,JSON,Object,Array,String,Number,Error
   };
-  vm.runInNewContext(read('PrintTemplateService.js'),sandbox);
+  vm.runInNewContext(read('PrintTemplateService.js') + '\\nthis.PrintTemplateService = PrintTemplateService;',sandbox);
   const service=sandbox.PrintTemplateService;
   assert.throws(()=>service.create({Name:'بدون المان',Layout:{elements:[]} },{}),/نسخه یا جهت صفحه قالب معتبر نیست/);
   assert.throws(()=>service.create({Name:'ساختار نامعتبر',Layout:{version:2,orientation:'portrait',elements:'invalid'}},{}),/قالب باید شامل فهرست معتبر/);
