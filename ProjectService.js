@@ -251,10 +251,10 @@ const ProjectService = {
     return true;
   },
 
-  updateProjectCodeFromEvent: function(projectId, code, eventId, user) {
+  updateProjectCodeFromEvent: function(projectId, code, eventId, user, lockAlreadyHeld) {
     const value = String(code || '').trim();
-    const lock = LockService.getScriptLock();
-    lock.waitLock(30000);
+    const lock = lockAlreadyHeld ? null : LockService.getScriptLock();
+    if (lock) lock.waitLock(30000);
     try {
       const project = ProjectRepository.findById(projectId);
       if (!project || String(project.TenantID) !== String(user.TenantID) ||
@@ -289,7 +289,7 @@ const ProjectService = {
       });
       return updated;
     } finally {
-      lock.releaseLock();
+      if (lock) lock.releaseLock();
     }
   },
 
