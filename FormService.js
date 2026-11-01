@@ -351,6 +351,45 @@ const FormService = {
       }
     },this);
   },
+  updateEventFormResponse: function(eventId, formId, body, params) {
+    var user=this._user(params), event=EventRepository.findById(eventId); body=body||{};
+    if(!event||String(event.TenantID)!==String(user.TenantID)||!event.ProjectID)throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'رویداد مبنا پیدا نشد.');
+    var project=ProjectRepository.findById(event.ProjectID);
+    if(!project||String(project.TenantID)!==String(user.TenantID)||!ProjectService._isProjectAvailableToUser_(project,user))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'پروژه رویداد مبنا پیدا نشد.');
+    var amendment=EventRepository.findById(String(body.AmendmentEventID||''));
+    if(!amendment||String(amendment.TenantID)!==String(user.TenantID)||String(amendment.ProjectID)!==String(event.ProjectID))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'ابتدا باید رویداد اصلاحی همین پروژه ثبت شده باشد.');
+    var amendmentType=EventTypeRepository.findById(amendment.EventTypeID);
+    var markerText=((amendmentType&&amendmentType.Code)||'')+' '+((amendmentType&&amendmentType.Name)||'');
+    if(!/(EDIT|UPDATE|AMEND|ویرایش|اصلاح)/i.test(markerText))throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED,'نوع رویداد برای اصلاح فرم مشخص نشده است.');
+    var existing=FormRepository.findResponse(eventId,formId);
+    if(!existing||String(existing.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'پاسخ فرم ثبت‌شده پیدا نشد.');
+    var form=this._form(formId,user.TenantID),fields=this._definition(form,user.TenantID),version=Number(form.Version||1);
+    if(Number(body.FormVersion||0)!==version)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'نسخه فرم تغییر کرده است؛ فرم را دوباره باز کنید.');
+    if(!body.Values||typeof body.Values!=='object'||Array.isArray(body.Values))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقادیر فرم معتبر نیستند.');
+    var values=body.Values,allowed=Object.create(null),clean=Object.create(null),context={projectId:String(project.ID),tenantId:String(user.TenantID)};
+    fields.forEach(function(field){
+      var type=field.InformationType,key=String(type.ID),value=Object.prototype.hasOwnProperty.call(values,key)?values[key]:FormService._emptyValueForType_(type);
+      allowed[key]=true;
+      var visible=FormService._isVisible_(field.VisibilityRule||{},values),required=field.IsRequired===true||String(field.IsRequired).toLowerCase()==='true';
+      if(!visible)value=FormService._emptyValueForType_(type);
+      if(required&&FormService._isEmptyValue_(value))throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تکمیل «'+(field.LabelOverride||type.Name)+'» الزامی است.');
+      clean[key]=FormService._isEmptyValue_(value)?FormService._emptyValueForType_(type):ProjectInformationService._validate(type,type.Columns||[],value,context);
+    });
+    Object.keys(values).forEach(function(key){if(!allowed[key])throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فیلد خارج از فرم ارسال شده است.');});
+    var lock=LockService.getScriptLock();lock.waitLock(30000);
+    try {
+      var now=new Date().toISOString(),oldValues=this._parse(existing.ResponseJSON,{});
+      var updated=FormRepository.updateResponse(existing.ID,{ResponseJSON:JSON.stringify(clean),FormVersion:version,UpdatedBy:user.ID,UpdatedAt:now,LastAmendmentEventID:amendment.ID});
+      fields.forEach(function(field){
+        var type=field.InformationType,key=String(type.ID),next=clean[key],current=ProjectInformationRepository.findAnyByProjectAndType(project.ID,type.ID);
+        if(String(type.Code||'').toUpperCase()==='PROJECT_CODE'){if(!FormService._isEmptyValue_(next))ProjectService.updateProjectCodeFromEvent(project.ID,next,amendment.ID,user);return;}
+        if(FormService._isEmptyValue_(next)){if(current&&String(current.Status||'ACTIVE')==='ACTIVE')ProjectInformationService.deactivate(project.ID,type.ID,params);return;}
+        ProjectInformationService.save(project.ID,type.ID,{Value:next,SourceEventID:amendment.ID,Reason:'اصلاح پاسخ فرم رویداد مبنا '+event.ID},params||{});
+      });
+      AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.UPDATE,EntityType:'EVENT_FORM_DATA',EntityID:existing.ID,OldData:{EventID:event.ID,Values:oldValues},NewData:{EventID:event.ID,FormID:formId,Values:clean,AmendmentEventID:amendment.ID},Reason:'اصلاح پاسخ فرم از طریق رویداد اصلاحی'});
+      return Response.success(Object.assign({},updated,{Values:clean,AmendmentEventID:amendment.ID}),{message:'پاسخ فرم با موفقیت اصلاح شد.'});
+    } finally {lock.releaseLock();}
+  },
   getEventResponses: function(eventId, params) {
     var user=this._user(params),event=EventRepository.findById(eventId);
     if(!event||String(event.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'رویداد پیدا نشد.');
