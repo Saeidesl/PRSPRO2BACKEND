@@ -116,7 +116,7 @@ test('print template service rejects malformed layouts, oversized payloads and d
   };
   vm.runInNewContext(read('PrintTemplateService.js') + '; this.PrintTemplateService = PrintTemplateService;',sandbox);
   const service=sandbox.PrintTemplateService;
-  assert.throws(()=>service.create({Name:'بدون المان',Layout:{elements:[]} },{}),/نسخه یا جهت صفحه قالب معتبر نیست/);
+  assert.throws(()=>service.create({Name:'جهت نامعتبر',Layout:{version:2,orientation:'diagonal',elements:[]} },{}),/نسخه یا جهت صفحه قالب معتبر نیست/);
   assert.throws(()=>service.create({Name:'ساختار نامعتبر',Layout:{version:2,orientation:'portrait',elements:'invalid'}},{}),/قالب باید شامل فهرست معتبر/);
   assert.throws(()=>service.create({Name:'بزرگ',Layout:{version:2,orientation:'portrait',elements:[{text:'x'.repeat(41000)}]}},{}),/حجم قالب بیش از حد مجاز/);
   service.create({Name:'قالب تکراری',Layout:{version:2,orientation:'portrait',elements:[]}},{});
