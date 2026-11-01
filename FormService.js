@@ -383,21 +383,21 @@ const FormService = {
       var currentResponse=FormRepository.findResponse(eventId,formId);
       if(!currentResponse||String(currentResponse.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'پاسخ فرم ثبت‌شده پیدا نشد.');
       var cleanJSON=JSON.stringify(clean);
-      if(String(currentResponse.LastAmendmentEventID||'')===String(amendment.ID)){
-        if(String(currentResponse.ResponseJSON||'')!==cleanJSON)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'این رویداد اصلاحی قبلاً با مقادیر دیگری ثبت شده است.');
-        return Response.success(Object.assign({},currentResponse,{Values:clean,AmendmentEventID:amendment.ID}),{message:'این اصلاحیه قبلاً با موفقیت اعمال شده است.'});
-      }
+      var isReplay=String(currentResponse.LastAmendmentEventID||'')===String(amendment.ID);
+      if(isReplay&&String(currentResponse.ResponseJSON||'')!==cleanJSON)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'این رویداد اصلاحی قبلاً با مقادیر دیگری ثبت شده است.');
       var expectedUpdatedAt=String(body.ExpectedUpdatedAt||'');
-      if(expectedUpdatedAt&&String(currentResponse.UpdatedAt||'')!==expectedUpdatedAt)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'پاسخ فرم پس از بازشدن شما تغییر کرده است؛ فرم را دوباره بارگذاری کنید.');
+      if(!isReplay&&expectedUpdatedAt&&String(currentResponse.UpdatedAt||'')!==expectedUpdatedAt)throw ErrorHandler.create(Constants.ERROR.CONFLICT,'پاسخ فرم پس از بازشدن شما تغییر کرده است؛ فرم را دوباره بارگذاری کنید.');
       var now=new Date().toISOString(),oldValues=this._parse(currentResponse.ResponseJSON,{});
-      var updated=FormRepository.updateResponse(currentResponse.ID,{ResponseJSON:cleanJSON,FormVersion:version,UpdatedBy:user.ID,UpdatedAt:now,LastAmendmentEventID:amendment.ID});
+      // Even on replay, finish project-information synchronization: an earlier
+      // request may have saved the response and failed halfway through the sync.
+      var updated=isReplay?currentResponse:FormRepository.updateResponse(currentResponse.ID,{ResponseJSON:cleanJSON,FormVersion:version,UpdatedBy:user.ID,UpdatedAt:now,LastAmendmentEventID:amendment.ID});
       fields.forEach(function(field){
         var type=field.InformationType,key=String(type.ID),next=clean[key],current=ProjectInformationRepository.findAnyByProjectAndType(project.ID,type.ID);
         if(String(type.Code||'').toUpperCase()==='PROJECT_CODE'){if(!FormService._isEmptyValue_(next))ProjectService.updateProjectCodeFromEvent(project.ID,next,amendment.ID,user,true);return;}
         if(FormService._isEmptyValue_(next)){if(current&&String(current.Status||'ACTIVE')==='ACTIVE')ProjectInformationService.deactivate(project.ID,type.ID,params,{SourceEventID:amendment.ID,Reason:'حذف مقدار از طریق اصلاح فرم رویداد مبنا '+event.ID});return;}
         ProjectInformationService.save(project.ID,type.ID,{Value:next,SourceEventID:amendment.ID,Reason:'اصلاح پاسخ فرم رویداد مبنا '+event.ID},params||{});
       });
-      AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.UPDATE,EntityType:'EVENT_FORM_DATA',EntityID:existing.ID,OldData:{EventID:event.ID,Values:oldValues},NewData:{EventID:event.ID,FormID:formId,Values:clean,AmendmentEventID:amendment.ID},Reason:'اصلاح پاسخ فرم از طریق رویداد اصلاحی'});
+      if(!isReplay)AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.UPDATE,EntityType:'EVENT_FORM_DATA',EntityID:existing.ID,OldData:{EventID:event.ID,Values:oldValues},NewData:{EventID:event.ID,FormID:formId,Values:clean,AmendmentEventID:amendment.ID},Reason:'اصلاح پاسخ فرم از طریق رویداد اصلاحی'});
       return Response.success(Object.assign({},updated,{Values:clean,AmendmentEventID:amendment.ID}),{message:'پاسخ فرم با موفقیت اصلاح شد.'});
     } finally {lock.releaseLock();}
   },
