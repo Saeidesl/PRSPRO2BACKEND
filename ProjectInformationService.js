@@ -160,14 +160,16 @@ const ProjectInformationService = {
     current.Value=value;current.HistoryID=history.ID;
     return Response.success(current,{message:'اطلاعات پرونده ذخیره شد.'});
   },
-  deactivate: function(projectId,typeId,params){
-    var user=this._user(params);this._project(projectId,user.TenantID,user);this._type(typeId,user.TenantID);
+  deactivate: function(projectId,typeId,params,options){
+    var user=this._user(params);this._project(projectId,user.TenantID,user);this._type(typeId,user.TenantID);options=options||{};
     var existing=ProjectInformationRepository.findByProjectAndType(projectId,typeId);
     if(!existing)throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'اطلاعات ثبت‌شده پیدا نشد.');
-    var now=new Date().toISOString(),oldValue=this._parse(existing.ValueJSON,null),revision=Number(existing.Revision || 1)+1;
-    var updated=ProjectInformationRepository.update(existing.ID,{Status:'DELETED',Revision:revision,UpdatedBy:user.ID,UpdatedAt:now});
-    var history=ProjectInformationRepository.insertHistory({ID:this._id('PINH'),TenantID:user.TenantID,ProjectInformationID:existing.ID,ProjectID:projectId,InformationTypeID:typeId,Revision:revision,Action:'DELETED',OldValueJSON:JSON.stringify(oldValue),NewValueJSON:'',SourceEventID:'',Reason:'حذف منطقی اطلاعات پرونده',ActorUserID:user.ID,CreatedAt:now});
-    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.DELETE,EntityType:'PROJECT_INFORMATION',EntityID:existing.ID,OldData:existing,NewData:updated,Reason:'حذف منطقی اطلاعات پرونده'});
+    var now=new Date().toISOString(),oldValue=this._parse(existing.ValueJSON,null),revision=Number(existing.Revision || 1)+1,eventId=String(options.SourceEventID||'');
+    if(eventId){var sourceEvent=EventRepository.findById(eventId);if(!sourceEvent||String(sourceEvent.TenantID)!==String(user.TenantID)||String(sourceEvent.ProjectID)!==String(projectId))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'رویداد اصلاح اطلاعات پیدا نشد.');}
+    var updated=ProjectInformationRepository.update(existing.ID,{Status:'DELETED',Revision:revision,UpdatedBy:user.ID,UpdatedAt:now,SourceEventID:eventId||existing.SourceEventID||''});
+    var reason=String(options.Reason||'حذف منطقی اطلاعات پرونده');
+    var history=ProjectInformationRepository.insertHistory({ID:this._id('PINH'),TenantID:user.TenantID,ProjectInformationID:existing.ID,ProjectID:projectId,InformationTypeID:typeId,Revision:revision,Action:'DELETED',OldValueJSON:JSON.stringify(oldValue),NewValueJSON:'',SourceEventID:eventId,Reason:reason,ActorUserID:user.ID,CreatedAt:now});
+    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.DELETE,EntityType:'PROJECT_INFORMATION',EntityID:existing.ID,OldData:existing,NewData:updated,Reason:reason});
     updated.HistoryID=history.ID;
     return Response.success(updated,{message:'اطلاعات پرونده حذف منطقی شد.'});
   },
