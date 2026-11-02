@@ -7,7 +7,7 @@
 
 const APP_CONFIG = {
 
-  VERSION: '1.1.7',
+  VERSION: '1.1.8',
 
   DEFAULT_TENANT: {
     NAME: 'شرکت اصلی',
@@ -126,6 +126,11 @@ const APP_CONFIG = {
     EVENT_FORM_DATA: {
       name: '35_EventFormData',
       headers: ['ID','TenantID','EventID','FormID','FormVersion','ResponseJSON','DefinitionSnapshotJSON','CreatedBy','CreatedAt']
+    },
+
+    PRINT_TEMPLATES: {
+      name: '36_PrintTemplates',
+      headers: ['ID','TenantID','Code','Name','Description','Status','Version','DefinitionJSON','CreatedBy','CreatedAt','UpdatedBy','UpdatedAt']
     },
 
     ATTACHMENTS: {
