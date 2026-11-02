@@ -159,7 +159,7 @@ const APP_CONFIG = {
 
     EVENT_TYPE_PROCUREMENT_SETTINGS: {
       name: '23_EventTypeProcurementSettings',
-      headers: ['ID','TenantID','EventTypeID','Action','FieldMapJSON','Status','CreatedBy','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','EventTypeID','Action','FieldMapJSON','ConfirmedQuantityInformationTypeID','Status','CreatedBy','CreatedAt','UpdatedAt']
     },
 
     MATERIAL_NEEDS: {
