@@ -183,6 +183,13 @@ test('legacy event data is read-only and historical detail lookup remains availa
   assert.doesNotMatch(fields, /insert: function|update: function|delete: function/);
 });
 
+test('legacy field administration and dynamic data write services are removed', () => {
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'EventFieldService.js')), false);
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'EventFieldValidator.js')), false);
+  const dataRepository = fs.readFileSync(path.join(__dirname, '..', 'EventDataRepository.js'), 'utf8');
+  assert.doesNotMatch(dataRepository, /insert: function|update: function/);
+});
+
 test('database retains legacy sheets and appends the central quantity setting column', () => {
   const setup = fs.readFileSync(path.join(__dirname, '..', 'DatabaseSetup.js'), 'utf8');
   assert.match(setup, /name: '12_EventFields'/);
