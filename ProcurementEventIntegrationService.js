@@ -1,207 +1,105 @@
 /**
- * Configurable bridge from dynamic events to procurement records.
- * FieldMap values must be active EventField.Code values for the event type.
+ * Event integration with procurement through central project information.
+ * Purchase orders and receipts remain independent of event integration.
  */
 const ProcurementEventIntegrationService = {
   SHEET: '23_EventTypeProcurementSettings',
-
-  _map_: function(value) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
-    try {
-      var parsed = JSON.parse(String(value || '{}'));
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid');
-      return parsed;
-    } catch (error) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نگاشت فیلدهای تأمین معتبر نیست.');
-    }
-  },
-
   _find_: function(eventTypeId, tenantId) {
     return (GoogleSheetsRepository.getAll(this.SHEET) || []).find(function(row) {
-      return String(row.EventTypeID) === String(eventTypeId) &&
-        String(row.TenantID) === String(tenantId) &&
+      return String(row.EventTypeID) === String(eventTypeId) && String(row.TenantID) === String(tenantId) &&
         String(row.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
     }) || null;
   },
-
-  get: function(eventTypeId, params) {
-    var user = AccessControlService.require(params || {}, 'EVENT_TYPE_MANAGE');
-    var type = EventTypeRepository.findById(eventTypeId);
-    if (!type || String(type.TenantID) !== String(user.TenantID)) {
-      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع رویداد پیدا نشد.');
+  _informationType_: function(typeId, tenantId) {
+    var type = InformationTypeRepository.findById(typeId);
+    if (!type || String(type.TenantID) !== String(tenantId) || String(type.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات مرکزی تعداد قطعی معتبر یا فعال نیست.');
     }
-    var row = this._find_(eventTypeId, user.TenantID);
-    if (!row) return Response.success({ EventTypeID: eventTypeId, Action: 'NONE', FieldMap: {} });
-    var result = Object.assign({}, row);
-    result.FieldMap = this._map_(row.FieldMapJSON);
-    delete result.FieldMapJSON;
+    if (String(type.DataType || '').toLowerCase() !== 'number' || String(type.Cardinality || 'SINGLE').toUpperCase() !== 'SINGLE') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تعداد قطعی باید به نوع اطلاعات مرکزی عددی و تک‌مقداری متصل باشد.');
+    }
+    var columns = InformationTypeRepository.findColumns(type.ID) || [];
+    if (columns.some(function(column) { return String(column.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; })) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات تعداد قطعی نباید ساختار جدولی یا ستون جداگانه داشته باشد.');
+    }
+    return type;
+  },
+  _quantity_: function(value) {
+    if (value === undefined || value === null || String(value).trim() === '') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقدار تعداد قطعی تأییدشده در فرم متصل ثبت نشده است.');
+    }
+    var quantity = Number(value);
+    if (!isFinite(quantity) || quantity <= 0) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تعداد قطعی تأییدشده باید عددی بزرگ‌تر از صفر باشد.');
+    return quantity;
+  },
+  _quantityFromResponses_: function(typeId, responses) {
+    var found = false, value = null;
+    (responses || []).forEach(function(response) {
+      var values = response && response.Values;
+      if (!values || !Object.prototype.hasOwnProperty.call(values, String(typeId))) return;
+      var candidate = values[String(typeId)];
+      if (candidate === undefined || candidate === null || String(candidate).trim() === '') return;
+      if (found) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تعداد قطعی در بیش از یک فرم متصل ثبت شده است؛ فقط یک منبع اطلاعاتی مجاز است.');
+      found = true; value = candidate;
+    });
+    if (!found) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'فرم متصل باید مقدار تعداد قطعی تأییدشده را ثبت کند.');
+    return this._quantity_(value);
+  },
+  get: function(eventTypeId, params) {
+    var user=AccessControlService.require(params || {},'EVENT_TYPE_MANAGE'), type=EventTypeRepository.findById(eventTypeId);
+    if(!type||String(type.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع رویداد پیدا نشد.');
+    var row=this._find_(eventTypeId,user.TenantID);
+    if(!row)return Response.success({EventTypeID:eventTypeId,Action:'NONE',ConfirmedQuantityInformationTypeID:''});
+    var result=Object.assign({},row), action=String(row.Action || 'NONE').toUpperCase();
+    result.Action=action==='RECALCULATE_CONFIRMED_NEEDS'&&String(row.ConfirmedQuantityInformationTypeID || '').trim()?action:'NONE';
+    result.ConfirmedQuantityInformationTypeID=String(row.ConfirmedQuantityInformationTypeID || '');
+    delete result.FieldMap; delete result.FieldMapJSON;
     return Response.success(result);
   },
-
-  save: function(eventTypeId, body, params) {
-    var user = AccessControlService.require(params || {}, 'EVENT_TYPE_MANAGE');
-    var type = EventTypeRepository.findById(eventTypeId);
-    if (!type || String(type.TenantID) !== String(user.TenantID)) {
-      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع رویداد پیدا نشد.');
+  save: function(eventTypeId,body,params) {
+    var user=AccessControlService.require(params || {},'EVENT_TYPE_MANAGE'), type=EventTypeRepository.findById(eventTypeId);
+    if(!type||String(type.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع رویداد پیدا نشد.');
+    body=body||{};
+    var action=String(body.Action || 'NONE').toUpperCase();
+    if(['NONE','RECALCULATE_CONFIRMED_NEEDS'].indexOf(action)<0)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'عملیات تأمین معتبر نیست.');
+    var informationTypeId='';
+    if(action==='RECALCULATE_CONFIRMED_NEEDS'){
+      informationTypeId=String(body.ConfirmedQuantityInformationTypeID || '').trim();
+      if(!informationTypeId)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات مرکزی تعداد قطعی را انتخاب کنید.');
+      this._informationType_(informationTypeId,user.TenantID);
     }
-    body = body || {};
-    var action = String(body.Action || 'NONE').toUpperCase();
-    if (['NONE', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(action) < 0) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین معتبر نیست.');
-    }
-    var map = this._map_(body.FieldMap || body.FieldMapJSON);
-    var required = action === 'RECORD_RECEIPT'
-      ? ['PurchaseOrderItemID', 'QuantityReceived']
-      : (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []);
-    required.forEach(function(key) {
-      if (!map[key] || typeof map[key] !== 'string') {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نگاشت فیلد الزامی است: ' + key);
-      }
-    });
-    var fields = EventFieldRepository.findByEventTypeId(eventTypeId) || [];
-    var codes = {};
-    fields.forEach(function(field) {
-      if (String(field.TenantID) === String(user.TenantID) &&
-          String(field.Status || '').toUpperCase() === 'ACTIVE') codes[String(field.Code)] = true;
-    });
-    Object.keys(map).forEach(function(key) {
-      if (typeof map[key] !== 'string' || !codes[map[key]]) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کد فیلد فعال و معتبری انتخاب کنید: ' + key);
-      }
-    });
-    var now = new Date().toISOString();
-    var existing = this._find_(eventTypeId, user.TenantID);
-    var record = {
-      ID: existing ? existing.ID : 'PSET_' + Utilities.getUuid().replace(/-/g, ''),
-      TenantID: user.TenantID, EventTypeID: eventTypeId, Action: action,
-      FieldMapJSON: JSON.stringify(map), Status: 'ACTIVE',
-      CreatedBy: existing ? existing.CreatedBy : user.ID,
-      CreatedAt: existing ? existing.CreatedAt : now, UpdatedAt: now
-    };
-    var saved = existing
-      ? GoogleSheetsRepository.updateById(this.SHEET, existing.ID, record)
-      : GoogleSheetsRepository.insert(this.SHEET, record);
-    AuditService.log({
-      TenantID: user.TenantID, UserID: user.ID,
-      Action: existing ? 'UPDATE' : 'CREATE',
-      EntityType: 'EVENT_TYPE_PROCUREMENT_SETTINGS', EntityID: record.ID,
-      OldData: existing, NewData: saved
-    });
-    var output = Object.assign({}, saved);
-    output.FieldMap = map;
-    delete output.FieldMapJSON;
+    var now=new Date().toISOString(),existing=this._find_(eventTypeId,user.TenantID);
+    var record={ID:existing?existing.ID:'PSET_'+Utilities.getUuid().replace(/-/g,''),TenantID:user.TenantID,EventTypeID:eventTypeId,Action:action,ConfirmedQuantityInformationTypeID:informationTypeId,Status:'ACTIVE',CreatedBy:existing?existing.CreatedBy:user.ID,CreatedAt:existing?existing.CreatedAt:now,UpdatedAt:now};
+    var saved=existing?GoogleSheetsRepository.updateById(this.SHEET,existing.ID,record):GoogleSheetsRepository.insert(this.SHEET,record);
+    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:existing?'UPDATE':'CREATE',EntityType:'EVENT_TYPE_PROCUREMENT_SETTINGS',EntityID:record.ID,OldData:existing,NewData:saved,Reason:'تنظیم اتصال تعداد قطعی مرکزی به محاسبه نیاز ملزومات'});
+    var output=Object.assign({},saved);delete output.FieldMap;delete output.FieldMapJSON;
     return Response.success(output);
   },
-
-  validate: function(eventType, dynamicData, projectId, params) {
-    var user = AccessControlService.getCurrentUser(params || {});
-    var row = this._find_(eventType.ID, user.TenantID);
-    if (!row || String(row.Action || 'NONE').toUpperCase() === 'NONE') return true;
-    var map = this._map_(row.FieldMapJSON);
-    dynamicData = dynamicData || {};
-    function read(key) {
-      var code = map[key];
-      return code && dynamicData[code] !== undefined && dynamicData[code] !== null
-        ? dynamicData[code] : '';
-    }
-    var action = String(row.Action).toUpperCase();
-    if (['NONE', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(action) < 0) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم قدیمی عملیات تأمین معتبر نیست؛ نوع رویداد را بازتنظیم کنید.');
-    }
-    var required = action === 'RECORD_RECEIPT'
-      ? ['PurchaseOrderItemID', 'QuantityReceived']
-      : (action === 'RECALCULATE_CONFIRMED_NEEDS' ? ['ConfirmedQuantity'] : []);
-    required.forEach(function(key) {
-      var value = read(key);
-      if (String(value === undefined || value === null ? '' : value).trim() === '') {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
-          'برای اجرای عملیات تأمین، مقدار فیلد مربوط به ' + key + ' الزامی است.');
-      }
-    });
-    var quantityKey = action === 'RECALCULATE_CONFIRMED_NEEDS' ? 'ConfirmedQuantity' : 'QuantityReceived';
-    var quantity = Number(read(quantityKey));
-    if (!isFinite(quantity) || quantity <= 0) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تأمین باید عددی بزرگ‌تر از صفر باشد.');
-    }
-    if (action === 'RECALCULATE_CONFIRMED_NEEDS') {
-      if (!projectId) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'محاسبه نیاز قطعی فقط برای رویداد مرتبط با پروژه مجاز است.');
-      }
-      var confirmedProject = ProjectRepository.findById(projectId);
-      if (!confirmedProject || String(confirmedProject.TenantID) !== String(user.TenantID) ||
-          !ProjectService._isProjectAvailableToUser_(confirmedProject, user)) {
-        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه برای محاسبه نیاز قطعی معتبر نیست.');
-      }
-    }
-    // Validate receipt references and remaining quantity before the production
-    // event is persisted. This prevents predictable integration failures from
-    // leaving an event that looks successful without a matching receipt.
-    if (action === 'RECORD_RECEIPT') {
-      var itemId = read('PurchaseOrderItemID');
-      var item = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ITEMS, itemId);
-      if (!item || String(item.TenantID) !== String(user.TenantID)) {
-        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'قلم سفارش برای ثبت دریافت معتبر نیست.');
-      }
-      var order = GoogleSheetsRepository.findById(ProcurementRepository.SHEETS.ORDERS, item.PurchaseOrderID);
-      if (!order || String(order.TenantID) !== String(user.TenantID) ||
-          String(order.Status || '').toUpperCase() === 'CANCELLED') {
-        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'سفارش خرید برای ثبت دریافت معتبر یا فعال نیست.');
-      }
-      var priorReceived = ProcurementRepository.getReceipts(user.TenantID)
-        .filter(function(receipt) {
-          return String(receipt.PurchaseOrderItemID) === String(item.ID);
-        })
-        .reduce(function(sum, receipt) {
-          return sum + (Number(receipt.QuantityReceived) || 0);
-        }, 0);
-      if (priorReceived + quantity > (Number(item.OrderedQuantity) || 0)) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
-          'مقدار دریافت از باقیمانده قلم سفارش بیشتر است.');
-      }
-      var mappedProjectIdForReceipt = projectId || read('ProjectID');
-      if (mappedProjectIdForReceipt) {
-        var receiptProject = ProjectRepository.findById(mappedProjectIdForReceipt);
-        if (!receiptProject || String(receiptProject.TenantID) !== String(user.TenantID)) {
-          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه ثبت دریافت معتبر نیست.');
-        }
-      }
-    }
+  validate: function(eventType,formResponses,projectId,params) {
+    var user=AccessControlService.getCurrentUser(params || {}),row=this._find_(eventType.ID,user.TenantID);
+    // Historical RECORD_RECEIPT mappings are deliberately inert. Receipt APIs remain independent.
+    if(!row||String(row.Action || 'NONE').toUpperCase()!=='RECALCULATE_CONFIRMED_NEEDS')return true;
+    if(!projectId)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'محاسبه نیاز قطعی فقط برای رویداد مرتبط با پروژه مجاز است.');
+    var project=ProjectRepository.findById(projectId);
+    if(!project||String(project.TenantID)!==String(user.TenantID)||!ProjectService._isProjectAvailableToUser_(project,user))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'پروژه برای محاسبه نیاز قطعی معتبر نیست.');
+    var typeId=String(row.ConfirmedQuantityInformationTypeID || '').trim();
+    if(!typeId)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تنظیم اتصال تعداد قطعی به اطلاعات مرکزی کامل نشده است.');
+    this._informationType_(typeId,user.TenantID);
+    this._quantityFromResponses_(typeId,formResponses);
     return true;
   },
-
-  apply: function(eventType, event, dynamicData, params) {
-    var user = AccessControlService.getCurrentUser(params || {});
-    var row = this._find_(eventType.ID, user.TenantID);
-    if (!row || String(row.Action || 'NONE').toUpperCase() === 'NONE') return null;
-    var map = this._map_(row.FieldMapJSON);
-    dynamicData = dynamicData || {};
-    function read(key) {
-      var code = map[key];
-      return code && dynamicData[code] !== undefined && dynamicData[code] !== null
-        ? dynamicData[code] : '';
-    }
-    if (['NONE', 'RECORD_RECEIPT', 'RECALCULATE_CONFIRMED_NEEDS'].indexOf(String(row.Action).toUpperCase()) < 0) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم قدیمی عملیات تأمین معتبر نیست؛ نوع رویداد را بازتنظیم کنید.');
-    }
-    if (String(row.Action).toUpperCase() === 'RECALCULATE_CONFIRMED_NEEDS') {
-      if (!event.ProjectID) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد مبنای تعداد قطعی باید به پروژه متصل باشد.');
-      }
-      return MaterialPlanningService.recalculateProjectNeeds(
-        event.ProjectID, event.ID, read('ConfirmedQuantity'),
-        event.EventTypeVersion || eventType.Version || '', params
-      );
-    }
-    if (String(row.Action).toUpperCase() === 'RECORD_RECEIPT') {
-      return ProcurementService.createReceipt({
-        PurchaseOrderItemID: read('PurchaseOrderItemID'),
-        QuantityReceived: read('QuantityReceived'),
-        ProjectID: event.ProjectID || read('ProjectID') || '',
-        ReceivedAt: event.OccurredAt || '',
-        WarehouseDepartmentID: event.DepartmentID || '',
-        SourceEventID: event.ID, Notes: read('Notes')
-      }, params);
-    }
-    throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'عملیات تأمین پشتیبانی نمی‌شود.');
+  apply: function(eventType,event,params) {
+    var user=AccessControlService.getCurrentUser(params || {}),row=this._find_(eventType.ID,user.TenantID);
+    if(!row||String(row.Action || 'NONE').toUpperCase()!=='RECALCULATE_CONFIRMED_NEEDS')return null;
+    if(!event.ProjectID)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'رویداد مبنای تعداد قطعی باید به پروژه متصل باشد.');
+    var typeId=String(row.ConfirmedQuantityInformationTypeID || '').trim();
+    if(!typeId)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'نوع اطلاعات مرکزی تعداد قطعی در تنظیمات تأمین مشخص نشده است.');
+    this._informationType_(typeId,user.TenantID);
+    var saved=ProjectInformationRepository.findByProjectAndType(event.ProjectID,typeId);
+    if(!saved||String(saved.TenantID)!==String(user.TenantID)||String(saved.SourceEventID || '')!==String(event.ID))throw ErrorHandler.create(Constants.ERROR.CONFLICT,'مقدار تعداد قطعی باید از فرم همین رویداد در اطلاعات مرکزی پروژه ذخیره شده باشد.');
+    var value;
+    try{value=JSON.parse(String(saved.ValueJSON || ''));}catch(error){throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'مقدار تعداد قطعی ذخیره‌شده در اطلاعات مرکزی معتبر نیست.');}
+    var quantity=this._quantity_(value);
+    return MaterialPlanningService.recalculateProjectNeeds(event.ProjectID,event.ID,quantity,event.EventTypeVersion || eventType.Version || '',params);
   }
 };
