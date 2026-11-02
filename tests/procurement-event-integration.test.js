@@ -163,7 +163,9 @@ test('retry reads saved reusable-form responses and central project information,
 test('event integration no longer creates purchase receipts; standard receipt route remains separate', () => {
   const integration = fs.readFileSync(path.join(__dirname, '..', 'ProcurementEventIntegrationService.js'), 'utf8');
   const router = fs.readFileSync(path.join(__dirname, '..', 'Router.js'), 'utf8');
-  assert.doesNotMatch(integration, /RECORD_RECEIPT|ProcurementService\\.createReceipt|_map_:/);
+  assert.equal(integration.includes('RECORD_RECEIPT'), false);
+  assert.equal(integration.includes('ProcurementService.createReceipt'), false);
+  assert.equal(integration.includes('_map_:'), false);
   assert.match(router, /ProcurementService\.createReceipt/);
   assert.match(router, /ProcurementService\.createReceiptsBatch/);
 });
