@@ -261,6 +261,20 @@ const Router = {
       return WorkflowService.get(workflowId, params);
     }
 
+    if (path === '/print-templates') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.list(params);
+    }
+    if (path === '/print-templates/sources') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.sources(params);
+    }
+    const printTemplateGetMatch = path.match(/^\\/print-templates\\/([^/]+)$/);
+    if (printTemplateGetMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.get(decodeURIComponent(printTemplateGetMatch[1]), params);
+    }
+
     if (path === '/forms') {
       this.requireAny(params, ['SYSTEM_SETTINGS', 'EVENT_TYPE_MANAGE']);
       return FormService.list(params);
@@ -489,6 +503,16 @@ const Router = {
 
     if (path === '/auth/login') {
       return AuthService.login(body, params);
+    }
+
+    if (path === '/print-templates') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.create(body, params);
+    }
+    const printTemplateResolveMatch = path.match(/^\\/print-templates\\/([^/]+)\\/resolve$/);
+    if (printTemplateResolveMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return PrintTemplateService.resolve(decodeURIComponent(printTemplateResolveMatch[1]), body, params);
     }
 
     if (path === '/auth/logout') {
@@ -776,6 +800,12 @@ const Router = {
       return InformationTypeService.updateColumn(decodeURIComponent(informationTypeColumnUpdateMatch[1]), decodeURIComponent(informationTypeColumnUpdateMatch[2]), body, params);
     }
 
+    const printTemplateUpdateMatch = path.match(/^\\/print-templates\\/([^/]+)$/);
+    if (printTemplateUpdateMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.update(decodeURIComponent(printTemplateUpdateMatch[1]), body, params);
+    }
+
     const informationTypeUpdateMatch = path.match(/^\/information-types\/([^/]+)$/);
     if (informationTypeUpdateMatch) {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
@@ -863,6 +893,12 @@ const Router = {
     if (informationTypeColumnDeleteMatch) {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
       return InformationTypeService.deactivateColumn(decodeURIComponent(informationTypeColumnDeleteMatch[1]), params);
+    }
+
+    const printTemplateDeleteMatch = path.match(/^\\/print-templates\\/([^/]+)$/);
+    if (printTemplateDeleteMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.deactivate(decodeURIComponent(printTemplateDeleteMatch[1]), params);
     }
 
     const informationTypeDeleteMatch = path.match(/^\/information-types\/([^/]+)$/);
