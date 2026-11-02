@@ -323,6 +323,9 @@ const Router = {
         AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
         return ProcurementEventIntegrationService.get(eventTypeId, params);
       }
+      if (parts[3]) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مسیر مورد نظر پیدا نشد.');
+      }
 
       return EventTypeService.get(eventTypeId, params);
     }
