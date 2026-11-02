@@ -951,19 +951,6 @@ const EventService = {
       }
     }
 
-    const hasDynamicData =
-      Object.prototype.hasOwnProperty.call(event, 'DynamicData');
-
-    let validatedDynamicData = null;
-
-    if (hasDynamicData) {
-      validatedDynamicData = EventDataService.validateDynamicData(
-        eventType.ID,
-        event.DynamicData,
-        user.TenantID
-      );
-    }
-
     // Validate reusable forms before persisting the event. Required form mappings
     // are enforced server-side even if the client omits FormResponses.
     let validatedFormResponses = [];
@@ -1100,14 +1087,9 @@ const EventService = {
     };
 
 
-    // Reject missing/invalid mapped procurement inputs before writing the event.
+    // Validate confirmed quantity using the prepared reusable-form responses.
     if (typeof ProcurementEventIntegrationService !== 'undefined') {
-      ProcurementEventIntegrationService.validate(
-        eventType,
-        validatedDynamicData || {},
-        project ? project.ID : '',
-        requestParams
-      );
+      ProcurementEventIntegrationService.validate(eventType, validatedFormResponses, project ? project.ID : '', requestParams);
     }
 
     const created = EventRepository.insert(newEvent);
@@ -1116,34 +1098,9 @@ const EventService = {
       FormService.saveEventResponses(created, validatedFormResponses, user, requestParams);
     }
 
-    if (hasDynamicData) {
-      const createdData = EventDataRepository.insert({
-        ID: 'ED_' + Utilities.getUuid().replace(/-/g, ''),
-        EventID: created.ID,
-        DataJSON: JSON.stringify(validatedDynamicData),
-        CreatedAt: now
-      });
-
-      AuditService.log({
-        TenantID: user.TenantID,
-        UserID: user.ID,
-        Action: Constants.ACTION.CREATE,
-        EntityType: Constants.ENTITY.EVENT,
-        EntityID: created.ID,
-        OldData: null,
-        NewData: createdData,
-        Reason: 'ثبت اطلاعات پویای رویداد'
-      });
-    }
-
     let procurementIntegration = { status: 'NOT_CONFIGURED' };
     try {
-      procurementIntegration = ProcurementEventIntegrationService.apply(
-        eventType,
-        created,
-        hasDynamicData ? validatedDynamicData : {},
-        requestParams
-      ) || { status: 'NOT_CONFIGURED' };
+      procurementIntegration = ProcurementEventIntegrationService.apply(eventType, created, requestParams) || { status: 'NOT_CONFIGURED' };
     } catch (integrationError) {
       // The production event is already persisted. Record the integration failure
       // explicitly so it is not mistaken for a successful procurement update.
