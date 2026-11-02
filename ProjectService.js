@@ -15,33 +15,6 @@ const ProjectService = {
     return date.toISOString();
   },
 
-  _normalizeColorSizeJSON_: function(value) {
-    if (value === undefined || value === null || String(value).trim() === '') return JSON.stringify({ colors: [], sizes: [] });
-    let parsed;
-    try { parsed = typeof value === 'string' ? JSON.parse(value) : value; }
-    catch (error) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ساختار رنگ‌بندی و سایزبندی معتبر نیست.');
-    }
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.colors) ||
-        !Array.isArray(parsed.sizes) || parsed.colors.length > 100 || parsed.sizes.length > 100) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست رنگ‌ها و سایزها معتبر نیست.');
-    }
-    function clean(list, maxLength) {
-      const seen = {};
-      return list.map(function(item) {
-        const value = String(item || '').trim();
-        if (!value || value.length > maxLength) {
-          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام رنگ یا سایز خالی یا بیش از حد طولانی است.');
-        }
-        const key = value.toLocaleLowerCase();
-        if (seen[key]) return '';
-        seen[key] = true;
-        return value;
-      }).filter(Boolean);
-    }
-    return JSON.stringify({ colors: clean(parsed.colors, 80), sizes: clean(parsed.sizes, 40) });
-  },
-
   projectFormLookups: function(params) {
     const user = AccessControlService.getCurrentUser(params || {});
     const tenantId = String(user.TenantID || '');
@@ -443,7 +416,6 @@ const ProjectService = {
         CurrentStepStatus: '',
         Status: '',
         Quantity: '',
-        ColorSizeJSON: JSON.stringify({ colors: [], sizes: [] }),
         AvailableDepartmentIDs: JSON.stringify([]),
         AllowedUserIDs: JSON.stringify([]),
         NotifyEnabled: true,
@@ -616,8 +588,6 @@ const ProjectService = {
         String(project.Quantity).trim() === ''
           ? ''
           : Number(project.Quantity),
-
-      ColorSizeJSON: this._normalizeColorSizeJSON_(project.ColorSizeJSON),
 
       Description:
         project.Description ||
@@ -852,11 +822,6 @@ const ProjectService = {
       updateData.Title =
         data.Title;
 
-    }
-
-    // رنگ‌بندی و سایزبندی پس از ایجاد پروژه نیز از مسیر ویرایش قابل به‌روزرسانی است.
-    if (data.ColorSizeJSON !== undefined) {
-      updateData.ColorSizeJSON = this._normalizeColorSizeJSON_(data.ColorSizeJSON);
     }
 
     if (data.Quantity !== undefined) {
