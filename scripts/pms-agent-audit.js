@@ -50,7 +50,7 @@ check('CONFIRMED-QUANTITY-VALIDATION', 'Confirmed quantity must be numeric and g
     /!isFinite\(quantity\) \|\| quantity <= 0/,
     /محاسبه نیاز قطعی فقط برای رویداد مرتبط با پروژه مجاز است/,
     /_quantityFromResponses_\(typeId,formResponses\)/,
-    /SourceEventID \|\| ''\) !== String\(event\.ID\)/,
+    /saved\.SourceEventID/,
     /event\.ProjectID,event\.ID,quantity/
   ]));
 check('TENANT-PROJECT-BOUNDARY', 'Material recalculation verifies the source event belongs to the same tenant and project.',
