@@ -73,7 +73,7 @@ const ProcurementEventIntegrationService = {
     var now=new Date().toISOString(),existing=this._find_(eventTypeId,user.TenantID);
     var record={ID:existing?existing.ID:'PSET_'+Utilities.getUuid().replace(/-/g,''),TenantID:user.TenantID,EventTypeID:eventTypeId,Action:action,ConfirmedQuantityInformationTypeID:informationTypeId,Status:'ACTIVE',CreatedBy:existing?existing.CreatedBy:user.ID,CreatedAt:existing?existing.CreatedAt:now,UpdatedAt:now};
     var saved=existing?GoogleSheetsRepository.updateById(this.SHEET,existing.ID,record):GoogleSheetsRepository.insert(this.SHEET,record);
-    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:existing?'UPDATE':'CREATE',EntityType:'EVENT_TYPE_PROCUREMENT_SETTINGS',EntityID:record.ID,OldData:existing,NewData:saved,Reason:'تنظیم اتصال تعداد قطعی مرکزی به محاسبه نیاز ملزومات'});
+    AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:existing?Constants.ACTION.UPDATE:Constants.ACTION.CREATE,EntityType:'EVENT_TYPE_PROCUREMENT_SETTINGS',EntityID:record.ID,OldData:existing,NewData:saved,Reason:'تنظیم اتصال تعداد قطعی مرکزی به محاسبه نیاز ملزومات'});
     var output=Object.assign({},saved);delete output.FieldMap;delete output.FieldMapJSON;
     return Response.success(output);
   },
