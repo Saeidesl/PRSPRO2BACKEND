@@ -99,6 +99,7 @@ const PrintTemplateService = {
     const user = this._user(params);
     data = data || {};
     const existing = this._template(id, user.TenantID);
+    const previous = Object.assign({}, existing);
     PrintTemplateValidator.validateMetadata(data, true);
     if (data.Code !== undefined) {
       const code = String(data.Code).trim();
@@ -120,7 +121,7 @@ const PrintTemplateService = {
     const updated = PrintTemplateRepository.update(id, patch);
     const current = Object.assign({}, existing, patch);
     AuditService.log({ TenantID: user.TenantID, UserID: user.ID, Action: Constants.ACTION.UPDATE,
-      EntityType: 'PRINT_TEMPLATE', EntityID: id, OldData: this._public(existing), NewData: this._public(current),
+      EntityType: 'PRINT_TEMPLATE', EntityID: id, OldData: this._public(previous), NewData: this._public(current),
       Reason: 'ویرایش قالب چاپ مرکزی' });
     return Response.success(this._public(current), { message: 'قالب به‌روزرسانی شد.' });
   },
