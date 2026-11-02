@@ -50,8 +50,12 @@ const PrintTemplateValidator = {
       if (['PROJECT_FIELD','PROJECT_INFORMATION','EVENT_FORM_FIELD','EVENT_FORM_RESPONSE'].indexOf(sourceType) === -1) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع منبع داده پشتیبانی نمی‌شود.');
       }
-      if (sourceType === 'PROJECT_FIELD' && !String(binding.field || '').trim()) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فیلد پروژه برای منبع داده الزامی است.');
+      if (sourceType === 'PROJECT_FIELD') {
+        const projectField = String(binding.field || '').trim();
+        const allowedProjectFields = ['ID','ProjectCode','Title','Description','Status','Quantity','CreatedAt','UpdatedAt','RecordState'];
+        if (allowedProjectFields.indexOf(projectField) === -1) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فیلد پروژه برای منبع داده مجاز نیست.');
+        }
       }
       if (sourceType === 'PROJECT_INFORMATION' && !String(binding.informationTypeId || '').trim()) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه اطلاعات مرکزی الزامی است.');
