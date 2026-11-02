@@ -288,7 +288,7 @@ const Router = {
     }
 
     if (path === '/information-types') {
-      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'EVENT_TYPE_MANAGE']);
       return InformationTypeService.list(params);
     }
 
@@ -317,9 +317,6 @@ const Router = {
 
       if (parts[3] === 'forms') {
         return FormService.listEventTypeForms(eventTypeId, params);
-      }
-      if (parts[3] === 'fields') {
-        return EventFieldService.listByEventType(eventTypeId, params);
       }
 
       if (parts[3] === 'procurement') {
@@ -683,16 +680,6 @@ const Router = {
       return ProcurementEventIntegrationService.save(eventTypeProcurementMatch[1], body, params);
     }
 
-    if (path.indexOf('/event-types/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      const parts = path.split('/');
-
-      if (parts[3] === 'fields') {
-        body.EventTypeID = parts[2];
-        return EventFieldService.create(body, params);
-      }
-    }
-
     if (path === '/events') {
       AccessControlService.require(params, 'EVENT_CREATE');
       return EventService.create(body, params);
@@ -701,11 +688,6 @@ const Router = {
     if (path.indexOf('/events/') === 0) {
       const parts = path.split('/');
       const eventId = parts[2];
-
-      if (parts[3] === 'data') {
-        AccessControlService.require(params, 'EVENT_EDIT');
-        return EventDataService.save(eventId, body, params);
-      }
 
       if (parts[3] === 'attachments') {
         AccessControlService.require(params, 'ATTACHMENT_UPLOAD');
@@ -873,11 +855,6 @@ const Router = {
       return UserService.update(path.split('/')[2], body, params);
     }
 
-    if (path.indexOf('/event-fields/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      return EventFieldService.update(path.split('/')[2], body, params);
-    }
-
     throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مسیر مورد نظر پیدا نشد.');
   },
 
@@ -932,11 +909,6 @@ const Router = {
         adminUser,
         AuthService.getToken_(params)
       );
-    }
-
-    if (path.indexOf('/event-fields/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      return EventFieldService.delete(path.split('/')[2], params);
     }
 
     if (
