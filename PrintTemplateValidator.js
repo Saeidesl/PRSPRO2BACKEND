@@ -60,6 +60,23 @@ const PrintTemplateValidator = {
           !String(binding.formId || '').trim()) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه فرم برای منبع رویداد الزامی است.');
       }
+      if (sourceType === 'EVENT_FORM_FIELD' &&
+          !String(binding.fieldId || binding.informationTypeId || '').trim()) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه فیلد فرم برای منبع داده الزامی است.');
+      }
+      if (sourceType === 'EVENT_FORM_FIELD' || sourceType === 'EVENT_FORM_RESPONSE') {
+        const selection = String(binding.selection || 'LATEST').toUpperCase();
+        if (['LATEST','ALL','EVENT','RESPONSE'].indexOf(selection) === -1) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'روش انتخاب پاسخ فرم معتبر نیست.');
+        }
+        if (selection === 'EVENT' && !String(binding.eventId || '').trim()) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه رویداد برای انتخاب پاسخ الزامی است.');
+        }
+        if (selection === 'RESPONSE' && !String(binding.responseId || '').trim()) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه پاسخ فرم برای انتخاب پاسخ الزامی است.');
+        }
+        binding.selection = selection;
+      }
       seen[id] = true;
       binding.id = id;
       binding.sourceType = sourceType;
