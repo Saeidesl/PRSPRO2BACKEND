@@ -122,7 +122,7 @@ const PrintTemplateService = {
     AuditService.log({ TenantID: user.TenantID, UserID: user.ID, Action: Constants.ACTION.UPDATE,
       EntityType: 'PRINT_TEMPLATE', EntityID: id, OldData: this._public(existing), NewData: this._public(current),
       Reason: 'ویرایش قالب چاپ مرکزی' });
-    return Response.success(this._public(updated ? current : current), { message: 'قالب به‌روزرسانی شد.' });
+    return Response.success(this._public(current), { message: 'قالب به‌روزرسانی شد.' });
   },
   deactivate: function(id, params) {
     const user = this._user(params);
@@ -140,6 +140,9 @@ const PrintTemplateService = {
     const user = this._user(params);
     body = body || {};
     const template = this._template(id, user.TenantID);
+    if (String(template.Status || 'ACTIVE') !== 'ACTIVE') {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'قالب غیرفعال است و قابل استفاده برای تولید سند نیست.');
+    }
     Validator.required(body.ProjectID, 'ProjectID');
     const project = ProjectRepository.findById(body.ProjectID);
     if (!project || String(project.TenantID) !== String(user.TenantID) ||
