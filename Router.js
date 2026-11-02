@@ -269,10 +269,10 @@ const Router = {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
       return PrintTemplateService.sources(params);
     }
-    const printTemplateGetMatch = path.match(/^\\/print-templates\\/([^/]+)$/);
-    if (printTemplateGetMatch) {
+    const printTemplateGetParts = path.split('/');
+    if (printTemplateGetParts.length === 3 && printTemplateGetParts[1] === 'print-templates' && printTemplateGetParts[2]) {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
-      return PrintTemplateService.get(decodeURIComponent(printTemplateGetMatch[1]), params);
+      return PrintTemplateService.get(decodeURIComponent(printTemplateGetParts[2]), params);
     }
 
     if (path === '/forms') {
@@ -509,10 +509,11 @@ const Router = {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
       return PrintTemplateService.create(body, params);
     }
-    const printTemplateResolveMatch = path.match(/^\\/print-templates\\/([^/]+)\\/resolve$/);
-    if (printTemplateResolveMatch) {
+    const printTemplateResolveParts = path.split('/');
+    if (printTemplateResolveParts.length === 4 && printTemplateResolveParts[1] === 'print-templates' &&
+        printTemplateResolveParts[2] && printTemplateResolveParts[3] === 'resolve') {
       AccessControlService.require(params, 'PROJECT_VIEW');
-      return PrintTemplateService.resolve(decodeURIComponent(printTemplateResolveMatch[1]), body, params);
+      return PrintTemplateService.resolve(decodeURIComponent(printTemplateResolveParts[2]), body, params);
     }
 
     if (path === '/auth/logout') {
@@ -800,10 +801,10 @@ const Router = {
       return InformationTypeService.updateColumn(decodeURIComponent(informationTypeColumnUpdateMatch[1]), decodeURIComponent(informationTypeColumnUpdateMatch[2]), body, params);
     }
 
-    const printTemplateUpdateMatch = path.match(/^\\/print-templates\\/([^/]+)$/);
-    if (printTemplateUpdateMatch) {
+    const printTemplateUpdateParts = path.split('/');
+    if (printTemplateUpdateParts.length === 3 && printTemplateUpdateParts[1] === 'print-templates' && printTemplateUpdateParts[2]) {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
-      return PrintTemplateService.update(decodeURIComponent(printTemplateUpdateMatch[1]), body, params);
+      return PrintTemplateService.update(decodeURIComponent(printTemplateUpdateParts[2]), body, params);
     }
 
     const informationTypeUpdateMatch = path.match(/^\/information-types\/([^/]+)$/);
@@ -895,10 +896,10 @@ const Router = {
       return InformationTypeService.deactivateColumn(decodeURIComponent(informationTypeColumnDeleteMatch[1]), params);
     }
 
-    const printTemplateDeleteMatch = path.match(/^\\/print-templates\\/([^/]+)$/);
-    if (printTemplateDeleteMatch) {
+    const printTemplateDeleteParts = path.split('/');
+    if (printTemplateDeleteParts.length === 3 && printTemplateDeleteParts[1] === 'print-templates' && printTemplateDeleteParts[2]) {
       AccessControlService.require(params, 'SYSTEM_SETTINGS');
-      return PrintTemplateService.deactivate(decodeURIComponent(printTemplateDeleteMatch[1]), params);
+      return PrintTemplateService.deactivate(decodeURIComponent(printTemplateDeleteParts[2]), params);
     }
 
     const informationTypeDeleteMatch = path.match(/^\/information-types\/([^/]+)$/);
