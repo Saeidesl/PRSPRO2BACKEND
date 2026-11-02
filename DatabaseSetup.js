@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','RunNumber','SourceProjectID','RecordState']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','RunNumber','SourceProjectID','RecordState']
     },
 
     WORKFLOWS: {
@@ -70,7 +70,7 @@ const APP_CONFIG = {
 
     EVENT_TYPES: {
       name: '11_EventTypes',
-      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion','AllowOnDraft','IsFormAmendment','AmendableFormIDs']
+      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion','AllowOnDraft','IsFormAmendment','AmendableFormIDs']
     },
 
     EVENT_FIELDS: {
