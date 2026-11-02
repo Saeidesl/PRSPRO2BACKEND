@@ -32,7 +32,7 @@ const PrintTemplateService = {
     const user = this._user(params);
     const rows = PrintTemplateRepository.getAll().filter(function(row) {
       return String(row.TenantID) === String(user.TenantID) &&
-        String(row.Status || 'ACTIVE') !== 'DELETED';
+        String(row.Status || 'ACTIVE') === 'ACTIVE';
     }).sort(function(a,b) {
       return String(a.Name || '').localeCompare(String(b.Name || ''), 'fa');
     });
