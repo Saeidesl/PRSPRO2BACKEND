@@ -148,6 +148,26 @@ test('event creation validates forms before insert, saves central information, t
   assert.doesNotMatch(source, /hasDynamicData|validatedDynamicData|DynamicData|EventDataRepository\.insert/);
 });
 
+test('retry reads saved reusable-form responses and central project information, not legacy event data', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
+  const start = source.indexOf('retryProcurementIntegration: function');
+  const end = source.indexOf('\n\n};', start);
+  const retry = source.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(retry, /FormRepository\.findResponsesByEvent\(eventId\)/);
+  assert.match(retry, /ProcurementEventIntegrationService\.validate\(eventType, responses/);
+  assert.match(retry, /ProcurementEventIntegrationService\.apply\(eventType, event, params/);
+  assert.doesNotMatch(retry, /EventDataRepository|dynamicData|DynamicData/);
+});
+
+test('event integration no longer creates purchase receipts; standard receipt route remains separate', () => {
+  const integration = fs.readFileSync(path.join(__dirname, '..', 'ProcurementEventIntegrationService.js'), 'utf8');
+  const router = fs.readFileSync(path.join(__dirname, '..', 'Router.js'), 'utf8');
+  assert.doesNotMatch(integration, /RECORD_RECEIPT|ProcurementService\.createReceipt|FieldMap/);
+  assert.match(router, /ProcurementService\.createReceipt/);
+  assert.match(router, /ProcurementService\.createReceiptsBatch/);
+});
+
 test('legacy event data is read-only and historical detail lookup remains available', () => {
   const router = fs.readFileSync(path.join(__dirname, '..', 'Router.js'), 'utf8');
   const service = fs.readFileSync(path.join(__dirname, '..', 'EventDataService.js'), 'utf8');
