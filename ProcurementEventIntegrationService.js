@@ -77,7 +77,7 @@ const ProcurementEventIntegrationService = {
   },
   validate: function(eventType,formResponses,projectId,params) {
     var user=AccessControlService.getCurrentUser(params || {}),row=this._find_(eventType.ID,user.TenantID);
-    // Historical RECORD_RECEIPT mappings are deliberately inert. Receipt APIs remain independent.
+    // Legacy receipt mappings are deliberately inert. Receipt APIs remain independent.
     if(!row||String(row.Action || 'NONE').toUpperCase()!=='RECALCULATE_CONFIRMED_NEEDS')return true;
     if(!projectId)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'محاسبه نیاز قطعی فقط برای رویداد مرتبط با پروژه مجاز است.');
     var project=ProjectRepository.findById(projectId);
