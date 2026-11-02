@@ -262,7 +262,7 @@ const Router = {
     }
 
     if (path === '/print-templates') {
-      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'PROJECT_VIEW']);
       return PrintTemplateService.list(params);
     }
     if (path === '/print-templates/sources') {
@@ -271,7 +271,7 @@ const Router = {
     }
     const printTemplateGetParts = path.split('/');
     if (printTemplateGetParts.length === 3 && printTemplateGetParts[1] === 'print-templates' && printTemplateGetParts[2]) {
-      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'PROJECT_VIEW']);
       return PrintTemplateService.get(decodeURIComponent(printTemplateGetParts[2]), params);
     }
 
