@@ -46,7 +46,8 @@ const ProcurementEventIntegrationService = {
     return this._quantity_(value);
   },
   get: function(eventTypeId, params) {
-    var user=AccessControlService.require(params || {},'EVENT_TYPE_MANAGE'), type=EventTypeRepository.findById(eventTypeId);
+    AccessControlService.require(params || {},'EVENT_TYPE_MANAGE');
+    var user=AccessControlService.getCurrentUser(params || {}), type=EventTypeRepository.findById(eventTypeId);
     if(!type||String(type.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع رویداد پیدا نشد.');
     var row=this._find_(eventTypeId,user.TenantID);
     if(!row)return Response.success({EventTypeID:eventTypeId,Action:'NONE',ConfirmedQuantityInformationTypeID:''});
@@ -57,7 +58,8 @@ const ProcurementEventIntegrationService = {
     return Response.success(result);
   },
   save: function(eventTypeId,body,params) {
-    var user=AccessControlService.require(params || {},'EVENT_TYPE_MANAGE'), type=EventTypeRepository.findById(eventTypeId);
+    AccessControlService.require(params || {},'EVENT_TYPE_MANAGE');
+    var user=AccessControlService.getCurrentUser(params || {}), type=EventTypeRepository.findById(eventTypeId);
     if(!type||String(type.TenantID)!==String(user.TenantID))throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'نوع رویداد پیدا نشد.');
     body=body||{};
     var action=String(body.Action || 'NONE').toUpperCase();
