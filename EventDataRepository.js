@@ -32,24 +32,4 @@ const EventDataRepository = {
   },
 
 
-  insert: function(data) {
-
-    return GoogleSheetsRepository.insert(
-      this.SHEET_NAME,
-      data
-    );
-
-  },
-
-
-  update: function(id, data) {
-
-    return GoogleSheetsRepository.updateById(
-      this.SHEET_NAME,
-      id,
-      data
-    );
-
-  }
-
 };
