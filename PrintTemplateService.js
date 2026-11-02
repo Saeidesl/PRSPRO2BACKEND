@@ -219,7 +219,7 @@ const PrintTemplateService = {
         else value = matching.length ? pickValue(matching[matching.length - 1]) : null;
       }
       resolved[String(binding.id)] = value;
-    });
+    }, this);
     return Response.success({
       template: { ID: template.ID, Code: template.Code, Name: template.Name, Version: Number(template.Version || 1) },
       project: { ID: project.ID, ProjectCode: project.ProjectCode || '', Title: project.Title || '' },
