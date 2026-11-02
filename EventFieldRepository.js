@@ -62,27 +62,5 @@ const EventFieldRepository = {
 
   existsByCode: function(eventTypeId, code) {
     return !!this.findByCode(eventTypeId, code);
-  },
-
-  _invalidateCache: function() {
-    this.resetRequestCache();
-  },
-
-  insert: function(field) {
-    var result = GoogleSheetsRepository.insert(this.SHEET_NAME, field);
-    this._invalidateCache();
-    return result;
-  },
-
-  update: function(id, data) {
-    var result = GoogleSheetsRepository.updateById(this.SHEET_NAME, id, data);
-    this._invalidateCache();
-    return result;
-  },
-
-  delete: function(id) {
-    var result = GoogleSheetsRepository.deleteById(this.SHEET_NAME, id);
-    this._invalidateCache();
-    return result;
   }
 };
