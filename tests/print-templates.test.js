@@ -24,7 +24,7 @@ function loadPrintTemplates() {
       insert: row => { templates.push(row); return row; },
       update: (id, patch) => { const row=templates.find(item=>String(item.ID)===String(id)); if(row)Object.assign(row,patch); return row; }
     },
-    ProjectRepository: { findById: () => ({ID:'P1',TenantID:'T1',ProjectCode:'PR-1',Title:'پروژه آزمایشی',Status:'ACTIVE'}) },
+    ProjectRepository: { findById: id => String(id)==='P1' ? ({ID:'P1',TenantID:'T1',ProjectCode:'PR-1',Title:'پروژه آزمایشی',Status:'ACTIVE'}) : null },
     ProjectService: { _isProjectAvailableToUser_: () => true },
     InformationTypeRepository: {
       findByTenant: () => [{ID:'I1',TenantID:'T1',Code:'MODEL',Name:'نام مدل',DataType:'text',Cardinality:'SINGLE',Status:'ACTIVE'}],
@@ -119,8 +119,7 @@ test('resolve rejects projects outside the current tenant or access boundary',()
   const h=loadPrintTemplates();
   const created=h.service.create({Code:'SECURE',Name:'قالب امن',Definition:{bindings:[]}}, {});
   h.service._user=()=>({ID:'U1',TenantID:'T1'});
-  const context=vm.runInNewContext;
-  assert.throws(()=>h.service.resolve(created.data.ID,{ProjectID:'OTHER'},{}),/پیدا نشد/);
+    assert.throws(()=>h.service.resolve(created.data.ID,{ProjectID:'OTHER'},{}),/پیدا نشد/);
 });
 
 test('source catalog exposes active tenant information types and reusable forms',()=>{
