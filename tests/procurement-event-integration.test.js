@@ -55,7 +55,7 @@ function loadIntegration(overrides = {}) {
     },
     Utilities: { getUuid: () => 'uuid-1' },
     Response: { success: data => ({ data }) },
-    Constants: { ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR', NOT_FOUND: 'NOT_FOUND', CONFLICT: 'CONFLICT' } },
+    Constants: { ACTION: { CREATE: 'CREATE', UPDATE: 'UPDATE' }, ERROR: { VALIDATION_ERROR: 'VALIDATION_ERROR', NOT_FOUND: 'NOT_FOUND', CONFLICT: 'CONFLICT' } },
     ErrorHandler: { create: (_code, message) => new Error(message) },
     AuditService: { log: () => true },
     Date, Math, Number, String, Object, Array, JSON, isFinite
