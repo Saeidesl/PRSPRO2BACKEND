@@ -148,6 +148,13 @@ test('event creation validates forms before insert, saves central information, t
   assert.doesNotMatch(source, /hasDynamicData|validatedDynamicData|DynamicData|EventDataRepository\.insert/);
 });
 
+test('saving reusable form responses writes the current event ID into central project information history', () => {
+  const forms = fs.readFileSync(path.join(__dirname, '..', 'FormService.js'), 'utf8');
+  assert.match(forms, /SourceEventID: event\.ID/);
+  assert.match(forms, /ProjectInformationService\.save\(event\.ProjectID, typeId/);
+  assert.match(forms, /FormRepository\.insertResponse\(row\)/);
+});
+
 test('retry reads saved reusable-form responses and central project information, not legacy event data', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'EventService.js'), 'utf8');
   const start = source.indexOf('retryProcurementIntegration: function');
