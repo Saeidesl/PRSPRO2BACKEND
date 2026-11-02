@@ -45,8 +45,8 @@ const EventTypeService = {
 
     result.AllowVoid =
       this._toBoolean_(result.AllowVoid);
-    result.UseProjectColors = this._toBoolean_(result.UseProjectColors);
-    result.UseProjectSizes = this._toBoolean_(result.UseProjectSizes);
+    delete result.UseProjectColors;
+    delete result.UseProjectSizes;
     result.TrackVariantQuantity = this._toBoolean_(result.TrackVariantQuantity);
     result.IsWorkCompletion = this._toBoolean_(result.IsWorkCompletion);
     result.AllowOnDraft = this._toBoolean_(result.AllowOnDraft);
@@ -73,8 +73,6 @@ const EventTypeService = {
       'MovesProjectToStep',
       'AllowAttachments',
       'AllowVoid',
-      'UseProjectColors',
-      'UseProjectSizes',
       'TrackVariantQuantity',
       'IsWorkCompletion',
       'AllowOnDraft',
@@ -450,8 +448,6 @@ const EventTypeService = {
         data.AvailableDepartmentIDs
       ),
       AllowVoid: this._toBoolean_(data.AllowVoid),
-      UseProjectColors: this._toBoolean_(data.UseProjectColors),
-      UseProjectSizes: this._toBoolean_(data.UseProjectSizes),
       TrackVariantQuantity: this._toBoolean_(data.TrackVariantQuantity),
       AllowOnDraft: this._toBoolean_(data.AllowOnDraft),
       IsFormAmendment: this._toBoolean_(data.IsFormAmendment),
@@ -544,7 +540,9 @@ const EventTypeService = {
       if (
         key !== 'ID' &&
         key !== 'TenantID' &&
-        key !== 'CreatedAt'
+        key !== 'CreatedAt' &&
+        key !== 'UseProjectColors' &&
+        key !== 'UseProjectSizes'
       ) {
         updateData[key] = data[key];
       }

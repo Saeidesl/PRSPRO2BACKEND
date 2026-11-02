@@ -983,64 +983,66 @@ const EventService = {
       }
     }
 
-    const useProjectColors = EventTypeService._toBoolean_(eventType.UseProjectColors);
-    const useProjectSizes = EventTypeService._toBoolean_(eventType.UseProjectSizes);
     const trackVariantQuantity = EventTypeService._toBoolean_(eventType.TrackVariantQuantity);
     let selectedColor = '';
     let selectedSize = '';
     let variantQuantity = '';
     let validatedVariants = [];
 
-    if (useProjectColors || useProjectSizes || trackVariantQuantity) {
-      if (!project) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت رنگ، سایز یا مقدار ترکیب فقط برای رویداد مرتبط با پروژه امکان‌پذیر است.');
-      let projectVariants = { colors: [], sizes: [] };
-      try {
-        const parsed = JSON.parse(String(project.ColorSizeJSON || '{"colors":[],"sizes":[]}'));
-        if (parsed && typeof parsed === 'object') {
-          projectVariants.colors = Array.isArray(parsed.colors) ? parsed.colors.map(String) : [];
-          projectVariants.sizes = Array.isArray(parsed.sizes) ? parsed.sizes.map(String) : [];
-        }
-      } catch (error) {}
+    const hasVariantRows = Array.isArray(event.VariantDetails) && event.VariantDetails.length > 0;
+    const hasSingleVariant = event.Color || event.Size ||
+      (event.VariantQuantity !== undefined && event.VariantQuantity !== null &&
+       String(event.VariantQuantity).trim() !== '');
+    const submittedVariants = hasVariantRows
+      ? event.VariantDetails
+      : (hasSingleVariant ? [{
+          Color: event.Color,
+          Size: event.Size,
+          VariantQuantity: event.VariantQuantity
+        }] : []);
 
-      const submittedVariants = Array.isArray(event.VariantDetails) && event.VariantDetails.length
-        ? event.VariantDetails
-        : [{ Color: event.Color, Size: event.Size, VariantQuantity: event.VariantQuantity }];
-      if (submittedVariants.length > 500) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'در هر رویداد حداکثر ۵۰۰ ردیف رنگ و سایز قابل ثبت است.');
+    if (trackVariantQuantity && !project) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت مقدار تولید/تحویل فقط برای رویداد مرتبط با پروژه امکان‌پذیر است.');
+    }
+    if (submittedVariants.length > 500) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'در هر رویداد حداکثر ۵۰۰ ردیف اطلاعات ترکیب قابل ثبت است.');
+    }
+    if (trackVariantQuantity && !submittedVariants.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تولید/تحویل را وارد کنید.');
+    }
+    if (submittedVariants.length) {
+      if (!project) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت مشخصات رنگ و سایز فقط برای رویداد مرتبط با پروژه امکان‌پذیر است.');
       }
       const seenVariants = Object.create(null);
       validatedVariants = submittedVariants.map(function(row) {
         row = row || {};
         const color = String(row.Color || '').trim();
         const size = String(row.Size || '').trim();
+        if (color.length > 80 || size.length > 40) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'طول نام رنگ یا سایز بیش از حد مجاز است.');
+        }
         let quantity = '';
-        if (useProjectColors) {
-          if (!color || projectVariants.colors.indexOf(color) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رنگ انتخاب‌شده در مشخصات همین پروژه وجود ندارد.');
-        } else if (color) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت رنگ پروژه را ندارد.');
-        if (useProjectSizes) {
-          if (!size || projectVariants.sizes.indexOf(size) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سایز انتخاب‌شده در مشخصات همین پروژه وجود ندارد.');
-        } else if (size) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت سایز پروژه را ندارد.');
         if (trackVariantQuantity) {
-          const q = Number(row.VariantQuantity);
-          if (row.VariantQuantity === undefined || row.VariantQuantity === null || String(row.VariantQuantity).trim() === '' || !isFinite(q) || q < 1 || Math.floor(q) !== q) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تولید هر ترکیب باید عدد صحیح بزرگ‌تر از صفر باشد.');
-          quantity = q;
+          const rawQuantity = row.VariantQuantity;
+          const parsedQuantity = Number(rawQuantity);
+          if (rawQuantity === undefined || rawQuantity === null ||
+              String(rawQuantity).trim() === '' || !isFinite(parsedQuantity) ||
+              parsedQuantity < 1 || Math.floor(parsedQuantity) !== parsedQuantity) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تولید/تحویل باید عدد صحیح بزرگ‌تر از صفر باشد.');
+          }
+          quantity = parsedQuantity;
         } else if (row.VariantQuantity !== undefined && String(row.VariantQuantity).trim() !== '') {
-          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت مقدار ترکیب را ندارد.');
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت مقدار تولید/تحویل را ندارد.');
         }
         const key = JSON.stringify([color, size]);
-        if (seenVariants[key]) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ترکیب رنگ و سایز تکراری است؛ هر ترکیب را فقط یک‌بار وارد کنید.');
+        if (seenVariants[key]) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'اطلاعات تکراری رنگ و سایز در یک رویداد مجاز نیست.');
         seenVariants[key] = true;
         return { Color: color, Size: size, VariantQuantity: quantity };
       });
       selectedColor = validatedVariants[0].Color || '';
       selectedSize = validatedVariants[0].Size || '';
       variantQuantity = validatedVariants[0].VariantQuantity;
-    } else if (
-      event.Color || event.Size ||
-      (event.VariantQuantity !== undefined && String(event.VariantQuantity).trim() !== '') ||
-      (Array.isArray(event.VariantDetails) && event.VariantDetails.length)
-    ) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد برای ثبت رنگ، سایز یا مقدار ترکیب تنظیم نشده است.');
     }
 
     const projectChanges = project
