@@ -1001,6 +1001,7 @@ const EventService = {
         );
       }
       this._checkProjectAvailability_(project, user);
+      this._validateWorkflowEvent_(project, eventType, user.TenantID);
       if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT' &&
           !EventTypeService._toBoolean_(eventType.AllowOnDraft)) {
         throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این نوع رویداد برای ثبت روی پیش‌نویس مجاز نشده است.');
@@ -1186,6 +1187,9 @@ const EventService = {
       IdempotencyKey: String(event.IdempotencyKey || '').trim(),
       IdempotencyStatus: String(event.IdempotencyKey || '').trim() ? 'PROCESSING' : '',
       ProjectID: project ? project.ID : '',
+      WorkflowID: project ? (project.WorkflowID || '') : '',
+      WorkflowVersion: project ? Number(project.WorkflowVersion || 0) : 0,
+      WorkflowStepID: project ? (project.CurrentStepID || '') : '',
       EventTypeID: eventType.ID,
       EventTypeVersion: eventType.Version || 1,
       PerformedBy: performedBy,
