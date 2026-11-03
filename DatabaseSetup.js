@@ -60,7 +60,7 @@ const APP_CONFIG = {
 
     WORKFLOWS: {
       name: '09_Workflows',
-      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt','WorkflowType','LifecycleState','PublishedVersion','DraftVersion','RepeatReferencePolicyJSON']
+      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt','WorkflowType','LifecycleState','PublishedVersion','DraftVersion','RepeatReferencePolicyJSON','PublishedRepeatReferencePolicyJSON']
     },
 
     WORKFLOW_STEPS: {
