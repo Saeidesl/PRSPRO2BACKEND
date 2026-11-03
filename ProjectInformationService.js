@@ -266,8 +266,9 @@ const ProjectInformationService = {
       var previous=successfulLogs[0] || null;
       var targetRevision=targetInfo?Number(targetInfo.Revision||0):0;
       var expectedRevision=previous ? Number(previous.TargetRevision||0) : 0;
-      if((previous && String(previous.Action)==='SYNCED' && targetRevision!==expectedRevision) || (!previous && targetInfo && String(targetInfo.Status||'ACTIVE')==='ACTIVE')){
-        var conflict={reason:'TARGET_CHANGED_LOCALLY',expectedRevision:expectedRevision,currentRevision:targetRevision,sourceRevision:Number(sourceInfo.Revision||0)};
+      var localReferenceWasKept = previous && String(previous.Action)==='CONFLICT_RESOLVED_LOCAL';
+      if(localReferenceWasKept || (previous && targetRevision!==expectedRevision) || (!previous && targetInfo && String(targetInfo.Status||'ACTIVE')==='ACTIVE')){
+        var conflict={reason:localReferenceWasKept?'LOCAL_REFERENCE_KEPT':'TARGET_CHANGED_LOCALLY',expectedRevision:expectedRevision,currentRevision:targetRevision,sourceRevision:Number(sourceInfo.Revision||0)};
         ProjectInformationRepository.insertSyncLog({ID:this._id('PRSL'),TenantID:user.TenantID,SourceProjectID:sourceProject.ID,TargetProjectID:target.ID,InformationTypeID:type.ID,Policy:policy,SourceRevision:sourceInfo.Revision,TargetRevision:targetRevision,Action:'CONFLICT',ConflictJSON:JSON.stringify(conflict),IdempotencyKey:idempotencyKey,ActorUserID:user.ID,CreatedAt:now});
         outcomes.push({targetProjectId:target.ID,status:'CONFLICT'});return;
       }
