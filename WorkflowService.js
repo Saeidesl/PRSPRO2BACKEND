@@ -11,7 +11,12 @@ const WorkflowService = {
     const departments = DepartmentRepository.getAll().filter(function(item) {
       return String(item.TenantID) === tenantId;
     });
-    return Response.success({ workflows: workflows, departments: departments });
+    const eventTypes = EventTypeRepository.getAll().filter(function(row) {
+      return String(row.TenantID) === tenantId && String(row.Status || '').toUpperCase() === 'ACTIVE' && String(row.ConnectionType || 'PROJECT').toUpperCase() === 'PROJECT';
+    }).map(function(row) {
+      return { ID: row.ID, Name: row.Name, Code: row.Code, Category: row.Category || '' };
+    });
+    return Response.success({ workflows: workflows, departments: departments, eventTypes: eventTypes });
   },
 
   managementData: function(workflowId, params) {
@@ -22,11 +27,14 @@ const WorkflowService = {
     if (!workflow || String(workflow.TenantID) !== tenantId) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
     }
+    const version = Number(workflow.DraftVersion || workflow.PublishedVersion || workflow.Version || 1);
     const steps = WorkflowStepRepository.findByWorkflowId(workflowId).filter(function(item) {
-      return String(item.TenantID) === tenantId;
+      return String(item.TenantID) === tenantId && Number(item.WorkflowVersion || 1) <= version;
     });
+    const visibleStepIds = Object.create(null);
+    steps.forEach(function(item) { visibleStepIds[String(item.ID)] = true; });
     const assignments = WorkflowStepDepartmentRepository.findByWorkflowId(workflowId).filter(function(item) {
-      return String(item.TenantID) === tenantId && String(item.Status).toUpperCase() === 'ACTIVE';
+      return String(item.TenantID) === tenantId && String(item.Status).toUpperCase() === 'ACTIVE' && visibleStepIds[String(item.WorkflowStepID)];
     });
     return Response.success({ steps: steps, assignments: assignments });
   },
@@ -93,16 +101,12 @@ const WorkflowService = {
 
     }
 
-    const steps =
-      WorkflowStepRepository.findByWorkflowId(id);
-
-    const tenantSteps =
-      steps.filter(function(step) {
-
-        return String(step.TenantID) ===
-          String(user.TenantID);
-
-      });
+    const requestedVersion = Number(workflow.DraftVersion || workflow.PublishedVersion || workflow.Version || 1);
+    const steps = WorkflowStepRepository.findByWorkflowId(id);
+    const tenantSteps = steps.filter(function(step) {
+      return String(step.TenantID) === String(user.TenantID) &&
+        Number(step.WorkflowVersion || 1) <= requestedVersion;
+    });
 
     return Response.success({
       workflow: workflow,
@@ -179,6 +183,11 @@ const WorkflowService = {
       Version:
         data.Version ||
         1,
+
+      WorkflowType: String(data.WorkflowType || 'INITIAL').toUpperCase(),
+      LifecycleState: 'DRAFT',
+      PublishedVersion: '',
+      DraftVersion: Number(data.Version || 1),
 
       Status:
         data.Status ||
@@ -282,6 +291,14 @@ const WorkflowService = {
 
     const updateData = {};
 
+    if (data.WorkflowType !== undefined) {
+      const workflowType = String(data.WorkflowType || '').toUpperCase();
+      if (['INITIAL', 'REPEAT'].indexOf(workflowType) === -1) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع گردش‌کار معتبر نیست.');
+      }
+      updateData.WorkflowType = workflowType;
+    }
+
     Object.keys(data).forEach(function(key) {
 
       if (
@@ -359,18 +376,12 @@ const WorkflowService = {
 
     }
 
-    const steps =
-      WorkflowStepRepository.findByWorkflowId(
-        workflowId
-      );
-
-    const tenantSteps =
-      steps.filter(function(step) {
-
-        return String(step.TenantID) ===
-          String(user.TenantID);
-
-      });
+    const requestedVersion = Number(workflow.DraftVersion || workflow.PublishedVersion || workflow.Version || 1);
+    const steps = WorkflowStepRepository.findByWorkflowId(workflowId);
+    const tenantSteps = steps.filter(function(step) {
+      return String(step.TenantID) === String(user.TenantID) &&
+        Number(step.WorkflowVersion || 1) <= requestedVersion;
+    });
 
     return Response.success({
       items: tenantSteps,
@@ -480,8 +491,19 @@ const WorkflowService = {
         ? Number(data.StepOrder)
         : existingSteps.length + 1;
 
-    const now =
-      new Date().toISOString();
+    const now = new Date().toISOString();
+    const isPublished = String(workflow.LifecycleState || '').toUpperCase() === 'PUBLISHED';
+    const publishedVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+    const workflowVersion = Number(workflow.DraftVersion || (isPublished ? publishedVersion + 1 : workflow.Version || 1));
+
+    if (isPublished && !workflow.DraftVersion) {
+      WorkflowStepEventRuleRepository.cloneWorkflowVersion(workflowId, publishedVersion, workflowVersion, user.TenantID);
+      WorkflowRepository.update(workflowId, {
+        DraftVersion: workflowVersion,
+        LifecycleState: 'DRAFT',
+        UpdatedAt: now
+      });
+    }
 
     const step = {
 
@@ -504,6 +526,8 @@ const WorkflowService = {
 
       StepOrder:
         stepOrder,
+
+      WorkflowVersion: workflowVersion,
 
       Status:
         data.Status ||
@@ -530,6 +554,148 @@ const WorkflowService = {
       }
     );
 
+  },
+
+  getStepEventRules: function(workflowId, stepId, params) {
+    Validator.id(workflowId, 'WorkflowID');
+    Validator.id(stepId, 'WorkflowStepID');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const workflow = WorkflowRepository.findById(workflowId);
+    const step = WorkflowStepRepository.findById(stepId);
+    if (!workflow || !step ||
+        String(workflow.TenantID) !== String(user.TenantID) ||
+        String(step.TenantID) !== String(user.TenantID) ||
+        String(step.WorkflowID) !== String(workflowId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مرحله گردش‌کار پیدا نشد.');
+    }
+    const requestedVersion = Number((params || {}).WorkflowVersion || (params || {}).version ||
+      workflow.DraftVersion || workflow.PublishedVersion || workflow.Version || 1);
+    const rules = WorkflowStepEventRuleRepository.findByStepAndVersion(stepId, requestedVersion)
+      .filter(function(rule) { return String(rule.TenantID) === String(user.TenantID) && String(rule.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+    return Response.success({ workflowId: workflowId, workflowVersion: requestedVersion, stepId: stepId, items: rules, total: rules.length });
+  },
+
+  saveStepEventRules: function(workflowId, stepId, data, params) {
+    Validator.id(workflowId, 'WorkflowID');
+    Validator.id(stepId, 'WorkflowStepID');
+    if (!data || !Array.isArray(data.rules)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست قواعد رویداد ارسال نشده است.');
+    }
+    const user = AccessControlService.getCurrentUser(params || {});
+    const workflow = WorkflowRepository.findById(workflowId);
+    const step = WorkflowStepRepository.findById(stepId);
+    if (!workflow || !step ||
+        String(workflow.TenantID) !== String(user.TenantID) ||
+        String(step.TenantID) !== String(user.TenantID) ||
+        String(step.WorkflowID) !== String(workflowId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مرحله گردش‌کار پیدا نشد.');
+    }
+    if (data.rules.length > 100) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای هر مرحله حداکثر ۱۰۰ قاعده رویداد مجاز است.');
+    }
+    const isPublished = String(workflow.LifecycleState || '').toUpperCase() === 'PUBLISHED';
+    const publishedVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+    const version = Number(workflow.DraftVersion || (isPublished ? publishedVersion + 1 : workflow.Version || 1));
+    if (data.WorkflowVersion !== undefined && Number(data.WorkflowVersion) !== version) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نسخه درخواستی با نسخه پیش‌نویس معتبر گردش‌کار مطابقت ندارد.');
+    }
+    const normalizedRules = WorkflowStepEventRuleValidator.validate(data.rules);
+    normalizedRules.forEach(function(rule) {
+      const eventType = EventTypeRepository.findById(rule.EventTypeID);
+      if (!eventType || String(eventType.TenantID) !== String(user.TenantID) ||
+          String(eventType.Status || '').toUpperCase() !== 'ACTIVE' ||
+          String(eventType.ConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT') {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'یکی از انواع رویداد انتخاب‌شده معتبر یا فعال نیست.');
+      }
+    });
+    if (isPublished && !workflow.DraftVersion) {
+      WorkflowStepEventRuleRepository.cloneWorkflowVersion(
+        workflowId, publishedVersion, version, user.TenantID
+      );
+    }
+    const now = new Date().toISOString();
+    const stored = normalizedRules.map(function(rule) {
+      return Object.assign({}, rule, {
+        ID: 'WFER_' + Utilities.getUuid().replace(/-/g, ''),
+        TenantID: user.TenantID,
+        WorkflowID: workflowId,
+        WorkflowVersion: version,
+        WorkflowStepID: stepId,
+        Status: 'ACTIVE',
+        CreatedAt: now,
+        UpdatedAt: now
+      });
+    });
+    WorkflowStepEventRuleRepository.replaceForStepVersion(workflowId, stepId, version, user.TenantID, stored);
+    const workflowPatch = {};
+    if (String(workflow.LifecycleState || '').toUpperCase() === 'PUBLISHED') {
+      workflowPatch.DraftVersion = version;
+      workflowPatch.LifecycleState = 'DRAFT';
+    } else if (!workflow.DraftVersion) {
+      workflowPatch.DraftVersion = version;
+      workflowPatch.LifecycleState = 'DRAFT';
+    }
+    if (Object.keys(workflowPatch).length) {
+      workflowPatch.UpdatedAt = now;
+      WorkflowRepository.update(workflowId, workflowPatch);
+    }
+    AuditService.log({
+      TenantID: user.TenantID, UserID: user.ID,
+      Action: 'WORKFLOW_STEP_EVENT_RULES_UPDATED',
+      EntityType: 'WORKFLOW_STEP', EntityID: stepId,
+      NewData: { WorkflowID: workflowId, WorkflowVersion: version, Rules: stored },
+      Reason: 'به‌روزرسانی قواعد رویداد مرحله گردش‌کار'
+    });
+    return Response.success({ workflowId: workflowId, workflowVersion: version, stepId: stepId, items: stored, total: stored.length },
+      { message: 'قواعد رویداد مرحله ذخیره شد.' });
+  },
+
+  publish: function(workflowId, params) {
+    Validator.id(workflowId, 'WorkflowID');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const workflow = WorkflowRepository.findById(workflowId);
+    if (!workflow || String(workflow.TenantID) !== String(user.TenantID)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
+    }
+    const steps = WorkflowStepRepository.findByWorkflowId(workflowId).filter(function(step) {
+      return String(step.TenantID) === String(user.TenantID) &&
+        String(step.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    });
+    if (!steps.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای انتشار گردش‌کار حداقل یک مرحله فعال لازم است.');
+    }
+    const version = Number(workflow.DraftVersion || workflow.Version || 1);
+    const eventTypes = EventTypeRepository.getAll().filter(function(item) {
+      return String(item.TenantID) === String(user.TenantID) && String(item.Status).toUpperCase() === 'ACTIVE';
+    });
+    const validEventTypeIds = Object.create(null);
+    eventTypes.forEach(function(item) { validEventTypeIds[String(item.ID)] = true; });
+    const activeRules = WorkflowStepEventRuleRepository.findByWorkflowVersion(workflowId, version)
+      .filter(function(rule) { return String(rule.TenantID) === String(user.TenantID) && String(rule.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+    activeRules.forEach(function(rule) {
+      if (!validEventTypeIds[String(rule.EventTypeID)] ||
+          !steps.some(function(step) { return String(step.ID) === String(rule.WorkflowStepID); })) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'قواعد گردش‌کار شامل مرحله یا نوع رویداد نامعتبر است.');
+      }
+    });
+    const now = new Date().toISOString();
+    const updated = WorkflowRepository.update(workflowId, {
+      Version: version,
+      PublishedVersion: version,
+      DraftVersion: '',
+      LifecycleState: 'PUBLISHED',
+      Status: Constants.STATUS.ACTIVE,
+      UpdatedAt: now
+    });
+    AuditService.log({
+      TenantID: user.TenantID, UserID: user.ID,
+      Action: 'WORKFLOW_PUBLISHED', EntityType: 'WORKFLOW', EntityID: workflowId,
+      OldData: workflow, NewData: updated,
+      Reason: 'انتشار نسخه ' + version + ' گردش‌کار'
+    });
+    return Response.success({ workflow: updated, workflowVersion: version },
+      { message: 'نسخه گردش‌کار با موفقیت منتشر شد.' });
   }
+
 
 };

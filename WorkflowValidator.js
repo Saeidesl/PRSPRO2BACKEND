@@ -18,6 +18,9 @@ const WorkflowValidator = {
     if (data.Version !== undefined && data.Version !== '') {
       Validator.number(data.Version, 'Version');
     }
+    if (data.WorkflowType !== undefined && ['INITIAL', 'REPEAT'].indexOf(String(data.WorkflowType).toUpperCase()) === -1) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع گردش‌کار معتبر نیست.');
+    }
 
     if (data.Status !== undefined && data.Status !== '') {
       Validator.enum(

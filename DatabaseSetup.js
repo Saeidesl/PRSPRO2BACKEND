@@ -60,12 +60,12 @@ const APP_CONFIG = {
 
     WORKFLOWS: {
       name: '09_Workflows',
-      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt','WorkflowType','LifecycleState','PublishedVersion','DraftVersion']
     },
 
     WORKFLOW_STEPS: {
       name: '10_WorkflowSteps',
-      headers: ['ID','TenantID','WorkflowID','Name','Code','StepOrder','Status','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','WorkflowID','Name','Code','StepOrder','Status','CreatedAt','UpdatedAt','WorkflowVersion']
     },
 
     EVENT_TYPES: {
@@ -141,6 +141,16 @@ const APP_CONFIG = {
     AUDIT_LOGS: {
       name: '16_AuditLogs',
       headers: ['ID','TenantID','UserID','Action','EntityType','EntityID','OldData','NewData','Reason','CreatedAt']
+    },
+
+
+    WORKFLOW_STEP_EVENT_RULES: {
+      name: '37_WorkflowStepEventRules',
+      headers: [
+        'ID','TenantID','WorkflowID','WorkflowVersion','WorkflowStepID',
+        'EventTypeID','RequirementMode','DataSource','SequenceMode',
+        'GroupKey','GroupOrder','EventOrder','Status','CreatedAt','UpdatedAt'
+      ]
     },
 
     WORKFLOW_STEP_DEPARTMENTS: {

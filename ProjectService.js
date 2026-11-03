@@ -35,12 +35,15 @@ const ProjectService = {
     // round-trip just to load workflows. Keep filtering tenant-scoped here.
     const workflows = (WorkflowRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
-        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+        (Number(item.PublishedVersion || 0) > 0 || String(item.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED');
     }).map(function(item) {
       return {
         ID: item.ID,
         Name: item.Name || item.Title || item.WorkflowName || item.Code || String(item.ID),
         Code: item.Code || '',
+        Version: Number(item.PublishedVersion || item.Version || 1),
+        WorkflowType: item.WorkflowType || 'INITIAL',
         Status: item.Status || 'ACTIVE'
       };
     });
@@ -456,8 +459,9 @@ const ProjectService = {
     }
 
     if (
-      String(workflow.TenantID) !==
-      String(tenantId)
+      String(workflow.TenantID) !== String(tenantId) ||
+      String(workflow.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE' ||
+      !(Number(workflow.PublishedVersion || 0) > 0 || String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED')
     ) {
 
       throw ErrorHandler.create(
@@ -467,10 +471,12 @@ const ProjectService = {
 
     }
 
-    const firstStep =
-      WorkflowStepRepository.findFirstByWorkflowId(
-        workflow.ID
-      );
+    const workflowVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+    const firstStep = WorkflowStepRepository.findByWorkflowId(workflow.ID).filter(function(step) {
+      return String(step.TenantID) === String(tenantId) &&
+        String(step.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+        Number(step.WorkflowVersion || 1) <= workflowVersion;
+    })[0] || null;
 
     if (!firstStep) {
 
@@ -601,9 +607,7 @@ const ProjectService = {
       WorkflowID:
         workflow.ID,
 
-      WorkflowVersion:
-        workflow.Version ||
-        1,
+      WorkflowVersion: workflowVersion,
 
       CurrentStepID:
         firstStep.ID,
@@ -785,8 +789,8 @@ const ProjectService = {
         if (
           !workflow ||
           String(workflow.TenantID) !== String(user.TenantID) ||
-          String(workflow.Status || Constants.STATUS.ACTIVE).toUpperCase() !==
-            String(Constants.STATUS.ACTIVE).toUpperCase()
+          String(workflow.Status || Constants.STATUS.ACTIVE).toUpperCase() !== String(Constants.STATUS.ACTIVE).toUpperCase() ||
+          !(Number(workflow.PublishedVersion || 0) > 0 || String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED')
         ) {
           throw ErrorHandler.create(
             Constants.ERROR.INVALID_WORKFLOW,
@@ -794,7 +798,12 @@ const ProjectService = {
           );
         }
 
-        const firstStep = WorkflowStepRepository.findFirstByWorkflowId(workflow.ID);
+        const workflowVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+        const firstStep = WorkflowStepRepository.findByWorkflowId(workflow.ID).filter(function(step) {
+          return String(step.TenantID) === String(user.TenantID) &&
+            String(step.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+            Number(step.WorkflowVersion || 1) <= workflowVersion;
+        })[0] || null;
 
         if (
           !firstStep ||
@@ -807,7 +816,7 @@ const ProjectService = {
         }
 
         updateData.WorkflowID = workflow.ID;
-        updateData.WorkflowVersion = workflow.Version || 1;
+        updateData.WorkflowVersion = workflowVersion;
         updateData.CurrentStepID = firstStep.ID;
       }
     }
