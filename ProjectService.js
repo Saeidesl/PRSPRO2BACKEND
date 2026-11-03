@@ -18,6 +18,7 @@ const ProjectService = {
   projectFormLookups: function(params) {
     const user = AccessControlService.getCurrentUser(params || {});
     const tenantId = String(user.TenantID || '');
+    const informationTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; }).map(function(item) { return { ID: item.ID, Code: item.Code, Name: item.Name, DataType: item.DataType || 'text' }; });
     const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
         String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
@@ -111,6 +112,8 @@ const ProjectService = {
       departments: departments,
       users: users,
       workflows: workflows,
+      informationTypes: informationTypes,
+      referenceProjects: (ProjectRepository.getAll() || []).filter(function(item) { return String(item.TenantID) === tenantId && String(item.RecordState || 'ACTIVE').toUpperCase() === 'ACTIVE' && this._isProjectAvailableToUser_(item, user); }, this).map(function(item) { return { ID: item.ID, ProjectCode: item.ProjectCode || '', Title: item.Title || '' }; }),
       projectStatuses: projectStatuses
     });
   },
@@ -499,6 +502,32 @@ const ProjectService = {
 
     }
 
+    var sourceProject = null;
+    var referencePolicy = {};
+    if (String(workflow.WorkflowType || 'INITIAL').toUpperCase() === 'REPEAT') {
+      var sourceId = String(project.SourceProjectID || '').trim();
+      if (!sourceId) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای پروژه تکراری، انتخاب پروژه مرجع الزامی است.');
+      sourceProject = ProjectRepository.findById(sourceId);
+      if (!sourceProject || String(sourceProject.TenantID) !== String(tenantId) || String(sourceProject.RecordState || 'ACTIVE').toUpperCase() !== 'ACTIVE' || !this._isProjectAvailableToUser_(sourceProject, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مرجع پیدا نشد یا دسترسی به آن مجاز نیست.');
+      }
+      if (String(sourceProject.ID) === String(project.ID || '')) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه نمی‌تواند مرجع خودش باشد.');
+      try { referencePolicy = JSON.parse(workflow.PublishedRepeatReferencePolicyJSON || workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
+      var overrides = project.ReferencePolicyJSON || {};
+      if (typeof overrides === 'string') { try { overrides = JSON.parse(overrides); } catch (parseError) { overrides = {}; } }
+      if (overrides && typeof overrides === 'object' && !Array.isArray(overrides)) Object.keys(overrides).forEach(function(key) { referencePolicy[key] = overrides[key]; });
+      var validInformationTypes = InformationTypeRepository.findByTenant(tenantId).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+      Object.keys(overrides || {}).forEach(function(key) {
+        if (!validInformationTypes.some(function(item) { return String(item.ID) === String(key); })) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع اطلاعات انتخاب‌شده برای سیاست مرجع معتبر نیست.');
+      });
+      Object.keys(referencePolicy).forEach(function(key) {
+        referencePolicy[key] = String(referencePolicy[key] || 'INDEPENDENT').toUpperCase();
+        if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(referencePolicy[key]) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+      });
+    } else if (String(project.SourceProjectID || '').trim()) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'اتصال پروژه مرجع فقط برای گردش‌کار تولید تکراری مجاز است.');
+    }
+
     const departmentIds = Array.isArray(project.AvailableDepartmentIDs)
       ? project.AvailableDepartmentIDs.map(function(id) { return String(id || '').trim(); }).filter(Boolean)
       : [];
@@ -627,7 +656,10 @@ const ProjectService = {
         now,
 
       RecordState:
-        'ACTIVE'
+        'ACTIVE',
+      SourceProjectID: sourceProject ? sourceProject.ID : '',
+      ReferencePolicyJSON: sourceProject ? JSON.stringify(referencePolicy) : '{}',
+      ReferenceSourceRevision: sourceProject ? new Date().toISOString() : ''
 
     };
 
@@ -650,6 +682,37 @@ const ProjectService = {
         );
       }
       created = ProjectRepository.insert(newProject);
+      if (sourceProject && typeof ProjectInformationRepository !== 'undefined') {
+        var referenceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
+        referenceRows.forEach(function(row) {
+          if (String(row.TenantID) !== String(tenantId) || String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
+          var infoType = InformationTypeRepository.findById(row.InformationTypeID);
+          if (!infoType) return;
+          var policy = String(referencePolicy[String(row.InformationTypeID)] || referencePolicy[String(infoType.Code || '')] || 'INDEPENDENT').toUpperCase();
+          if (policy !== 'INITIAL_COPY' || ProjectInformationService._isFileBased_(row.InformationTypeID, infoType)) return;
+          if (ProjectInformationRepository.findAnyByProjectAndType(created.ID, row.InformationTypeID)) return;
+          var approvedRevision = ProjectInformationRepository.findHistory(row.ID).filter(function(historyRow) {
+            return String(historyRow.TenantID) === String(tenantId) &&
+              String(historyRow.Action || '').toUpperCase() === 'APPROVED';
+          }).sort(function(a,b) { return Number(b.Revision || 0) - Number(a.Revision || 0); })[0];
+          if (!approvedRevision || !approvedRevision.NewValueJSON) return;
+          var approvedValueJSON = String(approvedRevision.NewValueJSON);
+          var copyNow = new Date().toISOString();
+          var copy = ProjectInformationRepository.insert({
+            ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: approvedValueJSON,
+            Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
+            CreatedAt: copyNow, UpdatedAt: copyNow
+          });
+          ProjectInformationRepository.insertHistory({
+            ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+            ProjectInformationID: copy.ID, ProjectID: created.ID, InformationTypeID: row.InformationTypeID,
+            Revision: 1, Action: 'INITIAL_COPY', OldValueJSON: '', NewValueJSON: approvedValueJSON,
+            SourceEventID: '', Reason: 'کپی نسخه تأییدشده ' + approvedRevision.Revision + ' از پروژه مرجع ' + sourceProject.ID,
+            ActorUserID: user.ID, CreatedAt: copyNow
+          });
+        });
+      }
     } finally {
       createLock.releaseLock();
     }
@@ -753,6 +816,20 @@ const ProjectService = {
     }
 
     const updateData = {};
+    if (data.ReferencePolicyJSON !== undefined) {
+      var referenceOverrides = data.ReferencePolicyJSON;
+      if (typeof referenceOverrides === 'string') { try { referenceOverrides = JSON.parse(referenceOverrides); } catch (error) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.'); } }
+      if (!referenceOverrides || typeof referenceOverrides !== 'object' || Array.isArray(referenceOverrides)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+      var activeReferenceTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+      Object.keys(referenceOverrides).forEach(function(typeId) {
+        var validType = activeReferenceTypes.some(function(item) { return String(item.ID) === String(typeId); });
+        var policy = String(referenceOverrides[typeId] || '').toUpperCase();
+        if (!validType || ['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(policy) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+        referenceOverrides[typeId] = policy;
+      });
+      if (!String(existing.SourceProjectID || '').trim()) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این پروژه به پروژه مرجع متصل نیست.');
+      updateData.ReferencePolicyJSON = JSON.stringify(referenceOverrides);
+    }
 
     if (data.ProjectCode !== undefined) {
       updateData.ProjectCode = String(data.ProjectCode || '').trim();

@@ -16,7 +16,8 @@ const WorkflowService = {
     }).map(function(row) {
       return { ID: row.ID, Name: row.Name, Code: row.Code, Category: row.Category || '' };
     });
-    return Response.success({ workflows: workflows, departments: departments, eventTypes: eventTypes });
+    const informationTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(row) { return String(row.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; }).map(function(row) { return { ID: row.ID, Code: row.Code, Name: row.Name, DataType: row.DataType || 'text' }; });
+    return Response.success({ workflows: workflows, departments: departments, eventTypes: eventTypes , informationTypes: informationTypes });
   },
 
   managementData: function(workflowId, params) {
@@ -127,6 +128,17 @@ const WorkflowService = {
       data
     );
 
+    var repeatPolicy = data.RepeatReferencePolicyJSON || {};
+    if (typeof repeatPolicy === 'string') { try { repeatPolicy = JSON.parse(repeatPolicy); } catch (policyError) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.'); } }
+    if (!repeatPolicy || typeof repeatPolicy !== 'object' || Array.isArray(repeatPolicy)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+    var activeInformationTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+    Object.keys(repeatPolicy).forEach(function(typeId) {
+      var type = activeInformationTypes.find(function(item) { return String(item.ID) === String(typeId); });
+      var policy = String(repeatPolicy[typeId] || '').toUpperCase();
+      if (!type || ['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(policy) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع یا نوع اطلاعات انتخاب‌شده معتبر نیست.');
+      repeatPolicy[typeId] = policy;
+    });
+
     const tenantId =
       user.TenantID;
 
@@ -185,6 +197,7 @@ const WorkflowService = {
         1,
 
       WorkflowType: String(data.WorkflowType || 'INITIAL').toUpperCase(),
+      RepeatReferencePolicyJSON: JSON.stringify(repeatPolicy),
       LifecycleState: 'DRAFT',
       PublishedVersion: '',
       DraftVersion: Number(data.Version || 1),
@@ -290,6 +303,13 @@ const WorkflowService = {
     }
 
     const updateData = {};
+    if (data.RepeatReferencePolicyJSON !== undefined) {
+      var repeatPolicy = data.RepeatReferencePolicyJSON;
+      if (typeof repeatPolicy === 'string') { try { repeatPolicy = JSON.parse(repeatPolicy); } catch (error) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.'); } }
+      if (!repeatPolicy || typeof repeatPolicy !== 'object' || Array.isArray(repeatPolicy)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+      Object.keys(repeatPolicy).forEach(function(key) { if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(String(repeatPolicy[key]).toUpperCase()) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار سیاست اطلاعات مرجع معتبر نیست.'); });
+      updateData.RepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
+    }
 
     if (data.WorkflowType !== undefined) {
       const workflowType = String(data.WorkflowType || '').toUpperCase();
@@ -313,6 +333,10 @@ const WorkflowService = {
       }
 
     });
+
+    if (data.RepeatReferencePolicyJSON !== undefined) {
+      updateData.RepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
+    }
 
     /*
      * TenantID هرگز از ورودی قابل تغییر نیست.
@@ -682,6 +706,7 @@ const WorkflowService = {
     const updated = WorkflowRepository.update(workflowId, {
       Version: version,
       PublishedVersion: version,
+      PublishedRepeatReferencePolicyJSON: JSON.stringify((function(value){ if(typeof value==='string'){try{return JSON.parse(value||'{}');}catch(error){return {};}} return value && typeof value==='object' && !Array.isArray(value) ? value : {}; })(workflow.RepeatReferencePolicyJSON)),
       DraftVersion: '',
       LifecycleState: 'PUBLISHED',
       Status: Constants.STATUS.ACTIVE,
