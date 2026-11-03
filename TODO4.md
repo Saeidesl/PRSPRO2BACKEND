@@ -5,11 +5,11 @@
 ## 🗺️ Technical Spec & Architecture Map (DO NOT DELETE)
 
 ### مخازن، شاخه و اسناد مرجع
-- Backend: `Saeidesl/PRSPRO2BACKEND`، شاخه کاری فعلی `main`.
-- Frontend: `Saeidesl/PRSPRO2`، شاخه کاری فعلی `main`.
+- Backend: `Saeidesl/PRSPRO2BACKEND`، شاخه کاری این فاز `feat/workflow-event-rules-engine` (مبنای ایجاد: `main`).
+- Frontend: `Saeidesl/PRSPRO2`، شاخه کاری این فاز `feat/workflow-event-rules-engine` (مبنای ایجاد: `main`).
 - این فایل در ریشه هر دو مخزن نگهداری می‌شود تا نقشه و وضعیت تسک‌ها بین Frontend و Backend یکسان بماند.
 - اسناد مرجع: بک‌اند `ARCHITECTURE.md`, `ARCHITECTURE2.md`, `TODO.md`, `TODO2.md`, `AGENTS.md`؛ فرانت‌اند `ARCHITECTURE.md`, `ARCHITECTURE2.md`, `TODO2.md`, `TODO3.md`, `AGENTS.md`.
-- طبق `TODO2.md` هر دو مخزن، شاخه `feature/design-case-preproduction` ادغام شده و تغییرات جدید باید روی `main` انجام شوند. انتشار بک‌اند روی `main` می‌تواند Apps Script تولید را همگام‌سازی/منتشر کند؛ بنابراین اجرای کدنویسی باید روی شاخه feature و از مسیر PR انجام شود و ادغام/انتشار فقط با تأیید جداگانه انجام گیرد. این TODO روی `main` فقط برای ثبت برنامه و نقشه ایجاد شده است.
+- طبق `TODO2.md` شاخه قدیمی `feature/design-case-preproduction` ادغام شده است. برای این فاز شاخه جداگانه `feat/workflow-event-rules-engine` در هر دو مخزن از `main` ساخته شد. تغییرات از مسیر PR ارائه می‌شوند؛ ادغام/انتشار بک‌اند روی `main` می‌تواند Apps Script تولید را فعال کند و فقط با تأیید جداگانه مجاز است.
 
 ### معماری Backend — Google Apps Script V8 / Google Sheets
 - `Router.js`: dispatch مسیرها و اعمال مجوز سمت سرور. مسیرهای فعلی گردش کار:
@@ -26,7 +26,7 @@
 - `WorkflowService.js`: توابع تأییدشده `managementBootstrap`, `managementData`, `list`, `get`, `create`, `update`, `getSteps`, `createStep`. گردش کار فعلی دارای `Version` است؛ مراحل با `WorkflowID`, `StepOrder`, `Status` تعریف می‌شوند.
 - APIهای افزوده‌شده در تسک ۲: `GET /workflows/:workflowId/steps/:stepId/event-rules`، `PUT /workflows/:workflowId/steps/:stepId/event-rules` و `POST /workflows/:workflowId/publish`؛ توابع `getStepEventRules`, `saveStepEventRules`, `publish` در `WorkflowService.js` پیاده‌سازی شده‌اند.
 - `WorkflowRepository.js`: شیت `09_Workflows`؛ توابع `getAll`, `findById`, `findByCode`, `existsByCode`, `insert`, `update`.
-- `WorkflowStepRepository`: توسط `WorkflowService` استفاده می‌شود؛ مسیر فیزیکی فایل Repository در این مرور از fetch مستقل تأیید نشد و باید در شروع تسک اجرایی از درخت/سورس مخزن تعیین شود.
+- `WorkflowStepRepository.gs.js`: شیت `10_WorkflowSteps`؛ `getAll`, `findById`, `findByWorkflowId`, `findFirstByWorkflowId`, `findByCode`, `insert`, `update`؛ مراحل جدید `WorkflowVersion` دریافت می‌کنند.
 - `WorkflowStepDepartmentRepository.js`: شیت `17_WorkflowStepDepartments`؛ توابع `getAll`, `findById`, `findByWorkflowId`, `findByDepartmentAndWorkflow`, `findByStepId`, `insert`, `insertMany`, `update`.
 - `WorkflowStepDepartmentService.js`: اعتبارسنجی tenant، Workflow، Step و Department و ثبت اتصال‌های تکی/گروهی.
 - `WorkflowValidator.js`: اعتبارسنجی ایجاد Workflow.
