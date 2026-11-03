@@ -512,7 +512,7 @@ const ProjectService = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مرجع پیدا نشد یا دسترسی به آن مجاز نیست.');
       }
       if (String(sourceProject.ID) === String(project.ID || '')) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه نمی‌تواند مرجع خودش باشد.');
-      try { referencePolicy = JSON.parse(workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
+      try { referencePolicy = JSON.parse(workflow.PublishedRepeatReferencePolicyJSON || workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
       var overrides = project.ReferencePolicyJSON || {};
       if (typeof overrides === 'string') { try { overrides = JSON.parse(overrides); } catch (parseError) { overrides = {}; } }
       if (overrides && typeof overrides === 'object' && !Array.isArray(overrides)) Object.keys(overrides).forEach(function(key) { referencePolicy[key] = overrides[key]; });
