@@ -101,16 +101,12 @@ const WorkflowService = {
 
     }
 
-    const steps =
-      WorkflowStepRepository.findByWorkflowId(id);
-
-    const tenantSteps =
-      steps.filter(function(step) {
-
-        return String(step.TenantID) ===
-          String(user.TenantID);
-
-      });
+    const requestedVersion = Number(workflow.DraftVersion || workflow.PublishedVersion || workflow.Version || 1);
+    const steps = WorkflowStepRepository.findByWorkflowId(id);
+    const tenantSteps = steps.filter(function(step) {
+      return String(step.TenantID) === String(user.TenantID) &&
+        Number(step.WorkflowVersion || 1) <= requestedVersion;
+    });
 
     return Response.success({
       workflow: workflow,
