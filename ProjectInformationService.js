@@ -175,7 +175,7 @@ const ProjectInformationService = {
     else current=ProjectInformationRepository.insert({ID:this._id('PINF'),TenantID:user.TenantID,ProjectID:project.ID,InformationTypeID:type.ID,ValueJSON:valueJSON,Revision:revision,Status:'ACTIVE',SourceEventID:eventId,CreatedBy:user.ID,UpdatedBy:user.ID,CreatedAt:now,UpdatedAt:now});
     var history=ProjectInformationRepository.insertHistory({ID:this._id('PINH'),TenantID:user.TenantID,ProjectInformationID:current.ID,ProjectID:project.ID,InformationTypeID:type.ID,Revision:revision,Action:wasActive?'UPDATED':(existing?'RESTORED':'CREATED'),OldValueJSON:wasActive?JSON.stringify(oldValue):'',NewValueJSON:JSON.stringify(value),SourceEventID:eventId,Reason:String(body.Reason || ''),ActorUserID:user.ID,CreatedAt:now});
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:wasActive?Constants.ACTION.UPDATE:Constants.ACTION.CREATE,EntityType:'PROJECT_INFORMATION',EntityID:current.ID,OldData:wasActive?{Value:oldValue,Revision:existing.Revision}:null,NewData:{Value:value,Revision:revision,HistoryID:history.ID,SourceEventID:eventId},Reason:String(body.Reason || 'ثبت اطلاعات پرونده پروژه')});
-    var referenceSync = this._syncLiveReference_(project,type,current,user);
+    var referenceSync = typeof ProjectRepository !== 'undefined' && typeof ProjectInformationRepository !== 'undefined' ? this._syncLiveReference_(project,type,current,user) : [];
     current.Value=value;current.HistoryID=history.ID;current.ReferenceSync=referenceSync;
     return Response.success(current,{message:'اطلاعات پرونده ذخیره شد و اطلاعات مرجع پروژه‌های تکراری به‌روزرسانی شد.',referenceSync:referenceSync});
   },
