@@ -291,6 +291,13 @@ const WorkflowService = {
     }
 
     const updateData = {};
+    if (data.RepeatReferencePolicyJSON !== undefined) {
+      var repeatPolicy = data.RepeatReferencePolicyJSON;
+      if (typeof repeatPolicy === 'string') { try { repeatPolicy = JSON.parse(repeatPolicy); } catch (error) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.'); } }
+      if (!repeatPolicy || typeof repeatPolicy !== 'object' || Array.isArray(repeatPolicy)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+      Object.keys(repeatPolicy).forEach(function(key) { if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(String(repeatPolicy[key]).toUpperCase()) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار سیاست اطلاعات مرجع معتبر نیست.'); });
+      updateData.RepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
+    }
 
     if (data.WorkflowType !== undefined) {
       const workflowType = String(data.WorkflowType || '').toUpperCase();
