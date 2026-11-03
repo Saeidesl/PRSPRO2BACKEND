@@ -36,7 +36,7 @@ const ProjectService = {
     const workflows = (WorkflowRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
         String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
-        String(item.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED';
+        (Number(item.PublishedVersion || 0) > 0 || String(item.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED');
     }).map(function(item) {
       return {
         ID: item.ID,
@@ -461,7 +461,7 @@ const ProjectService = {
     if (
       String(workflow.TenantID) !== String(tenantId) ||
       String(workflow.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE' ||
-      String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() !== 'PUBLISHED'
+      !(Number(workflow.PublishedVersion || 0) > 0 || String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED')
     ) {
 
       throw ErrorHandler.create(
@@ -790,7 +790,7 @@ const ProjectService = {
           !workflow ||
           String(workflow.TenantID) !== String(user.TenantID) ||
           String(workflow.Status || Constants.STATUS.ACTIVE).toUpperCase() !== String(Constants.STATUS.ACTIVE).toUpperCase() ||
-          String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() !== 'PUBLISHED'
+          !(Number(workflow.PublishedVersion || 0) > 0 || String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED')
         ) {
           throw ErrorHandler.create(
             Constants.ERROR.INVALID_WORKFLOW,
