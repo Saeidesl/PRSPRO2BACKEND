@@ -111,6 +111,7 @@ const ProjectService = {
       departments: departments,
       users: users,
       workflows: workflows,
+      referenceProjects: (ProjectRepository.getAll() || []).filter(function(item) { return String(item.TenantID) === tenantId && String(item.RecordState || 'ACTIVE').toUpperCase() === 'ACTIVE' && this._isProjectAvailableToUser_(item, user); }, this).map(function(item) { return { ID: item.ID, ProjectCode: item.ProjectCode || '', Title: item.Title || '' }; }),
       projectStatuses: projectStatuses
     });
   },
