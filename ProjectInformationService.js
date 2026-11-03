@@ -195,6 +195,48 @@ const ProjectInformationService = {
       return Response.success({approved:true,revision:Number(current.Revision||1),approvedAt:now,approvedBy:user.ID,Value:value,sync:sync},{message:'نسخه اطلاعات تأیید شد و همگام‌سازی پروژه‌های تکراری انجام شد.'});
     } finally { lock.releaseLock(); }
   },
+  resolveReferenceConflict: function(projectId,typeId,body,params){
+    var user=this._user(params),lock=LockService.getScriptLock();
+    lock.waitLock(30000);
+    try{
+      body=body||{};
+      var target=this._project(projectId,user.TenantID,user),type=this._type(typeId,user.TenantID);
+      var sourceId=String(target.SourceProjectID||'').trim();
+      if(!sourceId)throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'این پروژه به پروژه مرجع متصل نیست.');
+      var source=this._project(sourceId,user.TenantID,user);
+      var policyMap=this._parse(source.ReferencePolicyJSON,{});
+      var childPolicy=this._parse(target.ReferencePolicyJSON,{});
+      var policy=String(childPolicy[String(type.ID)]||policyMap[String(type.ID)]||childPolicy[String(type.Code||'')]||policyMap[String(type.Code||'')]||'INDEPENDENT').toUpperCase();
+      if(policy!=='LIVE_SYNC')throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'سیاست همگام‌سازی زنده برای این اطلاعات فعال نیست.');
+      var conflictLog=ProjectInformationRepository.findSyncLog(source.ID,target.ID,type.ID,user.TenantID);
+      if(!conflictLog||String(conflictLog.Action)!=='CONFLICT')throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'تعارض بازی برای تعیین تکلیف وجود ندارد.');
+      var targetInfo=ProjectInformationRepository.findAnyByProjectAndType(target.ID,type.ID);
+      var currentTargetRevision=targetInfo?Number(targetInfo.Revision||0):0;
+      if(Number(body.ExpectedTargetRevision)!==Number(conflictLog.TargetRevision||0)||currentTargetRevision!==Number(conflictLog.TargetRevision||0)){
+        throw ErrorHandler.create(Constants.ERROR.CONFLICT||Constants.ERROR.VALIDATION_ERROR,'اطلاعات پروژه تکراری پس از ثبت تعارض تغییر کرده است؛ صفحه را تازه‌سازی و دوباره بررسی کنید.');
+      }
+      var decision=String(body.Decision||'').toUpperCase();
+      if(['USE_SOURCE','KEEP_LOCAL'].indexOf(decision)===-1)throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,'تصمیم تعارض معتبر نیست.');
+      var sourceInfo=ProjectInformationRepository.findByProjectAndType(source.ID,type.ID);
+      if(!sourceInfo)throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'اطلاعات مرجع پیدا نشد.');
+      var approval=this._latestApproval_(sourceInfo.ID,user.TenantID);
+      if(!approval||Number(approval.Revision)!==Number(conflictLog.SourceRevision)||Number(sourceInfo.Revision)!==Number(approval.Revision)){
+        throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'نسخه مرجع تغییر کرده است؛ ابتدا نسخه جدید را تأیید و سپس تعارض را بررسی کنید.');
+      }
+      var now=new Date().toISOString(),nextRevision=currentTargetRevision,oldValue=targetInfo?String(targetInfo.ValueJSON||''):'';
+      if(decision==='USE_SOURCE'){
+        if(this._isFileBased_(type.ID,type))throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'همگام‌سازی فایل‌ها هنوز به انتقال امن پیوست نیاز دارد.');
+        nextRevision=currentTargetRevision+1;
+        if(targetInfo)targetInfo=ProjectInformationRepository.update(targetInfo.ID,{ValueJSON:String(approval.NewValueJSON||''),Revision:nextRevision,Status:'ACTIVE',SourceEventID:'',UpdatedBy:user.ID,UpdatedAt:now});
+        else targetInfo=ProjectInformationRepository.insert({ID:this._id('PINF'),TenantID:user.TenantID,ProjectID:target.ID,InformationTypeID:type.ID,ValueJSON:String(approval.NewValueJSON||''),Revision:nextRevision,Status:'ACTIVE',SourceEventID:'',CreatedBy:user.ID,UpdatedBy:user.ID,CreatedAt:now,UpdatedAt:now});
+        ProjectInformationRepository.insertHistory({ID:this._id('PINH'),TenantID:user.TenantID,ProjectInformationID:targetInfo.ID,ProjectID:target.ID,InformationTypeID:type.ID,Revision:nextRevision,Action:'REFERENCE_CONFLICT_RESOLVED',OldValueJSON:oldValue,NewValueJSON:String(approval.NewValueJSON||''),SourceEventID:'',Reason:'تعارض با انتخاب نسخه تأییدشده پروژه مرجع حل شد.',ActorUserID:user.ID,CreatedAt:now});
+      }
+      var resolution={decision:decision,reason:String(body.Reason||''),resolvedAt:now,sourceRevision:Number(approval.Revision),targetRevision:nextRevision,previousConflict:this._parse(conflictLog.ConflictJSON,{})};
+      ProjectInformationRepository.updateSyncLog(conflictLog.ID,{Action:decision==='USE_SOURCE'?'SYNCED':'CONFLICT_RESOLVED_LOCAL',TargetRevision:nextRevision,ConflictJSON:JSON.stringify(resolution),ActorUserID:user.ID,CreatedAt:now});
+      AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'PROJECT_REFERENCE_CONFLICT_RESOLVED',EntityType:'PROJECT_INFORMATION',EntityID:targetInfo?targetInfo.ID:target.ID,OldData:{ValueJSON:oldValue,Revision:currentTargetRevision},NewData:{Decision:decision,SourceProjectID:source.ID,InformationTypeID:type.ID,SourceRevision:Number(approval.Revision),TargetRevision:nextRevision},Reason:String(body.Reason||'تعیین تکلیف تعارض همگام‌سازی')});
+      return Response.success({resolved:true,decision:decision,targetRevision:nextRevision},{message:decision==='USE_SOURCE'?'نسخه مرجع اعمال شد.':'اطلاعات محلی حفظ شد.'});
+    } finally { lock.releaseLock(); }
+  },
   _syncApprovedReference_: function(sourceProject,type,sourceInfo,user){
     var policyMap=this._parse(sourceProject.ReferencePolicyJSON,{});
     var children=(ProjectRepository.getAll()||[]).filter(function(item){
@@ -211,7 +253,7 @@ const ProjectInformationService = {
       });
       if(logs.length){
         var priorAction=String(logs[logs.length-1].Action||'');
-        outcomes.push({targetProjectId:target.ID,status:priorAction==='SYNCED'?'ALREADY_SYNCED':priorAction});
+        outcomes.push({targetProjectId:target.ID,status:priorAction==='SYNCED'?'ALREADY_SYNCED':(priorAction==='CONFLICT_RESOLVED_LOCAL'?'LOCAL_KEPT':priorAction)});
         return;
       }
       var now=new Date().toISOString(),targetInfo=ProjectInformationRepository.findAnyByProjectAndType(target.ID,type.ID);
@@ -221,7 +263,7 @@ const ProjectInformationService = {
       }
       var successfulLogs=ProjectInformationRepository.getAllSyncLogs().filter(function(row){
         return String(row.TenantID)===String(user.TenantID) && String(row.SourceProjectID)===String(sourceProject.ID) &&
-          String(row.TargetProjectID)===String(target.ID) && String(row.InformationTypeID)===String(type.ID) && String(row.Action)==='SYNCED';
+          String(row.TargetProjectID)===String(target.ID) && String(row.InformationTypeID)===String(type.ID) && ['SYNCED','CONFLICT_RESOLVED_LOCAL'].indexOf(String(row.Action))!==-1;
       }).sort(function(a,b){return String(b.CreatedAt||'').localeCompare(String(a.CreatedAt||''));});
       var previous=successfulLogs[0] || null;
       var targetRevision=targetInfo?Number(targetInfo.Revision||0):0;
