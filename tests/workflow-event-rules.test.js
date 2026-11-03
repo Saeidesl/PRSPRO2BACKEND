@@ -37,3 +37,9 @@ test('workflow event rule validator enforces requirement, source and ordering co
   assert.match(validator, /strictOrders/);
   assert.match(validator, /stepSequenceMode/);
 });
+test('project workflow lookups and assignment only use published workflow versions', () => {
+  const projects = read('ProjectService.js');
+  assert.match(projects, /LifecycleState \\|\\| 'PUBLISHED'/);
+  assert.match(projects, /PublishedVersion \\|\\| item.Version/);
+  assert.match(projects, /WorkflowVersion: workflowVersion/);
+});
