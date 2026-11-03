@@ -691,18 +691,24 @@ const ProjectService = {
           var policy = String(referencePolicy[String(row.InformationTypeID)] || referencePolicy[String(infoType.Code || '')] || 'INDEPENDENT').toUpperCase();
           if (policy !== 'INITIAL_COPY' || ProjectInformationService._isFileBased_(row.InformationTypeID, infoType)) return;
           if (ProjectInformationRepository.findAnyByProjectAndType(created.ID, row.InformationTypeID)) return;
+          var approvedRevision = ProjectInformationRepository.findHistory(row.ID).filter(function(historyRow) {
+            return String(historyRow.TenantID) === String(tenantId) &&
+              String(historyRow.Action || '').toUpperCase() === 'APPROVED';
+          }).sort(function(a,b) { return Number(b.Revision || 0) - Number(a.Revision || 0); })[0];
+          if (!approvedRevision || !approvedRevision.NewValueJSON) return;
+          var approvedValueJSON = String(approvedRevision.NewValueJSON);
           var copyNow = new Date().toISOString();
           var copy = ProjectInformationRepository.insert({
             ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
-            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: String(row.ValueJSON || ''),
+            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: approvedValueJSON,
             Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
             CreatedAt: copyNow, UpdatedAt: copyNow
           });
           ProjectInformationRepository.insertHistory({
             ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
             ProjectInformationID: copy.ID, ProjectID: created.ID, InformationTypeID: row.InformationTypeID,
-            Revision: 1, Action: 'INITIAL_COPY', OldValueJSON: '', NewValueJSON: String(row.ValueJSON || ''),
-            SourceEventID: '', Reason: 'کپی اولیه از پروژه مرجع ' + sourceProject.ID,
+            Revision: 1, Action: 'INITIAL_COPY', OldValueJSON: '', NewValueJSON: approvedValueJSON,
+            SourceEventID: '', Reason: 'کپی نسخه تأییدشده ' + approvedRevision.Revision + ' از پروژه مرجع ' + sourceProject.ID,
             ActorUserID: user.ID, CreatedAt: copyNow
           });
         });
