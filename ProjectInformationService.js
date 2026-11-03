@@ -5,6 +5,17 @@ const ProjectInformationService = {
     if(typeof value==='object')return value;
     try{return JSON.parse(String(value));}catch(error){return fallback;}
   },
+  _latestApproval_: function(projectInformationId,tenantId){
+    return ProjectInformationRepository.findHistory(projectInformationId).filter(function(row){
+      return String(row.TenantID)===String(tenantId) && String(row.Action||'').toUpperCase()==='APPROVED';
+    }).sort(function(a,b){return Number(b.Revision||0)-Number(a.Revision||0);})[0] || null;
+  },
+  _isFileBased_: function(typeId,type){
+    if(['image','file'].indexOf(String(type.DataType||'').toLowerCase())!==-1)return true;
+    return (InformationTypeRepository.findColumns(typeId)||[]).some(function(col){
+      return ['image','file'].indexOf(String(col.DataType||'').toLowerCase())!==-1 && String(col.Status||'ACTIVE').toUpperCase()==='ACTIVE';
+    });
+  },
   _user: function(params){return AccessControlService.getCurrentUser(params || {});},
   _project: function(id,tenantId,user){
     var project=ProjectRepository.findById(id);
@@ -159,6 +170,60 @@ const ProjectInformationService = {
     AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:wasActive?Constants.ACTION.UPDATE:Constants.ACTION.CREATE,EntityType:'PROJECT_INFORMATION',EntityID:current.ID,OldData:wasActive?{Value:oldValue,Revision:existing.Revision}:null,NewData:{Value:value,Revision:revision,HistoryID:history.ID,SourceEventID:eventId},Reason:String(body.Reason || 'ثبت اطلاعات پرونده پروژه')});
     current.Value=value;current.HistoryID=history.ID;
     return Response.success(current,{message:'اطلاعات پرونده ذخیره شد.'});
+  },
+  approve: function(projectId,typeId,body,params){
+    var user=this._user(params),lock=LockService.getScriptLock();
+    lock.waitLock(30000);
+    try{
+      var project=this._project(projectId,user.TenantID,user),type=this._type(typeId,user.TenantID);
+      if(String(project.SourceProjectID||'').trim())throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'اطلاعات پروژه تکراری قابل تأیید به‌عنوان مرجع نیست.');
+      var current=ProjectInformationRepository.findByProjectAndType(projectId,typeId);
+      if(!current)throw ErrorHandler.create(Constants.ERROR.NOT_FOUND,'اطلاعاتی برای تأیید ثبت نشده است.');
+      var latest=this._latestApproval_(current.ID,user.TenantID);
+      if(latest && Number(latest.Revision)===Number(current.Revision))return Response.success({approved:true,revision:Number(current.Revision),sync:this._syncApprovedReference_(project,type,current,user)}, {message:'این نسخه قبلاً تأیید شده است.'});
+      var now=new Date().toISOString(),value=this._parse(current.ValueJSON,null);
+      var history=ProjectInformationRepository.insertHistory({ID:this._id('PINH'),TenantID:user.TenantID,ProjectInformationID:current.ID,ProjectID:project.ID,InformationTypeID:type.ID,Revision:Number(current.Revision||1),Action:'APPROVED',OldValueJSON:'',NewValueJSON:String(current.ValueJSON||''),SourceEventID:String(current.SourceEventID||''),Reason:String((body||{}).Reason||'تأیید نسخه مرجع'),ActorUserID:user.ID,CreatedAt:now});
+      AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'PROJECT_INFORMATION_APPROVED',EntityType:'PROJECT_INFORMATION',EntityID:current.ID,OldData:null,NewData:{Revision:Number(current.Revision||1),HistoryID:history.ID},Reason:String((body||{}).Reason||'تأیید نسخه مرجع')});
+      var sync=this._syncApprovedReference_(project,type,current,user);
+      return Response.success({approved:true,revision:Number(current.Revision||1),approvedAt:now,approvedBy:user.ID,Value:value,sync:sync},{message:'نسخه اطلاعات تأیید شد و همگام‌سازی پروژه‌های تکراری انجام شد.'});
+    } finally { lock.releaseLock(); }
+  },
+  _syncApprovedReference_: function(sourceProject,type,sourceInfo,user){
+    var policyMap=this._parse(sourceProject.ReferencePolicyJSON,{});
+    var children=(ProjectRepository.getAll()||[]).filter(function(item){
+      return String(item.TenantID)===String(user.TenantID) && String(item.SourceProjectID||'')===String(sourceProject.ID) && String(item.RecordState||'ACTIVE').toUpperCase()==='ACTIVE';
+    });
+    var outcomes=[];
+    children.forEach(function(target){
+      var childPolicy=this._parse(target.ReferencePolicyJSON,{});
+      var policy=String(childPolicy[String(type.ID)] || policyMap[String(type.ID)] || childPolicy[String(type.Code||'')] || policyMap[String(type.Code||'')] || 'INDEPENDENT').toUpperCase();
+      if(policy!=='LIVE_SYNC')return;
+      var idempotencyKey=[sourceProject.ID,target.ID,type.ID,sourceInfo.Revision].join('|');
+      var logs=ProjectInformationRepository.getAllSyncLogs().filter(function(row){
+        return String(row.TenantID)===String(user.TenantID) && String(row.IdempotencyKey||'')===idempotencyKey;
+      });
+      if(logs.some(function(row){return String(row.Action||'')==='SYNCED';})){outcomes.push({targetProjectId:target.ID,status:'ALREADY_SYNCED'});return;}
+      var now=new Date().toISOString(),targetInfo=ProjectInformationRepository.findAnyByProjectAndType(target.ID,type.ID);
+      if(this._isFileBased_(type.ID,type)){
+        ProjectInformationRepository.insertSyncLog({ID:this._id('PRSL'),TenantID:user.TenantID,SourceProjectID:sourceProject.ID,TargetProjectID:target.ID,InformationTypeID:type.ID,Policy:policy,SourceRevision:sourceInfo.Revision,TargetRevision:targetInfo?targetInfo.Revision:'',Action:'SKIPPED_FILE',ConflictJSON:'',IdempotencyKey:idempotencyKey,ActorUserID:user.ID,CreatedAt:now});
+        outcomes.push({targetProjectId:target.ID,status:'SKIPPED_FILE'});return;
+      }
+      var previous=ProjectInformationRepository.findSyncLog(sourceProject.ID,target.ID,type.ID);
+      var targetRevision=targetInfo?Number(targetInfo.Revision||0):0;
+      var expectedRevision=previous && String(previous.Action)==='SYNCED' ? Number(previous.TargetRevision||0) : 0;
+      if((previous && String(previous.Action)==='SYNCED' && targetRevision!==expectedRevision) || (!previous && targetInfo && String(targetInfo.Status||'ACTIVE')==='ACTIVE')){
+        var conflict={reason:'TARGET_CHANGED_LOCALLY',expectedRevision:expectedRevision,currentRevision:targetRevision,sourceRevision:Number(sourceInfo.Revision||0)};
+        ProjectInformationRepository.insertSyncLog({ID:this._id('PRSL'),TenantID:user.TenantID,SourceProjectID:sourceProject.ID,TargetProjectID:target.ID,InformationTypeID:type.ID,Policy:policy,SourceRevision:sourceInfo.Revision,TargetRevision:targetRevision,Action:'CONFLICT',ConflictJSON:JSON.stringify(conflict),IdempotencyKey:idempotencyKey,ActorUserID:user.ID,CreatedAt:now});
+        outcomes.push({targetProjectId:target.ID,status:'CONFLICT'});return;
+      }
+      var nextRevision=targetInfo?targetRevision+1:1,copy;
+      if(targetInfo)copy=ProjectInformationRepository.update(targetInfo.ID,{ValueJSON:String(sourceInfo.ValueJSON||''),Revision:nextRevision,Status:'ACTIVE',SourceEventID:'',UpdatedBy:user.ID,UpdatedAt:now});
+      else copy=ProjectInformationRepository.insert({ID:this._id('PINF'),TenantID:user.TenantID,ProjectID:target.ID,InformationTypeID:type.ID,ValueJSON:String(sourceInfo.ValueJSON||''),Revision:nextRevision,Status:'ACTIVE',SourceEventID:'',CreatedBy:user.ID,UpdatedBy:user.ID,CreatedAt:now,UpdatedAt:now});
+      ProjectInformationRepository.insertHistory({ID:this._id('PINH'),TenantID:user.TenantID,ProjectInformationID:copy.ID,ProjectID:target.ID,InformationTypeID:type.ID,Revision:nextRevision,Action:'REFERENCE_SYNC',OldValueJSON:targetInfo?String(targetInfo.ValueJSON||''):'',NewValueJSON:String(sourceInfo.ValueJSON||''),SourceEventID:'',Reason:'همگام‌سازی نسخه تأییدشده پروژه مرجع '+sourceProject.ID,ActorUserID:user.ID,CreatedAt:now});
+      ProjectInformationRepository.insertSyncLog({ID:this._id('PRSL'),TenantID:user.TenantID,SourceProjectID:sourceProject.ID,TargetProjectID:target.ID,InformationTypeID:type.ID,Policy:policy,SourceRevision:sourceInfo.Revision,TargetRevision:nextRevision,Action:'SYNCED',ConflictJSON:'',IdempotencyKey:idempotencyKey,ActorUserID:user.ID,CreatedAt:now});
+      outcomes.push({targetProjectId:target.ID,status:'SYNCED',targetRevision:nextRevision});
+    },this);
+    return outcomes;
   },
   deactivate: function(projectId,typeId,params,options){
     var user=this._user(params);this._project(projectId,user.TenantID,user);this._type(typeId,user.TenantID);options=options||{};
