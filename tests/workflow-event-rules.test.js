@@ -41,5 +41,7 @@ test('project workflow lookups and assignment only use published workflow versio
   const projects = read('ProjectService.js');
   assert.ok(projects.includes("LifecycleState || 'PUBLISHED'"));
   assert.ok(projects.includes('PublishedVersion || item.Version'));
+  assert.ok(projects.includes('Number(item.PublishedVersion || 0) > 0'));
+  assert.ok(projects.includes('Number(workflow.PublishedVersion || 0) > 0'));
   assert.match(projects, /WorkflowVersion: workflowVersion/);
 });
