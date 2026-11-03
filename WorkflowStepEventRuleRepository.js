@@ -32,6 +32,11 @@ const WorkflowStepEventRuleRepository = {
 
   cloneWorkflowVersion: function(workflowId, fromVersion, toVersion, tenantId) {
     this.ensureSchema();
+    const existingDraft = this.findByWorkflowVersion(workflowId, toVersion).filter(function(item) {
+      return String(item.TenantID) === String(tenantId) &&
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    });
+    if (existingDraft.length) return existingDraft;
     const source = this.findByWorkflowVersion(workflowId, fromVersion).filter(function(item) {
       return String(item.TenantID) === String(tenantId) &&
         String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
