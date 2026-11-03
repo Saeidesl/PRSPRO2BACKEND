@@ -21,6 +21,8 @@ test('workflow event rule APIs are permission-protected and tenant-scoped', () =
   assert.match(service, /saveStepEventRules/);
   assert.match(service, /String\(workflow\.TenantID\) !== String\(user\.TenantID\)/);
   assert.match(service, /WORKFLOW_PUBLISHED/);
+  assert.match(service, /eventTypes: eventTypes/);
+  assert.match(service, /ConnectionType \\|\\| 'PROJECT'/);
 });
 
 test('workflow event rule validator enforces requirement, source and ordering compatibility', () => {
