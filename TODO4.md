@@ -24,17 +24,20 @@
   - `PUT /workflows/:workflowId` → `WorkflowService.update(id, body, params)`.
   - حذف اتصال دپارتمان از مسیر `DELETE /workflows/:workflowId/department-steps/:assignmentId`.
 - `WorkflowService.js`: توابع تأییدشده `managementBootstrap`, `managementData`, `list`, `get`, `create`, `update`, `getSteps`, `createStep`. گردش کار فعلی دارای `Version` است؛ مراحل با `WorkflowID`, `StepOrder`, `Status` تعریف می‌شوند.
+- APIهای افزوده‌شده در تسک ۲: `GET /workflows/:workflowId/steps/:stepId/event-rules`، `PUT /workflows/:workflowId/steps/:stepId/event-rules` و `POST /workflows/:workflowId/publish`؛ توابع `getStepEventRules`, `saveStepEventRules`, `publish` در `WorkflowService.js` پیاده‌سازی شده‌اند.
 - `WorkflowRepository.js`: شیت `09_Workflows`؛ توابع `getAll`, `findById`, `findByCode`, `existsByCode`, `insert`, `update`.
 - `WorkflowStepRepository`: توسط `WorkflowService` استفاده می‌شود؛ مسیر فیزیکی فایل Repository در این مرور از fetch مستقل تأیید نشد و باید در شروع تسک اجرایی از درخت/سورس مخزن تعیین شود.
 - `WorkflowStepDepartmentRepository.js`: شیت `17_WorkflowStepDepartments`؛ توابع `getAll`, `findById`, `findByWorkflowId`, `findByDepartmentAndWorkflow`, `findByStepId`, `insert`, `insertMany`, `update`.
 - `WorkflowStepDepartmentService.js`: اعتبارسنجی tenant، Workflow، Step و Department و ثبت اتصال‌های تکی/گروهی.
 - `WorkflowValidator.js`: اعتبارسنجی ایجاد Workflow.
+- `WorkflowStepEventRuleRepository.js`: شیت `37_WorkflowStepEventRules`، خواندن قواعد نسخه‌ای، کپی قواعد نسخه منتشرشده به پیش‌نویس و جایگزینی اتمیک قواعد یک مرحله/نسخه.
+- `WorkflowStepEventRuleValidator.js`: اعتبارسنجی Required/Optional/Reference/Not-required، منبع داده NEW_EVENT/SOURCE_PROJECT/NONE و ترتیب STRICT/FREE/GROUPED؛ هر مرحله یک مدل ترتیب دارد.
 - `EventService.js`: مسیر اصلی ثبت رویداد؛ قواعد موجود شامل کنترل پروژه/دپارتمان، تعیین مرحله مقصد و تغییر وضعیت طبق تنظیمات نوع رویداد است. منطق دقیق `create` و قرارداد payload در تسک اجرایی از سورس کامل استخراج و ثبت شود.
 - `EventRepository.js`: شیت `13_Events`؛ توابع `getAll`, `findById`, `findByProjectId`, `findByEventTypeId`, `findByPerformedBy`, `findByDepartmentId`, `insert`, `update`.
 - `EventTypeService.js` و `EventTypeRepository.js`: مدیریت EventTypes. EventType فعلی شامل `WorkflowStepID`, `MovesProjectToStep`, `TargetDepartmentID`, `TargetProjectStatus`, `TargetStepStatus`, `IsWorkCompletion`, `AllowOnDraft` و تنظیمات دسترسی است. این تنظیمات حفظ می‌شوند؛ الزامات ترتیب/اجبار مرحله نباید به‌صورت سراسری داخل EventType ذخیره شوند.
 - `ProjectService.js`: `projectFormLookups(params)`، `dashboardLookups(params)`؛ lookup گردش‌کار و مراحل را برای فرم/داشبورد tenant-scoped برمی‌گرداند.
 - `ProjectRepository.js`: شیت `08_Projects`؛ توابع `getAll`, `findById`, `findByProjectCode`, `existsByProjectCode`, `insert`, `update`, `delete`. ستون‌های موجود شامل `WorkflowID`, `WorkflowVersion`, `CurrentStepID`, `RunNumber`, `SourceProjectID`, `RecordState` هستند.
-- `DatabaseSetup.js`: تعریف شیت‌ها و ستون‌ها؛ شیت‌های تأییدشده `09_Workflows`, `10_WorkflowSteps`, `11_EventTypes`, `13_Events`, `17_WorkflowStepDepartments`. تغییرات schema باید افزایشی، idempotent و بدون حذف/جابجایی ستون‌های موجود باشند.
+- `DatabaseSetup.js`: تعریف شیت‌ها و ستون‌ها؛ شیت‌های تأییدشده `09_Workflows`, `10_WorkflowSteps`, `11_EventTypes`, `13_Events`, `17_WorkflowStepDepartments`. تغییرات schema باید افزایشی، idempotent و بدون حذف/جابجایی ستون‌های موجود باشند. ستون‌های افزایشی گردش‌کار شامل `WorkflowType`, `LifecycleState`, `PublishedVersion`, `DraftVersion` و `WorkflowVersion` هستند؛ شیت جدید `37_WorkflowStepEventRules` با ایجاد/تکمیل امن سرستون‌ها اضافه شده است.
 - `GoogleSheetsRepository.js`: لایه مشترک خواندن/نوشتن و cache؛ تمام Repositoryهای جدید باید از همین لایه و سیاست invalidation پیروی کنند.
 - `AccessControlService.js`, `PermissionService.js`, `AuditService.js`: مرجع مجوز، tenant isolation و audit.
 - `FormService.js` و `34_EventTypeForms` / `34_EventFormData`: اتصال فرم به رویداد، snapshot نسخه فرم و ذخیره پاسخ؛ این مسیر باید حفظ شود.
