@@ -13,7 +13,7 @@
 
 ### معماری Backend — Google Apps Script V8 / Google Sheets
 - `Router.js`: dispatch مسیرها و اعمال مجوز سمت سرور. مسیرهای فعلی گردش کار:
-  - `GET /workflow-management/bootstrap` → نیازمند `WORKFLOW_MANAGE`؛ `WorkflowService.managementBootstrap(params)` و خروجی شامل `workflows` و `departments`.
+  - `GET /workflow-management/bootstrap` → نیازمند `WORKFLOW_MANAGE`؛ `WorkflowService.managementBootstrap(params)` و خروجی شامل `workflows`، `departments` و EventTypeهای فعال و پروژه‌محور (`eventTypes`) برای تنظیم قواعد مرحله.
   - `GET /workflows` → `WorkflowService.list(params)`؛ دسترسی خواندنی برای `WORKFLOW_MANAGE`, `PROJECT_CREATE` یا `SYSTEM_SETTINGS`.
   - `GET /workflows/:workflowId/management-data` → `WorkflowService.managementData(workflowId, params)`؛ خروجی `steps` و `assignments`.
   - `GET /workflows/:workflowId/steps` → `WorkflowService.getSteps(workflowId, params)`.
@@ -46,7 +46,7 @@
 ### معماری Frontend — HTML/CSS/JavaScript
 - `index.html`: بارگذاری صفحه‌ها و ماژول‌ها؛ هر فایل تغییرکرده باید cache-busting متناسب دریافت کند.
 - `pages/workflows.html`: صفحه مدیریت گردش کار موجود.
-- `js/modules/workflows.js`: ماژول مدیریت Workflow؛ `init`, `bindEvents`, `loadWorkflows`, نرمال‌سازی Workflow/Steps و عملیات ساخت Workflow/Step. APIهای فعلی تأییدشده: `GET /workflow-management/bootstrap`, `POST /workflows`, `POST /workflows/:id/steps`, `GET /workflows/:id/steps`.
+- `js/modules/workflows.js`: ماژول مدیریت Workflow؛ `init`, `bindEvents`, `loadWorkflows`, `showWorkflowSteps`, `showStepEventRules`, `appendRuleRow`, `publishWorkflow`؛ انتخاب نوع مسیر INITIAL/REPEAT، ویرایش قواعد رویداد مرحله و انتشار نسخه. APIهای فعلی تأییدشده: `GET /workflow-management/bootstrap` (همراه EventTypes فعال)، `POST /workflows`, `POST /workflows/:id/steps`, `GET /workflows/:id/steps`, `GET/PUT /workflows/:id/steps/:stepId/event-rules`, `POST /workflows/:id/publish`.
 - `js/modules/workflow-department-assignments.js` (نام فایل/ماژول در زمان اجرای تسک از index و صفحه workflow تأیید شود): اتصال دپارتمان‌ها به مراحل.
 - `js/modules/events.js`: مسیر اصلی ثبت/نمایش رویدادها، انتخاب پروژه و EventType، فرم‌های پویا، اصلاح فرم و idempotency؛ باید همان مسیر توسعه یابد.
 - `js/modules/event-types.js`: مدیریت EventType و فیلدهای پویا؛ تعریف نوع رویداد مستقل از الزام استفاده آن در Workflow باقی بماند.
