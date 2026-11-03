@@ -127,6 +127,9 @@ const ProjectInformationService = {
       }else{
         row=Object.assign({},row,{Value:this._parse(row.ValueJSON,null)});
       }
+      var approved=row.ID?this._latestApproval_(row.ID,user.TenantID):null;
+      row.ApprovedRevision=approved?Number(approved.Revision||0):0;
+      row.IsApproved=!!(approved && Number(approved.Revision||0)===Number(row.Revision||0) && String(row.Status||'ACTIVE')==='ACTIVE');
       row.InformationType=type;
       row.Columns=InformationTypeRepository.findColumns(type.ID).filter(function(col){
         return String(col.Status || 'ACTIVE')==='ACTIVE';
@@ -140,6 +143,9 @@ const ProjectInformationService = {
     var row=ProjectInformationRepository.findByProjectAndType(projectId,typeId);
     if(!row)return Response.success(null);
     row.Value=this._parse(row.ValueJSON,null);
+    var latestApproval=this._latestApproval_(row.ID,user.TenantID);
+    row.ApprovedRevision=latestApproval?Number(latestApproval.Revision||0):0;
+    row.IsApproved=!!(latestApproval && Number(latestApproval.Revision||0)===Number(row.Revision||0));
     row.History=ProjectInformationRepository.findHistory(row.ID).filter(function(item){return String(item.TenantID)===String(user.TenantID);});
     return Response.success(row);
   },
