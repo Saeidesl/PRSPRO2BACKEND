@@ -499,6 +499,28 @@ const ProjectService = {
 
     }
 
+    var sourceProject = null;
+    var referencePolicy = {};
+    if (String(workflow.WorkflowType || 'INITIAL').toUpperCase() === 'REPEAT') {
+      var sourceId = String(project.SourceProjectID || '').trim();
+      if (!sourceId) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای پروژه تکراری، انتخاب پروژه مرجع الزامی است.');
+      sourceProject = ProjectRepository.findById(sourceId);
+      if (!sourceProject || String(sourceProject.TenantID) !== String(tenantId) || String(sourceProject.RecordState || 'ACTIVE').toUpperCase() !== 'ACTIVE' || !this._isProjectAvailableToUser_(sourceProject, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مرجع پیدا نشد یا دسترسی به آن مجاز نیست.');
+      }
+      if (String(sourceProject.ID) === String(project.ID || '')) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه نمی‌تواند مرجع خودش باشد.');
+      try { referencePolicy = JSON.parse(workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
+      var overrides = project.ReferencePolicyJSON || {};
+      if (typeof overrides === 'string') { try { overrides = JSON.parse(overrides); } catch (parseError) { overrides = {}; } }
+      if (overrides && typeof overrides === 'object' && !Array.isArray(overrides)) Object.keys(overrides).forEach(function(key) { referencePolicy[key] = overrides[key]; });
+      Object.keys(referencePolicy).forEach(function(key) {
+        referencePolicy[key] = String(referencePolicy[key] || 'INDEPENDENT').toUpperCase();
+        if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(referencePolicy[key]) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+      });
+    } else if (String(project.SourceProjectID || '').trim()) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'اتصال پروژه مرجع فقط برای گردش‌کار تولید تکراری مجاز است.');
+    }
+
     const departmentIds = Array.isArray(project.AvailableDepartmentIDs)
       ? project.AvailableDepartmentIDs.map(function(id) { return String(id || '').trim(); }).filter(Boolean)
       : [];
@@ -627,7 +649,10 @@ const ProjectService = {
         now,
 
       RecordState:
-        'ACTIVE'
+        'ACTIVE',
+      SourceProjectID: sourceProject ? sourceProject.ID : '',
+      ReferencePolicyJSON: sourceProject ? JSON.stringify(referencePolicy) : '{}',
+      ReferenceSourceRevision: sourceProject ? new Date().toISOString() : ''
 
     };
 
