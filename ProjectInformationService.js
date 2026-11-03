@@ -209,7 +209,11 @@ const ProjectInformationService = {
       var logs=ProjectInformationRepository.getAllSyncLogs().filter(function(row){
         return String(row.TenantID)===String(user.TenantID) && String(row.IdempotencyKey||'')===idempotencyKey;
       });
-      if(logs.some(function(row){return String(row.Action||'')==='SYNCED';})){outcomes.push({targetProjectId:target.ID,status:'ALREADY_SYNCED'});return;}
+      if(logs.length){
+        var priorAction=String(logs[logs.length-1].Action||'');
+        outcomes.push({targetProjectId:target.ID,status:priorAction==='SYNCED'?'ALREADY_SYNCED':priorAction});
+        return;
+      }
       var now=new Date().toISOString(),targetInfo=ProjectInformationRepository.findAnyByProjectAndType(target.ID,type.ID);
       if(this._isFileBased_(type.ID,type)){
         ProjectInformationRepository.insertSyncLog({ID:this._id('PRSL'),TenantID:user.TenantID,SourceProjectID:sourceProject.ID,TargetProjectID:target.ID,InformationTypeID:type.ID,Policy:policy,SourceRevision:sourceInfo.Revision,TargetRevision:targetInfo?targetInfo.Revision:'',Action:'SKIPPED_FILE',ConflictJSON:'',IdempotencyKey:idempotencyKey,ActorUserID:user.ID,CreatedAt:now});
