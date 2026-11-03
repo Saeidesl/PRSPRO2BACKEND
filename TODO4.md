@@ -1,0 +1,84 @@
+## 🎯 Current Objective
+
+طراحی و پیاده‌سازی موتور گردش کار قابل تنظیم برای PMS، با پشتیبانی از رویدادهای اجباری/اختیاری، ترتیب اجباری/آزاد/ترکیبی، مسیر تولید اولیه و تکراری، و همگام‌سازی خودکار اطلاعات مرجع پروژه اصلی در پروژه‌های تکراری؛ بدون ساخت مسیر موازی برای پروژه یا ثبت رویداد و با حفظ سوابق اجرایی مستقل هر پروژه.
+
+## 🗺️ Technical Spec & Architecture Map (DO NOT DELETE)
+
+### مخازن، شاخه و اسناد مرجع
+- Backend: `Saeidesl/PRSPRO2BACKEND`، شاخه کاری فعلی `main`.
+- Frontend: `Saeidesl/PRSPRO2`، شاخه کاری فعلی `main`.
+- این فایل در ریشه هر دو مخزن نگهداری می‌شود تا نقشه و وضعیت تسک‌ها بین Frontend و Backend یکسان بماند.
+- اسناد مرجع: بک‌اند `ARCHITECTURE.md`, `ARCHITECTURE2.md`, `TODO.md`, `TODO2.md`, `AGENTS.md`؛ فرانت‌اند `ARCHITECTURE.md`, `ARCHITECTURE2.md`, `TODO2.md`, `TODO3.md`, `AGENTS.md`.
+- طبق `TODO2.md` هر دو مخزن، شاخه `feature/design-case-preproduction` ادغام شده و تغییرات جدید باید روی `main` انجام شوند. انتشار بک‌اند روی `main` می‌تواند Apps Script تولید را همگام‌سازی/منتشر کند؛ بنابراین اجرای کدنویسی باید روی شاخه feature و از مسیر PR انجام شود و ادغام/انتشار فقط با تأیید جداگانه انجام گیرد. این TODO روی `main` فقط برای ثبت برنامه و نقشه ایجاد شده است.
+
+### معماری Backend — Google Apps Script V8 / Google Sheets
+- `Router.js`: dispatch مسیرها و اعمال مجوز سمت سرور. مسیرهای فعلی گردش کار:
+  - `GET /workflow-management/bootstrap` → نیازمند `WORKFLOW_MANAGE`؛ `WorkflowService.managementBootstrap(params)` و خروجی شامل `workflows` و `departments`.
+  - `GET /workflows` → `WorkflowService.list(params)`؛ دسترسی خواندنی برای `WORKFLOW_MANAGE`, `PROJECT_CREATE` یا `SYSTEM_SETTINGS`.
+  - `GET /workflows/:workflowId/management-data` → `WorkflowService.managementData(workflowId, params)`؛ خروجی `steps` و `assignments`.
+  - `GET /workflows/:workflowId/steps` → `WorkflowService.getSteps(workflowId, params)`.
+  - `GET /workflows/:workflowId/department-steps` → `WorkflowStepDepartmentService.listByWorkflow(workflowId, params)`.
+  - `POST /workflows` → `WorkflowService.create(body, params)`؛ payload فعلی `{Name, Code}`.
+  - `POST /workflows/:workflowId/steps` → `WorkflowService.createStep(workflowId, body, params)`؛ payload فعلی شامل `{Name, Code, StepOrder}`.
+  - `POST /workflows/:workflowId/department-steps` و `POST /workflows/:workflowId/department-steps/bulk` → اتصال مرحله به دپارتمان؛ bulk payload شامل `{assignments: [...]}`.
+  - `PUT /workflows/:workflowId` → `WorkflowService.update(id, body, params)`.
+  - حذف اتصال دپارتمان از مسیر `DELETE /workflows/:workflowId/department-steps/:assignmentId`.
+- `WorkflowService.js`: توابع تأییدشده `managementBootstrap`, `managementData`, `list`, `get`, `create`, `update`, `getSteps`, `createStep`. گردش کار فعلی دارای `Version` است؛ مراحل با `WorkflowID`, `StepOrder`, `Status` تعریف می‌شوند.
+- `WorkflowRepository.js`: شیت `09_Workflows`؛ توابع `getAll`, `findById`, `findByCode`, `existsByCode`, `insert`, `update`.
+- `WorkflowStepRepository`: توسط `WorkflowService` استفاده می‌شود؛ مسیر فیزیکی فایل Repository در این مرور از fetch مستقل تأیید نشد و باید در شروع تسک اجرایی از درخت/سورس مخزن تعیین شود.
+- `WorkflowStepDepartmentRepository.js`: شیت `17_WorkflowStepDepartments`؛ توابع `getAll`, `findById`, `findByWorkflowId`, `findByDepartmentAndWorkflow`, `findByStepId`, `insert`, `insertMany`, `update`.
+- `WorkflowStepDepartmentService.js`: اعتبارسنجی tenant، Workflow، Step و Department و ثبت اتصال‌های تکی/گروهی.
+- `WorkflowValidator.js`: اعتبارسنجی ایجاد Workflow.
+- `EventService.js`: مسیر اصلی ثبت رویداد؛ قواعد موجود شامل کنترل پروژه/دپارتمان، تعیین مرحله مقصد و تغییر وضعیت طبق تنظیمات نوع رویداد است. منطق دقیق `create` و قرارداد payload در تسک اجرایی از سورس کامل استخراج و ثبت شود.
+- `EventRepository.js`: شیت `13_Events`؛ توابع `getAll`, `findById`, `findByProjectId`, `findByEventTypeId`, `findByPerformedBy`, `findByDepartmentId`, `insert`, `update`.
+- `EventTypeService.js` و `EventTypeRepository.js`: مدیریت EventTypes. EventType فعلی شامل `WorkflowStepID`, `MovesProjectToStep`, `TargetDepartmentID`, `TargetProjectStatus`, `TargetStepStatus`, `IsWorkCompletion`, `AllowOnDraft` و تنظیمات دسترسی است. این تنظیمات حفظ می‌شوند؛ الزامات ترتیب/اجبار مرحله نباید به‌صورت سراسری داخل EventType ذخیره شوند.
+- `ProjectService.js`: `projectFormLookups(params)`، `dashboardLookups(params)`؛ lookup گردش‌کار و مراحل را برای فرم/داشبورد tenant-scoped برمی‌گرداند.
+- `ProjectRepository.js`: شیت `08_Projects`؛ توابع `getAll`, `findById`, `findByProjectCode`, `existsByProjectCode`, `insert`, `update`, `delete`. ستون‌های موجود شامل `WorkflowID`, `WorkflowVersion`, `CurrentStepID`, `RunNumber`, `SourceProjectID`, `RecordState` هستند.
+- `DatabaseSetup.js`: تعریف شیت‌ها و ستون‌ها؛ شیت‌های تأییدشده `09_Workflows`, `10_WorkflowSteps`, `11_EventTypes`, `13_Events`, `17_WorkflowStepDepartments`. تغییرات schema باید افزایشی، idempotent و بدون حذف/جابجایی ستون‌های موجود باشند.
+- `GoogleSheetsRepository.js`: لایه مشترک خواندن/نوشتن و cache؛ تمام Repositoryهای جدید باید از همین لایه و سیاست invalidation پیروی کنند.
+- `AccessControlService.js`, `PermissionService.js`, `AuditService.js`: مرجع مجوز، tenant isolation و audit.
+- `FormService.js` و `34_EventTypeForms` / `34_EventFormData`: اتصال فرم به رویداد، snapshot نسخه فرم و ذخیره پاسخ؛ این مسیر باید حفظ شود.
+- قرارداد API موجود برای پروژه و رویداد حفظ شود: `POST /projects`, `PUT /projects/:id`, `GET /projects/:id`, `POST /events`, `GET /events`, `GET /events/:id/forms/:formId`. هیچ endpoint یا جریان موازی برای ایجاد پروژه/ثبت رویداد ساخته نشود.
+
+### معماری Frontend — HTML/CSS/JavaScript
+- `index.html`: بارگذاری صفحه‌ها و ماژول‌ها؛ هر فایل تغییرکرده باید cache-busting متناسب دریافت کند.
+- `pages/workflows.html`: صفحه مدیریت گردش کار موجود.
+- `js/modules/workflows.js`: ماژول مدیریت Workflow؛ `init`, `bindEvents`, `loadWorkflows`, نرمال‌سازی Workflow/Steps و عملیات ساخت Workflow/Step. APIهای فعلی تأییدشده: `GET /workflow-management/bootstrap`, `POST /workflows`, `POST /workflows/:id/steps`, `GET /workflows/:id/steps`.
+- `js/modules/workflow-department-assignments.js` (نام فایل/ماژول در زمان اجرای تسک از index و صفحه workflow تأیید شود): اتصال دپارتمان‌ها به مراحل.
+- `js/modules/events.js`: مسیر اصلی ثبت/نمایش رویدادها، انتخاب پروژه و EventType، فرم‌های پویا، اصلاح فرم و idempotency؛ باید همان مسیر توسعه یابد.
+- `js/modules/event-types.js`: مدیریت EventType و فیلدهای پویا؛ تعریف نوع رویداد مستقل از الزام استفاده آن در Workflow باقی بماند.
+- `js/modules/projects.js`: `Projects.init()`, `Projects.render()`, `Projects.openCreateForm(project, options)`, `Projects.openProjectEditForm(projectId, options)`; تخصیص Workflow از همین جریان فعلی پروژه حفظ شود.
+- `js/modules/project-workflow-settings.js`: در حال حاضر انتخاب Workflow پیش‌فرض فرم ایجاد پروژه را از تنظیم محلی مرورگر اعمال/پنهان می‌کند؛ هنگام توسعه باید رفتار فعلی و تنظیمات پروژه حفظ و تصمیم سرورمحور/نسخه‌دار با آن هماهنگ شود.
+- `js/core/api.js`: همه درخواست‌ها از `PMS.Api` عبور کنند؛ از fetch مستقیم استفاده نشود.
+- `js/core/router.js`, `js/components/layout.js`: route، منو و مجوزهای UI؛ کنترل UI جایگزین مجوز Backend نیست.
+- `css/unified-theme.css` و استایل‌های صفحه Workflow: RTL، تم روشن/تیره و واکنش‌گرایی موبایل باید حفظ شود.
+
+### مدل دامنه هدف و قواعد قطعی محصول
+- EventType تعریف می‌کند «چه عملیاتی قابل ثبت است»؛ WorkflowStep تعریف می‌کند «کدام مرحله»؛ WorkflowStepEventRequirement تعریف می‌کند «در این مرحله چه رویدادهایی با چه قواعدی لازم‌اند». الزام رویداد در EventType ذخیره نشود تا یک EventType بتواند در Workflowهای مختلف اجباری/اختیاری/غیرضروری باشد.
+- برای هر Step، فهرست الزامات رویدادی مرتب‌شده نگهداری شود؛ هر الزام حداقل دارای EventTypeID، ترتیب، Required/Optional، نوع ترتیب/وابستگی و سیاست منبع داده باشد.
+- ترتیب رویدادها در سطح مرحله سه حالت دارد: اجباری (ترتیب دقیق)، آزاد (بدون وابستگی ترتیبی) و ترکیبی (گروه‌ها/وابستگی‌های مرتب‌شده و رویدادهای موازی درون گروه).
+- منبع داده هر الزام: ثبت جدید در پروژه جاری، دریافت از پروژه مرجع، اختیاری، یا غیرضروری/غیرفعال. داده مرجع رویداد جدید اجرایی محسوب نمی‌شود و Event تکراری در پروژه جدید ساخته نمی‌شود.
+- Workflow دارای نسخه منتشرشده و پیش‌نویس تغییرات است. Project هنگام تخصیص به یک Workflow، نسخه مشخص را تثبیت می‌کند؛ تغییر Workflow منتشرشده نباید اجرای در حال انجام را بی‌خبر تغییر دهد. انتقال پروژه به نسخه جدید باید کنترل‌شده و صریح باشد.
+- انواع مسیر حداقل شامل «تولید اولیه» و «تولید تکراری» هستند؛ این‌ها قالب Workflow هستند، نه مسیر موازی ثبت پروژه. ایجاد پروژه تکراری از مسیر موجود پروژه انجام می‌شود و Workflow مناسب به آن اختصاص می‌یابد.
+- پروژه تکراری پروژه مستقل با رویدادها/تولید/تأمین/کیفیت/بسته‌بندی مستقل است و با `SourceProjectID` به پروژه مرجع متصل می‌شود. چندین پروژه تکراری می‌توانند به یک پروژه اصلی متصل باشند.
+- اطلاعات مرجع (طراحی، تصویر، الگو، نمونه تأییدشده و مشخصات فنی انتخاب‌شده) از پروژه اصلی خوانده و با Live Reference Synchronization به پروژه‌های تکراری منعکس می‌شوند. تغییرات مرجع نباید Eventهای اجرایی، سفارش‌ها، مقادیر واقعی یا گزارش‌های گذشته را بازنویسی کنند.
+- همگام‌سازی باید قابل ردیابی باشد: منبع/شناسه/نسخه اطلاعات مرجع، زمان آخرین sync، وضعیت sync و تاریخچه تغییرات. عملیات تکراری باید idempotent و tenant-scoped باشد. اگر داده‌ای در پروژه تکراری به‌عنوان مقدار اجرایی مستقل ثبت شده، همگام‌سازی مرجع نباید آن را بی‌صدا جایگزین کند؛ تعارض باید طبق سیاست مشخص و قابل مشاهده مدیریت شود.
+- سوابق رویدادهای پروژه اصلی صرفاً مرجع خواندنی‌اند؛ رویدادهای تولید جدید فقط به ProjectID پروژه تکراری ثبت می‌شوند.
+- ثبت/ابطال/اصلاح رویداد باید وضعیت الزامات مرحله را دوباره محاسبه کند. ابطال یک رویداد اجباری می‌تواند مرحله را از حالت تکمیل خارج کند، ولی نباید به‌طور ناامن پروژه را به مرحله قبلی برگرداند.
+- قواعد امنیتی: tenant isolation، دسترسی پروژه، دپارتمان/کاربر مجاز، audit، idempotency و جلوگیری از race condition سمت Backend اعمال شوند.
+- تست‌ها فقط با دیتابیس/محیط آزمایشی اجرا شوند. هیچ داده واقعی حذف یا بازنویسی نشود. merge به main بک‌اند می‌تواند deploy تولید را فعال کند؛ انتشار نیازمند تأیید جداگانه است.
+
+## 📋 Macro-Task Queue & Implementation Log
+
+- [x] **تسک ۱ — کشف معماری و برنامه‌ریزی فاز**
+  - *Log:* اسناد `AGENTS.md`, `ARCHITECTURE.md`, `ARCHITECTURE2.md`, `TODO.md` و `TODO2.md` بک‌اند و اسناد `AGENTS.md`, `ARCHITECTURE.md`, `ARCHITECTURE2.md`, `TODO2.md`, `TODO3.md` فرانت‌اند در شاخه `main` بررسی شدند. ساختار فعلی Workflow در `09_Workflows` و `10_WorkflowSteps`، اتصال دپارتمان در `17_WorkflowStepDepartments`، EventTypes در `11_EventTypes` و رویدادها در `13_Events` تأیید شد. APIهای فعلی مدیریت Workflow و مسیر اصلی `POST /events` و پروژه `POST/PUT /projects` ثبت شدند. ماژول‌های Frontend موجود برای Workflow، رویداد، EventType و پروژه مشخص شدند. تصمیم‌های قطعی ترتیب اجباری/آزاد/ترکیبی، مسیر تولید اولیه/تکراری، ارجاع زنده اطلاعات مرجع، استقلال سوابق تولید و عدم ساخت مسیر موازی ثبت شد. بررسی ایستا است؛ قراردادهای جزئی و مسیر فایل WorkflowStepRepository باید پیش از تغییر کد در تسک اجرایی دوباره با سورس کامل تطبیق داده شوند. هیچ کد اجرایی یا داده‌ای تغییر نکرده است.
+- [ ] **تسک ۲ — مدل اطلاعاتی و موتور قواعد رویدادی Workflow (IN PROGRESS)**
+  - طراحی schema افزایشی برای الزامات رویدادی هر مرحله، گروه‌ها/وابستگی‌های ترتیب ترکیبی، منبع داده مرجع و وضعیت نسخه/انتشار؛ تکمیل Service/Repository/Validator و آزمون‌های Backend؛ حفظ EventTypes و APIهای موجود.
+- [ ] **تسک ۳ — پنل تنظیم و انتشار Workflow**
+  - توسعه صفحه و ماژول فعلی Workflow برای ساخت مسیر اولیه/تکراری، تعریف مراحل، انتخاب EventTypeهای موجود، تعیین ترتیب اجباری/آزاد/ترکیبی، Required/Optional/Reference/Not-needed، مدیریت پیش‌نویس/انتشار و نسخه؛ اتصال کامل به API و رعایت RTL/تم/موبایل.
+- [ ] **تسک ۴ — اجرای قواعد در ثبت رویداد و تکمیل مرحله**
+  - اتصال موتور قواعد به مسیر اصلی `POST /events` و UI موجود ثبت رویداد؛ نمایش رویدادهای مجاز/باقی‌مانده، کنترل ترتیب و وابستگی، اعتبارسنجی سرور، محاسبه تکمیل مرحله و مدیریت void/amendment؛ جلوگیری از انتقال زودهنگام بدون تغییر مسیر اصلی ثبت رویداد.
+- [ ] **تسک ۵ — پروژه تکراری و همگام‌سازی زنده مرجع**
+  - ایجاد پروژه تکراری از مسیر موجود پروژه؛ اتصال به پروژه اصلی با `SourceProjectID`؛ تخصیص Workflow تکراری؛ ارجاع اطلاعات طراحی/الگو/نمونه/مشخصات مرجع و همگام‌سازی خودکار تغییرات؛ ثبت تاریخچه و تعارض‌ها؛ حفظ استقلال رویدادها و سوابق تولید؛ آزمون کامل چند تکرار و عدم تغییر گزارش‌های گذشته.
+
+> قاعده اجرا: هر Macro-Task یک تحویل یکپارچه Backend + Frontend در محدوده خودش است. پس از هر تحویل، گزارش کوتاه و توقف برای تست کاربر؛ تیک و Log تکمیل فقط پس از تأیید کاربر ثبت می‌شود. کدنویسی روی شاخه feature و از مسیر PR انجام می‌شود؛ ادغام/انتشار تولید فقط با تأیید جداگانه کاربر.
