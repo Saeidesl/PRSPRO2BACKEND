@@ -13,7 +13,6 @@ const WorkflowStepEventRuleRepository = {
   },
 
   getAll: function() {
-    this.ensureSchema();
     return GoogleSheetsRepository.getAll(this.SHEET_NAME);
   },
 
@@ -31,19 +30,49 @@ const WorkflowStepEventRuleRepository = {
     });
   },
 
-  replaceForStepVersion: function(stepId, version, tenantId, records) {
+  replaceForStepVersion: function(workflowId, stepId, version, tenantId, records) {
     this.ensureSchema();
-    const existing = this.findByStepAndVersion(stepId, version).filter(function(item) {
-      return String(item.TenantID) === String(tenantId) &&
-        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-    });
-    existing.forEach(function(item) {
-      GoogleSheetsRepository.updateById(WorkflowStepEventRuleRepository.SHEET_NAME, item.ID, {
-        Status: 'INACTIVE',
-        UpdatedAt: new Date().toISOString()
+    const sheet = GoogleSheetsRepository.getSheet(this.SHEET_NAME);
+    const headers = GoogleSheetsRepository.getHeaders(this.SHEET_NAME);
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const lastRow = sheet.getLastRow();
+      const values = lastRow > 1
+        ? sheet.getRange(2, 1, lastRow - 1, headers.length).getValues()
+        : [];
+      const statusIndex = headers.indexOf('Status');
+      const tenantIndex = headers.indexOf('TenantID');
+      const workflowIndex = headers.indexOf('WorkflowID');
+      const stepIndex = headers.indexOf('WorkflowStepID');
+      const versionIndex = headers.indexOf('WorkflowVersion');
+      const updatedIndex = headers.indexOf('UpdatedAt');
+      const now = new Date().toISOString();
+      let changed = false;
+      values.forEach(function(row) {
+        if (String(row[tenantIndex]) === String(tenantId) &&
+            String(row[workflowIndex]) === String(workflowId) &&
+            String(row[stepIndex]) === String(stepId) &&
+            Number(row[versionIndex] || 1) === Number(version) &&
+            String(row[statusIndex] || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+          row[statusIndex] = 'INACTIVE';
+          row[updatedIndex] = now;
+          changed = true;
+        }
       });
-    });
-    if (!records.length) return [];
-    return GoogleSheetsRepository.insertMany(this.SHEET_NAME, records);
+      if (changed) sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+      if (records.length) {
+        const rows = records.map(function(record) {
+          return headers.map(function(header) { return record[header] !== undefined ? record[header] : ''; });
+        });
+        sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+      }
+      if (typeof GoogleSheetsRepository._invalidateSheetRecordCache === 'function') {
+        GoogleSheetsRepository._invalidateSheetRecordCache(this.SHEET_NAME);
+      }
+      return records;
+    } finally {
+      lock.releaseLock();
+    }
   }
 };
