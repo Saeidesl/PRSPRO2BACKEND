@@ -30,6 +30,36 @@ const WorkflowStepEventRuleRepository = {
     });
   },
 
+  cloneWorkflowVersion: function(workflowId, fromVersion, toVersion, tenantId) {
+    this.ensureSchema();
+    const source = this.findByWorkflowVersion(workflowId, fromVersion).filter(function(item) {
+      return String(item.TenantID) === String(tenantId) &&
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    });
+    if (!source.length) return [];
+    const now = new Date().toISOString();
+    const copies = source.map(function(item) {
+      return {
+        ID: 'WFER_' + Utilities.getUuid().replace(/-/g, ''),
+        TenantID: tenantId,
+        WorkflowID: workflowId,
+        WorkflowVersion: toVersion,
+        WorkflowStepID: item.WorkflowStepID,
+        EventTypeID: item.EventTypeID,
+        RequirementMode: item.RequirementMode,
+        DataSource: item.DataSource,
+        SequenceMode: item.SequenceMode,
+        GroupKey: item.GroupKey,
+        GroupOrder: item.GroupOrder,
+        EventOrder: item.EventOrder,
+        Status: 'ACTIVE',
+        CreatedAt: now,
+        UpdatedAt: now
+      };
+    });
+    return GoogleSheetsRepository.insertMany(this.SHEET_NAME, copies);
+  },
+
   replaceForStepVersion: function(workflowId, stepId, version, tenantId, records) {
     this.ensureSchema();
     const sheet = GoogleSheetsRepository.getSheet(this.SHEET_NAME);
