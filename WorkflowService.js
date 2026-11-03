@@ -16,7 +16,8 @@ const WorkflowService = {
     }).map(function(row) {
       return { ID: row.ID, Name: row.Name, Code: row.Code, Category: row.Category || '' };
     });
-    return Response.success({ workflows: workflows, departments: departments, eventTypes: eventTypes });
+    const informationTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(row) { return String(row.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; }).map(function(row) { return { ID: row.ID, Code: row.Code, Name: row.Name, DataType: row.DataType || 'text' }; });
+    return Response.success({ workflows: workflows, departments: departments, eventTypes: eventTypes , informationTypes: informationTypes });
   },
 
   managementData: function(workflowId, params) {
