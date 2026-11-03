@@ -214,9 +214,13 @@ const ProjectInformationService = {
         ProjectInformationRepository.insertSyncLog({ID:this._id('PRSL'),TenantID:user.TenantID,SourceProjectID:sourceProject.ID,TargetProjectID:target.ID,InformationTypeID:type.ID,Policy:policy,SourceRevision:sourceInfo.Revision,TargetRevision:targetInfo?targetInfo.Revision:'',Action:'SKIPPED_FILE',ConflictJSON:'',IdempotencyKey:idempotencyKey,ActorUserID:user.ID,CreatedAt:now});
         outcomes.push({targetProjectId:target.ID,status:'SKIPPED_FILE'});return;
       }
-      var previous=ProjectInformationRepository.findSyncLog(sourceProject.ID,target.ID,type.ID);
+      var successfulLogs=ProjectInformationRepository.getAllSyncLogs().filter(function(row){
+        return String(row.TenantID)===String(user.TenantID) && String(row.SourceProjectID)===String(sourceProject.ID) &&
+          String(row.TargetProjectID)===String(target.ID) && String(row.InformationTypeID)===String(type.ID) && String(row.Action)==='SYNCED';
+      }).sort(function(a,b){return String(b.CreatedAt||'').localeCompare(String(a.CreatedAt||''));});
+      var previous=successfulLogs[0] || null;
       var targetRevision=targetInfo?Number(targetInfo.Revision||0):0;
-      var expectedRevision=previous && String(previous.Action)==='SYNCED' ? Number(previous.TargetRevision||0) : 0;
+      var expectedRevision=previous ? Number(previous.TargetRevision||0) : 0;
       if((previous && String(previous.Action)==='SYNCED' && targetRevision!==expectedRevision) || (!previous && targetInfo && String(targetInfo.Status||'ACTIVE')==='ACTIVE')){
         var conflict={reason:'TARGET_CHANGED_LOCALLY',expectedRevision:expectedRevision,currentRevision:targetRevision,sourceRevision:Number(sourceInfo.Revision||0)};
         ProjectInformationRepository.insertSyncLog({ID:this._id('PRSL'),TenantID:user.TenantID,SourceProjectID:sourceProject.ID,TargetProjectID:target.ID,InformationTypeID:type.ID,Policy:policy,SourceRevision:sourceInfo.Revision,TargetRevision:targetRevision,Action:'CONFLICT',ConflictJSON:JSON.stringify(conflict),IdempotencyKey:idempotencyKey,ActorUserID:user.ID,CreatedAt:now});
