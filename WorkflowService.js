@@ -11,7 +11,10 @@ const WorkflowService = {
     const departments = DepartmentRepository.getAll().filter(function(item) {
       return String(item.TenantID) === tenantId;
     });
-    return Response.success({ workflows: workflows, departments: departments });
+    const eventTypes = EventTypeRepository.getAll().filter(function(row) {
+      return String(row.TenantID) === tenantId && String(row.Status || '').toUpperCase() === 'ACTIVE' && String(row.ConnectionType || 'PROJECT').toUpperCase() === 'PROJECT';
+    });
+    return Response.success({ workflows: workflows, departments: departments, eventTypes: eventTypes });
   },
 
   managementData: function(workflowId, params) {
