@@ -27,5 +27,6 @@ const ProjectInformationRepository = {
         (tenantId === undefined || String(row.TenantID)===String(tenantId));
     }).sort(function(a,b) { return String(b.CreatedAt||'').localeCompare(String(a.CreatedAt||'')); })[0] || null;
   },
-  insertSyncLog: function(row) { return GoogleSheetsRepository.insert(this.SYNC_LOG_SHEET,row); }
+  insertSyncLog: function(row) { return GoogleSheetsRepository.insert(this.SYNC_LOG_SHEET,row); },
+  updateSyncLog: function(id,data) { return GoogleSheetsRepository.updateById(this.SYNC_LOG_SHEET,id,data); }
 };
