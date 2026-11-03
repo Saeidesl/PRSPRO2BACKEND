@@ -179,8 +179,7 @@ const ProjectInformationService = {
     return Response.success(current,{message:'اطلاعات پرونده ذخیره شد.'});
   },
   approve: function(projectId,typeId,body,params){
-    var user=this._user(params),lock=LockService.getScriptLock();
-    lock.waitLock(30000);
+    var user=this._user(params);
     try{
       var project=this._project(projectId,user.TenantID,user),type=this._type(typeId,user.TenantID);
       if(String(project.SourceProjectID||'').trim())throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION,'اطلاعات پروژه تکراری قابل تأیید به‌عنوان مرجع نیست.');
@@ -193,11 +192,10 @@ const ProjectInformationService = {
       AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'PROJECT_INFORMATION_APPROVED',EntityType:'PROJECT_INFORMATION',EntityID:current.ID,OldData:null,NewData:{Revision:Number(current.Revision||1),HistoryID:history.ID},Reason:String((body||{}).Reason||'تأیید نسخه مرجع')});
       var sync=this._syncApprovedReference_(project,type,current,user);
       return Response.success({approved:true,revision:Number(current.Revision||1),approvedAt:now,approvedBy:user.ID,Value:value,sync:sync},{message:'نسخه اطلاعات تأیید شد و همگام‌سازی پروژه‌های تکراری انجام شد.'});
-    } finally { lock.releaseLock(); }
+    } finally {}
   },
   resolveReferenceConflict: function(projectId,typeId,body,params){
-    var user=this._user(params),lock=LockService.getScriptLock();
-    lock.waitLock(30000);
+    var user=this._user(params);
     try{
       body=body||{};
       var target=this._project(projectId,user.TenantID,user),type=this._type(typeId,user.TenantID);
@@ -235,7 +233,7 @@ const ProjectInformationService = {
       ProjectInformationRepository.updateSyncLog(conflictLog.ID,{Action:decision==='USE_SOURCE'?'SYNCED':'CONFLICT_RESOLVED_LOCAL',TargetRevision:nextRevision,ConflictJSON:JSON.stringify(resolution),ActorUserID:user.ID,CreatedAt:now});
       AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:'PROJECT_REFERENCE_CONFLICT_RESOLVED',EntityType:'PROJECT_INFORMATION',EntityID:targetInfo?targetInfo.ID:target.ID,OldData:{ValueJSON:oldValue,Revision:currentTargetRevision},NewData:{Decision:decision,SourceProjectID:source.ID,InformationTypeID:type.ID,SourceRevision:Number(approval.Revision),TargetRevision:nextRevision},Reason:String(body.Reason||'تعیین تکلیف تعارض همگام‌سازی')});
       return Response.success({resolved:true,decision:decision,targetRevision:nextRevision},{message:decision==='USE_SOURCE'?'نسخه مرجع اعمال شد.':'اطلاعات محلی حفظ شد.'});
-    } finally { lock.releaseLock(); }
+    } finally {}
   },
   _syncApprovedReference_: function(sourceProject,type,sourceInfo,user){
     var policyMap=this._parse(sourceProject.ReferencePolicyJSON,{});
