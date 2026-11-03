@@ -23,7 +23,7 @@
   - `POST /workflows/:workflowId/department-steps` و `POST /workflows/:workflowId/department-steps/bulk` → اتصال مرحله به دپارتمان؛ bulk payload شامل `{assignments: [...]}`.
   - `PUT /workflows/:workflowId` → `WorkflowService.update(id, body, params)`.
   - حذف اتصال دپارتمان از مسیر `DELETE /workflows/:workflowId/department-steps/:assignmentId`.
-- `WorkflowService.js`: توابع تأییدشده `managementBootstrap`, `managementData`, `list`, `get`, `create`, `update`, `getSteps`, `createStep`. گردش کار فعلی دارای `Version` است؛ مراحل با `WorkflowID`, `StepOrder`, `Status` تعریف می‌شوند.
+- `WorkflowService.js`: توابع تأییدشده `managementBootstrap`, `managementData`, `list`, `get`, `create`, `update`, `getSteps`, `createStep`. گردش کار فعلی دارای `Version` است؛ مراحل با `WorkflowID`, `StepOrder`, `Status` تعریف می‌شوند. در نسخه‌های جدید، `managementData`, `get`, `getSteps` مراحل و اتصال واحدها را با `WorkflowVersion <=` نسخه پیش‌نویس/منتشرشده فعال فیلتر می‌کنند؛ افزودن مرحله به Workflow منتشرشده ابتدا DraftVersion جدید ایجاد می‌کند.
 - APIهای افزوده‌شده در تسک ۲: `GET /workflows/:workflowId/steps/:stepId/event-rules`، `PUT /workflows/:workflowId/steps/:stepId/event-rules` و `POST /workflows/:workflowId/publish`؛ توابع `getStepEventRules`, `saveStepEventRules`, `publish` در `WorkflowService.js` پیاده‌سازی شده‌اند.
 - `WorkflowRepository.js`: شیت `09_Workflows`؛ توابع `getAll`, `findById`, `findByCode`, `existsByCode`, `insert`, `update`.
 - `WorkflowStepRepository.gs.js`: شیت `10_WorkflowSteps`؛ `getAll`, `findById`, `findByWorkflowId`, `findFirstByWorkflowId`, `findByCode`, `insert`, `update`؛ مراحل جدید `WorkflowVersion` دریافت می‌کنند.
