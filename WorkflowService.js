@@ -27,11 +27,14 @@ const WorkflowService = {
     if (!workflow || String(workflow.TenantID) !== tenantId) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
     }
+    const version = Number(workflow.DraftVersion || workflow.PublishedVersion || workflow.Version || 1);
     const steps = WorkflowStepRepository.findByWorkflowId(workflowId).filter(function(item) {
-      return String(item.TenantID) === tenantId;
+      return String(item.TenantID) === tenantId && Number(item.WorkflowVersion || 1) <= version;
     });
+    const visibleStepIds = Object.create(null);
+    steps.forEach(function(item) { visibleStepIds[String(item.ID)] = true; });
     const assignments = WorkflowStepDepartmentRepository.findByWorkflowId(workflowId).filter(function(item) {
-      return String(item.TenantID) === tenantId && String(item.Status).toUpperCase() === 'ACTIVE';
+      return String(item.TenantID) === tenantId && String(item.Status).toUpperCase() === 'ACTIVE' && visibleStepIds[String(item.WorkflowStepID)];
     });
     return Response.success({ steps: steps, assignments: assignments });
   },
@@ -377,18 +380,12 @@ const WorkflowService = {
 
     }
 
-    const steps =
-      WorkflowStepRepository.findByWorkflowId(
-        workflowId
-      );
-
-    const tenantSteps =
-      steps.filter(function(step) {
-
-        return String(step.TenantID) ===
-          String(user.TenantID);
-
-      });
+    const requestedVersion = Number(workflow.DraftVersion || workflow.PublishedVersion || workflow.Version || 1);
+    const steps = WorkflowStepRepository.findByWorkflowId(workflowId);
+    const tenantSteps = steps.filter(function(step) {
+      return String(step.TenantID) === String(user.TenantID) &&
+        Number(step.WorkflowVersion || 1) <= requestedVersion;
+    });
 
     return Response.success({
       items: tenantSteps,
