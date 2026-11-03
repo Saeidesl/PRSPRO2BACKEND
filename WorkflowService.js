@@ -585,15 +585,23 @@ const WorkflowService = {
     if (data.rules.length > 100) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای هر مرحله حداکثر ۱۰۰ قاعده رویداد مجاز است.');
     }
-    const version = Number(data.WorkflowVersion || workflow.DraftVersion ||
-      (workflow.LifecycleState === 'PUBLISHED'
-        ? Number(workflow.PublishedVersion || workflow.Version || 1) + 1
-        : workflow.Version || 1));
+    const isPublished = String(workflow.LifecycleState || '').toUpperCase() === 'PUBLISHED';
+    const publishedVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+    const version = Number(workflow.DraftVersion || (isPublished ? publishedVersion + 1 : workflow.Version || 1));
+    if (data.WorkflowVersion !== undefined && Number(data.WorkflowVersion) !== version) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نسخه درخواستی با نسخه پیش‌نویس معتبر گردش‌کار مطابقت ندارد.');
+    }
+    if (isPublished && !workflow.DraftVersion) {
+      WorkflowStepEventRuleRepository.cloneWorkflowVersion(
+        workflowId, publishedVersion, version, user.TenantID
+      );
+    }
     const normalizedRules = WorkflowStepEventRuleValidator.validate(data.rules);
     normalizedRules.forEach(function(rule) {
       const eventType = EventTypeRepository.findById(rule.EventTypeID);
       if (!eventType || String(eventType.TenantID) !== String(user.TenantID) ||
-          String(eventType.Status || '').toUpperCase() !== 'ACTIVE') {
+          String(eventType.Status || '').toUpperCase() !== 'ACTIVE' ||
+          String(eventType.ConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT') {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'یکی از انواع رویداد انتخاب‌شده معتبر یا فعال نیست.');
       }
     });
