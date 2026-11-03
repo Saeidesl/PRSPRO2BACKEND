@@ -44,31 +44,28 @@ const EventTypeValidator = {
       Validator.enum(data.ConnectionType, ['PROJECT', 'INDEPENDENT'], 'ConnectionType');
     }
 
+    if (data.AllowOnDraft !== undefined) Validator.boolean(data.AllowOnDraft, 'AllowOnDraft');
+    if (data.IsFormAmendment !== undefined) Validator.boolean(data.IsFormAmendment, 'IsFormAmendment');
+    if (data.AmendableFormIDs !== undefined && !Array.isArray(data.AmendableFormIDs)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست فرم‌های مجاز باید آرایه باشد.');
+
     if (String(data.ConnectionType || '').toUpperCase() === 'INDEPENDENT' &&
-        [data.UseProjectColors, data.UseProjectSizes, data.TrackVariantQuantity].some(function(value) {
-          return value === true || String(value).toLowerCase() === 'true';
-        })) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد مستقل از پروژه نمی‌تواند رنگ، سایز یا مقدار ترکیب پروژه را ثبت کند.');
+        (data.AllowOnDraft === true || String(data.AllowOnDraft).toLowerCase() === 'true')) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد مستقل نمی‌تواند روی پیش‌نویس پروژه ثبت شود.');
     }
 
     const flagEnabled = function(value) {
       return value === true || String(value).toLowerCase() === 'true';
     };
-    if (flagEnabled(data.TrackVariantQuantity) &&
-        !flagEnabled(data.UseProjectColors) &&
-        !flagEnabled(data.UseProjectSizes)) {
-      throw ErrorHandler.create(
-        Constants.ERROR.VALIDATION_ERROR,
-        'برای ثبت مقدار ترکیب، دست‌کم رنگ یا سایز باید فعال باشد.'
-      );
+    if (String(data.ConnectionType || '').toUpperCase() === 'INDEPENDENT' &&
+        flagEnabled(data.TrackVariantQuantity)) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت مقدار تولید/تحویل فقط برای رویدادهای متصل به پروژه امکان‌پذیر است.');
     }
 
-    ['UseProjectColors', 'UseProjectSizes', 'TrackVariantQuantity'].forEach(function(fieldName) {
-      if (data[fieldName] !== undefined && typeof data[fieldName] !== 'boolean' &&
-          String(data[fieldName]).toLowerCase() !== 'true' && String(data[fieldName]).toLowerCase() !== 'false') {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم ' + fieldName + ' معتبر نیست.');
-      }
-    });
+    if (data.TrackVariantQuantity !== undefined && typeof data.TrackVariantQuantity !== 'boolean' &&
+        String(data.TrackVariantQuantity).toLowerCase() !== 'true' &&
+        String(data.TrackVariantQuantity).toLowerCase() !== 'false') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'تنظیم TrackVariantQuantity معتبر نیست.');
+    }
 
     if (data.Version !== undefined &&
         data.Version !== null &&

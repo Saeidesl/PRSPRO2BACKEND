@@ -141,8 +141,43 @@ const Router = {
     }
 
     if (path === '/projects') {
-      AccessControlService.require(params, 'PROJECT_VIEW');
+      this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_CREATE']);
       return ProjectService.list(params);
+    }
+
+    const projectByIdMatch = path.match(/^\/projects\/([^/]+)$/);
+    if (projectByIdMatch) {
+      try {
+        AccessControlService.require(params, 'PROJECT_VIEW');
+      } catch (permissionError) {
+        const currentUser = AccessControlService.getCurrentUser(params || {});
+        const draft = ProjectRepository.findById(decodeURIComponent(projectByIdMatch[1]));
+        if (!draft || String(draft.TenantID) !== String(currentUser.TenantID) ||
+            String(draft.RecordState || '').toUpperCase() !== 'DRAFT' ||
+            String(draft.CreatedBy || '') !== String(currentUser.ID || '')) {
+          throw permissionError;
+        }
+        AccessControlService.require(params, 'PROJECT_CREATE');
+      }
+      return ProjectService.get(decodeURIComponent(projectByIdMatch[1]), params);
+    }
+
+    const projectInformationHistoryMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)\/history$/);
+    if (projectInformationHistoryMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectInformationService.history(decodeURIComponent(projectInformationHistoryMatch[1]), decodeURIComponent(projectInformationHistoryMatch[2]), params);
+    }
+
+    const projectInformationItemMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)$/);
+    if (projectInformationItemMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectInformationService.get(decodeURIComponent(projectInformationItemMatch[1]), decodeURIComponent(projectInformationItemMatch[2]), params);
+    }
+
+    const projectInformationListMatch = path.match(/^\/projects\/([^/]+)\/information$/);
+    if (projectInformationListMatch) {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return ProjectInformationService.list(decodeURIComponent(projectInformationListMatch[1]), params);
     }
 
     if (path.indexOf('/projects/') === 0) {
@@ -162,6 +197,9 @@ const Router = {
       if (parts[3] === 'events') {
         AccessControlService.require(params, 'EVENT_VIEW');
         return EventService.listByProject(projectId, params);
+      }
+      if (parts[3] === 'workflow-progress') {
+        return EventService.workflowProgress(projectId, params);
       }
 
       if (parts[3] === 'material-specifications') {
@@ -195,7 +233,7 @@ const Router = {
 
     if (path === '/workflows') {
       // Project creators need read-only workflow choices during project creation.
-      this.requireAny(params, ['WORKFLOW_MANAGE', 'PROJECT_CREATE']);
+      this.requireAny(params, ['WORKFLOW_MANAGE', 'PROJECT_CREATE', 'SYSTEM_SETTINGS']);
       return WorkflowService.list(params);
     }
 
@@ -205,6 +243,12 @@ const Router = {
 
       if (!workflowId) {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
+      }
+
+
+      if (parts[3] === 'steps' && parts[5] === 'event-rules') {
+        AccessControlService.require(params, 'WORKFLOW_MANAGE');
+        return WorkflowService.getStepEventRules(workflowId, decodeURIComponent(parts[4]), params);
       }
 
       if (parts[3] === 'management-data') {
@@ -226,8 +270,47 @@ const Router = {
       return WorkflowService.get(workflowId, params);
     }
 
+    if (path === '/print-templates') {
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'PROJECT_VIEW']);
+      return PrintTemplateService.list(params);
+    }
+    if (path === '/print-templates/sources') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.sources(params);
+    }
+    const printTemplateGetParts = path.split('/');
+    if (printTemplateGetParts.length === 3 && printTemplateGetParts[1] === 'print-templates' && printTemplateGetParts[2]) {
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'PROJECT_VIEW']);
+      return PrintTemplateService.get(decodeURIComponent(printTemplateGetParts[2]), params);
+    }
+
+    if (path === '/forms') {
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'EVENT_TYPE_MANAGE']);
+      return FormService.list(params);
+    }
+    if (path.indexOf('/forms/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      const parts = path.split('/');
+      const formId = decodeURIComponent(parts[2] || '');
+      if (parts[3] === 'event-types') return FormService.listFormEventTypes(formId, params);
+      return FormService.get(formId, params);
+    }
+
+    if (path === '/information-types') {
+      this.requireAny(params, ['SYSTEM_SETTINGS', 'EVENT_TYPE_MANAGE']);
+      return InformationTypeService.list(params);
+    }
+
+    if (path.indexOf('/information-types/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      const parts = path.split('/');
+      const informationTypeId = decodeURIComponent(parts[2] || '');
+      if (parts[3] === 'columns') return InformationTypeService.listColumns(informationTypeId, params);
+      if (parts.length === 3) return InformationTypeService.get(informationTypeId, params);
+    }
+
     if (path === '/event-types') {
-      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE']);
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'EVENT_CREATE', 'SYSTEM_SETTINGS']);
       return EventTypeService.list(params);
     }
 
@@ -241,13 +324,16 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مسیر مورد نظر پیدا نشد.');
       }
 
-      if (parts[3] === 'fields') {
-        return EventFieldService.listByEventType(eventTypeId, params);
+      if (parts[3] === 'forms') {
+        return FormService.listEventTypeForms(eventTypeId, params);
       }
 
       if (parts[3] === 'procurement') {
         AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
         return ProcurementEventIntegrationService.get(eventTypeId, params);
+      }
+      if (parts[3]) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مسیر مورد نظر پیدا نشد.');
       }
 
       return EventTypeService.get(eventTypeId, params);
@@ -267,6 +353,9 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
       }
 
+      if (parts[3] === 'forms') {
+        return FormService.getEventResponses(eventId, params);
+      }
       if (parts[3] === 'data') {
         return EventDataService.getByEventId(eventId, params);
       }
@@ -425,6 +514,17 @@ const Router = {
       return AuthService.login(body, params);
     }
 
+    if (path === '/print-templates') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.create(body, params);
+    }
+    const printTemplateResolveParts = path.split('/');
+    if (printTemplateResolveParts.length === 4 && printTemplateResolveParts[1] === 'print-templates' &&
+        printTemplateResolveParts[2] && printTemplateResolveParts[3] === 'resolve') {
+      AccessControlService.require(params, 'PROJECT_VIEW');
+      return PrintTemplateService.resolve(decodeURIComponent(printTemplateResolveParts[2]), body, params);
+    }
+
     if (path === '/auth/logout') {
       return AuthService.logout(params);
     }
@@ -528,6 +628,11 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
       }
 
+
+      if (parts[3] === 'publish') {
+        return WorkflowService.publish(workflowId, params);
+      }
+
       if (parts[3] === 'steps') {
         return WorkflowService.createStep(workflowId, body, params);
       }
@@ -551,6 +656,48 @@ const Router = {
       }
     }
 
+    if (path === '/information-types') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.create(body, params);
+    }
+
+    const informationTypeColumnCreateMatch = path.match(/^\/information-types\/([^/]+)\/columns$/);
+    if (informationTypeColumnCreateMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.createColumn(decodeURIComponent(informationTypeColumnCreateMatch[1]), body, params);
+    }
+
+    const projectReferenceResolveMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)\/resolve-reference$/);
+    if (projectReferenceResolveMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return ProjectInformationService.resolveReferenceConflict(decodeURIComponent(projectReferenceResolveMatch[1]), decodeURIComponent(projectReferenceResolveMatch[2]), body, params);
+    }
+
+    const projectInformationApproveMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)\/approve$/);
+    if (projectInformationApproveMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return ProjectInformationService.approve(decodeURIComponent(projectInformationApproveMatch[1]), decodeURIComponent(projectInformationApproveMatch[2]), body, params);
+    }
+
+    const projectInformationSaveMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)$/);
+    if (projectInformationSaveMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return ProjectInformationService.save(decodeURIComponent(projectInformationSaveMatch[1]), decodeURIComponent(projectInformationSaveMatch[2]), body, params);
+    }
+
+    if (path === '/forms') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.create(body, params);
+    }
+    if (path.indexOf('/forms/') === 0 && path.split('/')[3] === 'fields') {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.addField(decodeURIComponent(path.split('/')[2]), body, params);
+    }
+    if (path.indexOf('/event-types/') === 0 && path.split('/')[3] === 'forms') {
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'SYSTEM_SETTINGS']);
+      return FormService.assignEventType(decodeURIComponent(path.split('/')[2]), body, params);
+    }
+
     if (path === '/event-types') {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.create(body, params);
@@ -562,16 +709,6 @@ const Router = {
       return ProcurementEventIntegrationService.save(eventTypeProcurementMatch[1], body, params);
     }
 
-    if (path.indexOf('/event-types/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      const parts = path.split('/');
-
-      if (parts[3] === 'fields') {
-        body.EventTypeID = parts[2];
-        return EventFieldService.create(body, params);
-      }
-    }
-
     if (path === '/events') {
       AccessControlService.require(params, 'EVENT_CREATE');
       return EventService.create(body, params);
@@ -580,11 +717,6 @@ const Router = {
     if (path.indexOf('/events/') === 0) {
       const parts = path.split('/');
       const eventId = parts[2];
-
-      if (parts[3] === 'data') {
-        AccessControlService.require(params, 'EVENT_EDIT');
-        return EventDataService.save(eventId, body, params);
-      }
 
       if (parts[3] === 'attachments') {
         AccessControlService.require(params, 'ATTACHMENT_UPLOAD');
@@ -674,24 +806,80 @@ const Router = {
       return DepartmentService.update(departmentId, body, params);
     }
 
+    const informationTypeColumnUpdateMatch = path.match(/^\/information-types\/([^/]+)\/columns\/([^/]+)$/);
+    if (informationTypeColumnUpdateMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.updateColumn(decodeURIComponent(informationTypeColumnUpdateMatch[1]), decodeURIComponent(informationTypeColumnUpdateMatch[2]), body, params);
+    }
+
+    const printTemplateUpdateParts = path.split('/');
+    if (printTemplateUpdateParts.length === 3 && printTemplateUpdateParts[1] === 'print-templates' && printTemplateUpdateParts[2]) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.update(decodeURIComponent(printTemplateUpdateParts[2]), body, params);
+    }
+
+    const informationTypeUpdateMatch = path.match(/^\/information-types\/([^/]+)$/);
+    if (informationTypeUpdateMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.update(decodeURIComponent(informationTypeUpdateMatch[1]), body, params);
+    }
+
     const materialSpecUpdateMatch = path.match(/^\/material-specifications\/([^/]+)$/);
     if (materialSpecUpdateMatch) {
       AccessControlService.require(params, 'PROJECT_EDIT');
       return MaterialPlanningService.reviseSpecification(materialSpecUpdateMatch[1], body, params);
     }
 
-    if (path.indexOf('/projects/') === 0) {
-      AccessControlService.require(params, 'PROJECT_EDIT');
-      return ProjectService.update(path.split('/')[2], body, params);
+    const projectUpdateMatch = path.match(/^\/projects\/([^/]+)$/);
+    if (projectUpdateMatch) {
+      try {
+        AccessControlService.require(params, 'PROJECT_EDIT');
+      } catch (permissionError) {
+        const currentUser = AccessControlService.getCurrentUser(params || {});
+        const draft = ProjectRepository.findById(decodeURIComponent(projectUpdateMatch[1]));
+        if (!draft || String(draft.TenantID) !== String(currentUser.TenantID) ||
+            String(draft.RecordState || '').toUpperCase() !== 'DRAFT' ||
+            String(draft.CreatedBy || '') !== String(currentUser.ID || '')) {
+          throw permissionError;
+        }
+        AccessControlService.require(params, 'PROJECT_CREATE');
+      }
+      return ProjectService.update(decodeURIComponent(projectUpdateMatch[1]), body, params);
+    }
+
+
+    const workflowEventRulesMatch = path.match(/^\/workflows\/([^/]+)\/steps\/([^/]+)\/event-rules$/);
+    if (workflowEventRulesMatch) {
+      AccessControlService.require(params, 'WORKFLOW_MANAGE');
+      return WorkflowService.saveStepEventRules(
+        decodeURIComponent(workflowEventRulesMatch[1]),
+        decodeURIComponent(workflowEventRulesMatch[2]),
+        body,
+        params
+      );
     }
 
     if (path.indexOf('/workflows/') === 0) {
       AccessControlService.require(params, 'WORKFLOW_MANAGE');
       return WorkflowService.update(path.split('/')[2], body, params);
     }
+    if (path.indexOf('/forms/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.update(decodeURIComponent(path.split('/')[2]), body, params);
+    }
+    if (path.indexOf('/form-fields/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.updateField(decodeURIComponent(path.split('/')[2]), body, params);
+    }
     if (path.indexOf('/event-types/') === 0) {
       AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
       return EventTypeService.update(path.split('/')[2], body, params);
+    }
+
+    const eventFormUpdateMatch = path.match(/^\/events\/([^/]+)\/forms\/([^/]+)$/);
+    if (eventFormUpdateMatch) {
+      AccessControlService.require(params, 'EVENT_EDIT');
+      return FormService.updateEventFormResponse(decodeURIComponent(eventFormUpdateMatch[1]), decodeURIComponent(eventFormUpdateMatch[2]), body, params);
     }
 
     if (path.indexOf('/events/') === 0) {
@@ -708,16 +896,35 @@ const Router = {
       return UserService.update(path.split('/')[2], body, params);
     }
 
-    if (path.indexOf('/event-fields/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      return EventFieldService.update(path.split('/')[2], body, params);
-    }
-
     throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'مسیر مورد نظر پیدا نشد.');
   },
 
   delete: function(path, params) {
     path = String(path || '').trim();
+
+    const projectInformationDeleteMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)$/);
+    if (projectInformationDeleteMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return ProjectInformationService.deactivate(decodeURIComponent(projectInformationDeleteMatch[1]), decodeURIComponent(projectInformationDeleteMatch[2]), params);
+    }
+
+    const informationTypeColumnDeleteMatch = path.match(/^\/information-type-columns\/([^/]+)$/);
+    if (informationTypeColumnDeleteMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.deactivateColumn(decodeURIComponent(informationTypeColumnDeleteMatch[1]), params);
+    }
+
+    const printTemplateDeleteParts = path.split('/');
+    if (printTemplateDeleteParts.length === 3 && printTemplateDeleteParts[1] === 'print-templates' && printTemplateDeleteParts[2]) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return PrintTemplateService.deactivate(decodeURIComponent(printTemplateDeleteParts[2]), params);
+    }
+
+    const informationTypeDeleteMatch = path.match(/^\/information-types\/([^/]+)$/);
+    if (informationTypeDeleteMatch) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return InformationTypeService.deactivate(decodeURIComponent(informationTypeDeleteMatch[1]), params);
+    }
 
     var projectDeleteMatch = path.match(/^\/admin\/projects\/([^/]+)$/);
     if (projectDeleteMatch) {
@@ -743,11 +950,6 @@ const Router = {
         adminUser,
         AuthService.getToken_(params)
       );
-    }
-
-    if (path.indexOf('/event-fields/') === 0) {
-      AccessControlService.require(params, 'EVENT_TYPE_MANAGE');
-      return EventFieldService.delete(path.split('/')[2], params);
     }
 
     if (
@@ -790,6 +992,15 @@ const Router = {
       }
 
       return WorkflowStepDepartmentService.remove(assignmentId, params);
+    }
+
+    if (path.indexOf('/form-fields/') === 0) {
+      AccessControlService.require(params, 'SYSTEM_SETTINGS');
+      return FormService.removeField(decodeURIComponent(path.split('/')[2]), params);
+    }
+    if (path.indexOf('/event-type-forms/') === 0) {
+      this.requireAny(params, ['EVENT_TYPE_MANAGE', 'SYSTEM_SETTINGS']);
+      return FormService.unassignEventType(decodeURIComponent(path.split('/')[2]), params);
     }
 
     if (path.indexOf('/attachments/') === 0) {

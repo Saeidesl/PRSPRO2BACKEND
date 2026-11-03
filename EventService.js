@@ -157,6 +157,8 @@ const EventService = {
 
   _getConfiguredChanges_: function(project, event, eventType, tenantId) {
     const changes = {};
+    // Draft events collect information only; lifecycle/workflow transitions wait for explicit completion.
+    if (project && String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') return changes;
 
     const targetDepartmentId =
       eventType.TargetDepartmentID || '';
@@ -752,6 +754,129 @@ const EventService = {
     });
   },
 
+  _getWorkflowRuleProgress_: function(project, tenantId) {
+    if (!project || !project.WorkflowID || !project.CurrentStepID ||
+        typeof WorkflowStepEventRuleRepository === 'undefined') {
+      return { configured: false, rules: [], completed: [], remaining: [], sequenceMode: 'FREE', stageComplete: true };
+    }
+    const version = Number(project.WorkflowVersion || 1);
+    const rules = WorkflowStepEventRuleRepository.findByStepAndVersion(project.CurrentStepID, version)
+      .filter(function(rule) {
+        return String(rule.TenantID) === String(tenantId) &&
+          String(rule.WorkflowID) === String(project.WorkflowID) &&
+          Number(rule.WorkflowVersion || 1) === version &&
+          String(rule.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      }).sort(function(a, b) {
+        const mode = String(a.SequenceMode || 'STRICT').toUpperCase();
+        return mode === 'STRICT'
+          ? Number(a.EventOrder || 0) - Number(b.EventOrder || 0)
+          : Number(a.GroupOrder || 0) - Number(b.GroupOrder || 0);
+      });
+    if (!rules.length) {
+      return { configured: false, rules: [], completed: [], remaining: [], sequenceMode: 'FREE', stageComplete: true };
+    }
+    const projectEvents = (EventRepository.findByProjectId(project.ID) || []).filter(function(item) {
+      return String(item.TenantID) === String(tenantId) &&
+        String(item.Status || '').toUpperCase() !== String(Constants.STATUS.VOID).toUpperCase() &&
+        (!item.WorkflowStepID || String(item.WorkflowStepID) === String(project.CurrentStepID));
+    });
+    let sourceEvents = [];
+    if (project.SourceProjectID) {
+      sourceEvents = (EventRepository.findByProjectId(project.SourceProjectID) || []).filter(function(item) {
+        return String(item.TenantID) === String(tenantId) &&
+          String(item.Status || '').toUpperCase() !== String(Constants.STATUS.VOID).toUpperCase();
+      });
+    }
+    const completed = [];
+    const remaining = [];
+    const normalized = rules.map(function(rule) {
+      const mode = String(rule.RequirementMode || 'REQUIRED').toUpperCase();
+      const source = mode === 'REFERENCE' ? sourceEvents : projectEvents;
+      const matching = source.some(function(item) {
+        return String(item.EventTypeID) === String(rule.EventTypeID);
+      });
+      const satisfied = mode === 'NOT_REQUIRED' || (mode === 'REFERENCE' ? matching : matching);
+      const item = {
+        eventTypeId: String(rule.EventTypeID),
+        requirementMode: mode,
+        dataSource: String(rule.DataSource || 'NEW_EVENT').toUpperCase(),
+        sequenceMode: String(rule.SequenceMode || 'STRICT').toUpperCase(),
+        eventOrder: Number(rule.EventOrder || 0),
+        groupKey: String(rule.GroupKey || ''),
+        groupOrder: Number(rule.GroupOrder || 0),
+        satisfied: satisfied
+      };
+      if (satisfied) completed.push(item); else if (mode !== 'NOT_REQUIRED') remaining.push(item);
+      return item;
+    });
+    return {
+      configured: true,
+      rules: normalized,
+      completed: completed,
+      remaining: remaining,
+      sequenceMode: normalized[0].sequenceMode,
+      stageComplete: remaining.filter(function(item) { return item.requirementMode === 'REQUIRED' || item.requirementMode === 'REFERENCE'; }).length === 0
+    };
+  },
+
+  _validateWorkflowEvent_: function(project, eventType, tenantId) {
+    const progress = this._getWorkflowRuleProgress_(project, tenantId);
+    if (!progress.configured) return progress;
+    const typeId = String(eventType.ID);
+    const rule = progress.rules.find(function(item) { return item.eventTypeId === typeId; });
+    if (!rule) {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این رویداد در قواعد مرحله فعلی گردش‌کار تعریف نشده است.');
+    }
+    if (rule.requirementMode === 'REFERENCE' || rule.requirementMode === 'NOT_REQUIRED') {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این مورد از پروژه مرجع تأمین می‌شود و نباید به‌عنوان رویداد جدید ثبت شود.');
+    }
+    if (rule.satisfied) {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این رویداد قبلاً برای مرحله فعلی ثبت شده است.');
+    }
+    const requiredIncomplete = progress.rules.filter(function(item) {
+      return item.requirementMode === 'REQUIRED' && !item.satisfied;
+    });
+    if (rule.sequenceMode === 'STRICT') {
+      const earlierRequired = requiredIncomplete.some(function(item) {
+        return item.eventOrder < rule.eventOrder;
+      });
+      if (earlierRequired) {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'ابتدا رویدادهای اجباری با ترتیب قبلی را ثبت کنید.');
+      }
+    } else if (rule.sequenceMode === 'GROUPED') {
+      const firstPendingGroup = requiredIncomplete.reduce(function(min, item) {
+        return Math.min(min, item.groupOrder || 0);
+      }, Infinity);
+      if (isFinite(firstPendingGroup) && rule.groupOrder > firstPendingGroup) {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'ابتدا رویدادهای اجباری گروه قبلی را تکمیل کنید.');
+      }
+    }
+    return progress;
+  },
+
+  workflowProgress: function(projectId, params) {
+    Validator.id(projectId, 'ProjectID');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const project = ProjectRepository.findById(projectId);
+    if (!project || String(project.TenantID) !== String(user.TenantID) ||
+        !ProjectService._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
+    }
+    const progress = this._getWorkflowRuleProgress_(project, user.TenantID);
+    const eventTypes = EventTypeRepository.getAll().filter(function(item) {
+      return String(item.TenantID) === String(user.TenantID);
+    });
+    const names = Object.create(null);
+    eventTypes.forEach(function(item) { names[String(item.ID)] = item.Name || item.Code || item.ID; });
+    progress.rules = progress.rules.map(function(item) {
+      return Object.assign({}, item, { eventTypeName: names[item.eventTypeId] || item.eventTypeId });
+    });
+    progress.stepName = project.CurrentStepID
+      ? ((WorkflowStepRepository.findById(project.CurrentStepID) || {}).Name || '')
+      : '';
+    return Response.success(progress);
+  },
+
   // ثبت رویداد با جلوگیری از ایجاد تکراری هنگام تکرار درخواست شبکه
   create: function(event, params) {
     Validator.object(event, 'event');
@@ -877,6 +1002,11 @@ const EventService = {
         );
       }
       this._checkProjectAvailability_(project, user);
+      this._validateWorkflowEvent_(project, eventType, user.TenantID);
+      if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT' &&
+          !EventTypeService._toBoolean_(eventType.AllowOnDraft)) {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این نوع رویداد برای ثبت روی پیش‌نویس مجاز نشده است.');
+      }
     }
 
     if (!isAdmin) {
@@ -945,77 +1075,85 @@ const EventService = {
       }
     }
 
-    const hasDynamicData =
-      Object.prototype.hasOwnProperty.call(event, 'DynamicData');
-
-    let validatedDynamicData = null;
-
-    if (hasDynamicData) {
-      validatedDynamicData = EventDataService.validateDynamicData(
+    // Validate reusable forms before persisting the event. Required form mappings
+    // are enforced server-side even if the client omits FormResponses.
+    let validatedFormResponses = [];
+    if (typeof FormService !== 'undefined' && FormService &&
+        typeof FormService.prepareEventResponses === 'function') {
+      validatedFormResponses = FormService.prepareEventResponses(
         eventType.ID,
-        event.DynamicData,
-        user.TenantID
+        event.FormResponses || [],
+        user.TenantID,
+        project ? project.ID : ''
       );
+      if (validatedFormResponses.length && !isProjectEvent) {
+        throw ErrorHandler.create(
+          Constants.ERROR.VALIDATION_ERROR,
+          'فرم‌های اطلاعات پروژه فقط برای رویدادهای متصل به پروژه قابل ثبت هستند.'
+        );
+      }
     }
 
-    const useProjectColors = EventTypeService._toBoolean_(eventType.UseProjectColors);
-    const useProjectSizes = EventTypeService._toBoolean_(eventType.UseProjectSizes);
     const trackVariantQuantity = EventTypeService._toBoolean_(eventType.TrackVariantQuantity);
     let selectedColor = '';
     let selectedSize = '';
     let variantQuantity = '';
     let validatedVariants = [];
 
-    if (useProjectColors || useProjectSizes || trackVariantQuantity) {
-      if (!project) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت رنگ، سایز یا مقدار ترکیب فقط برای رویداد مرتبط با پروژه امکان‌پذیر است.');
-      let projectVariants = { colors: [], sizes: [] };
-      try {
-        const parsed = JSON.parse(String(project.ColorSizeJSON || '{"colors":[],"sizes":[]}'));
-        if (parsed && typeof parsed === 'object') {
-          projectVariants.colors = Array.isArray(parsed.colors) ? parsed.colors.map(String) : [];
-          projectVariants.sizes = Array.isArray(parsed.sizes) ? parsed.sizes.map(String) : [];
-        }
-      } catch (error) {}
+    const hasVariantRows = Array.isArray(event.VariantDetails) && event.VariantDetails.length > 0;
+    const hasSingleVariant = event.Color || event.Size ||
+      (event.VariantQuantity !== undefined && event.VariantQuantity !== null &&
+       String(event.VariantQuantity).trim() !== '');
+    const submittedVariants = hasVariantRows
+      ? event.VariantDetails
+      : (hasSingleVariant ? [{
+          Color: event.Color,
+          Size: event.Size,
+          VariantQuantity: event.VariantQuantity
+        }] : []);
 
-      const submittedVariants = Array.isArray(event.VariantDetails) && event.VariantDetails.length
-        ? event.VariantDetails
-        : [{ Color: event.Color, Size: event.Size, VariantQuantity: event.VariantQuantity }];
-      if (submittedVariants.length > 500) {
-        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'در هر رویداد حداکثر ۵۰۰ ردیف رنگ و سایز قابل ثبت است.');
+    if (trackVariantQuantity && !project) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت مقدار تولید/تحویل فقط برای رویداد مرتبط با پروژه امکان‌پذیر است.');
+    }
+    if (submittedVariants.length > 500) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'در هر رویداد حداکثر ۵۰۰ ردیف اطلاعات ترکیب قابل ثبت است.');
+    }
+    if (trackVariantQuantity && !submittedVariants.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تولید/تحویل را وارد کنید.');
+    }
+    if (submittedVariants.length) {
+      if (!project) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ثبت مشخصات رنگ و سایز فقط برای رویداد مرتبط با پروژه امکان‌پذیر است.');
       }
       const seenVariants = Object.create(null);
       validatedVariants = submittedVariants.map(function(row) {
         row = row || {};
         const color = String(row.Color || '').trim();
         const size = String(row.Size || '').trim();
+        if (color.length > 80 || size.length > 40) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'طول نام رنگ یا سایز بیش از حد مجاز است.');
+        }
         let quantity = '';
-        if (useProjectColors) {
-          if (!color || projectVariants.colors.indexOf(color) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رنگ انتخاب‌شده در مشخصات همین پروژه وجود ندارد.');
-        } else if (color) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت رنگ پروژه را ندارد.');
-        if (useProjectSizes) {
-          if (!size || projectVariants.sizes.indexOf(size) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سایز انتخاب‌شده در مشخصات همین پروژه وجود ندارد.');
-        } else if (size) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت سایز پروژه را ندارد.');
         if (trackVariantQuantity) {
-          const q = Number(row.VariantQuantity);
-          if (row.VariantQuantity === undefined || row.VariantQuantity === null || String(row.VariantQuantity).trim() === '' || !isFinite(q) || q < 1 || Math.floor(q) !== q) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تولید هر ترکیب باید عدد صحیح بزرگ‌تر از صفر باشد.');
-          quantity = q;
+          const rawQuantity = row.VariantQuantity;
+          const parsedQuantity = Number(rawQuantity);
+          if (rawQuantity === undefined || rawQuantity === null ||
+              String(rawQuantity).trim() === '' || !isFinite(parsedQuantity) ||
+              parsedQuantity < 1 || Math.floor(parsedQuantity) !== parsedQuantity) {
+            throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار تولید/تحویل باید عدد صحیح بزرگ‌تر از صفر باشد.');
+          }
+          quantity = parsedQuantity;
         } else if (row.VariantQuantity !== undefined && String(row.VariantQuantity).trim() !== '') {
-          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت مقدار ترکیب را ندارد.');
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد اجازه ثبت مقدار تولید/تحویل را ندارد.');
         }
         const key = JSON.stringify([color, size]);
-        if (seenVariants[key]) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ترکیب رنگ و سایز تکراری است؛ هر ترکیب را فقط یک‌بار وارد کنید.');
+        if (seenVariants[key]) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'اطلاعات تکراری رنگ و سایز در یک رویداد مجاز نیست.');
         seenVariants[key] = true;
         return { Color: color, Size: size, VariantQuantity: quantity };
       });
       selectedColor = validatedVariants[0].Color || '';
       selectedSize = validatedVariants[0].Size || '';
       variantQuantity = validatedVariants[0].VariantQuantity;
-    } else if (
-      event.Color || event.Size ||
-      (event.VariantQuantity !== undefined && String(event.VariantQuantity).trim() !== '') ||
-      (Array.isArray(event.VariantDetails) && event.VariantDetails.length)
-    ) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این نوع رویداد برای ثبت رنگ، سایز یا مقدار ترکیب تنظیم نشده است.');
     }
 
     const projectChanges = project
@@ -1050,6 +1188,9 @@ const EventService = {
       IdempotencyKey: String(event.IdempotencyKey || '').trim(),
       IdempotencyStatus: String(event.IdempotencyKey || '').trim() ? 'PROCESSING' : '',
       ProjectID: project ? project.ID : '',
+      WorkflowID: project ? (project.WorkflowID || '') : '',
+      WorkflowVersion: project ? Number(project.WorkflowVersion || 0) : 0,
+      WorkflowStepID: project ? (project.CurrentStepID || '') : '',
       EventTypeID: eventType.ID,
       EventTypeVersion: eventType.Version || 1,
       PerformedBy: performedBy,
@@ -1072,46 +1213,24 @@ const EventService = {
       PreviousSnapshotCaptured: project ? true : false
     };
 
-    // Reject missing/invalid mapped procurement inputs before writing the event.
+
+    // Validate confirmed quantity using the prepared reusable-form responses.
     if (typeof ProcurementEventIntegrationService !== 'undefined') {
-      ProcurementEventIntegrationService.validate(
-        eventType,
-        validatedDynamicData || {},
-        project ? project.ID : '',
-        requestParams
-      );
+      ProcurementEventIntegrationService.validate(eventType, validatedFormResponses, project ? project.ID : '', requestParams);
     }
 
     const created = EventRepository.insert(newEvent);
+    const workflowProgressAfter = project
+      ? this._getWorkflowRuleProgress_(project, user.TenantID)
+      : null;
 
-    if (hasDynamicData) {
-      const createdData = EventDataRepository.insert({
-        ID: 'ED_' + Utilities.getUuid().replace(/-/g, ''),
-        EventID: created.ID,
-        DataJSON: JSON.stringify(validatedDynamicData),
-        CreatedAt: now
-      });
-
-      AuditService.log({
-        TenantID: user.TenantID,
-        UserID: user.ID,
-        Action: Constants.ACTION.CREATE,
-        EntityType: Constants.ENTITY.EVENT,
-        EntityID: created.ID,
-        OldData: null,
-        NewData: createdData,
-        Reason: 'ثبت اطلاعات پویای رویداد'
-      });
+    if (validatedFormResponses.length) {
+      FormService.saveEventResponses(created, validatedFormResponses, user, requestParams);
     }
 
     let procurementIntegration = { status: 'NOT_CONFIGURED' };
     try {
-      procurementIntegration = ProcurementEventIntegrationService.apply(
-        eventType,
-        created,
-        hasDynamicData ? validatedDynamicData : {},
-        requestParams
-      ) || { status: 'NOT_CONFIGURED' };
+      procurementIntegration = ProcurementEventIntegrationService.apply(eventType, created, requestParams) || { status: 'NOT_CONFIGURED' };
     } catch (integrationError) {
       // The production event is already persisted. Record the integration failure
       // explicitly so it is not mistaken for a successful procurement update.
@@ -1130,6 +1249,7 @@ const EventService = {
       });
     }
 
+
     const projectUpdate = {
       UpdatedAt: now
     };
@@ -1137,6 +1257,11 @@ const EventService = {
     Object.keys(projectChanges).forEach(function(key) {
       projectUpdate[key] = projectChanges[key];
     });
+
+    if (workflowProgressAfter && workflowProgressAfter.configured &&
+        workflowProgressAfter.stageComplete && projectChanges.CurrentStepID === undefined) {
+      projectChanges.CurrentStepStatus = 'COMPLETED';
+    }
 
     const hasProjectChanges = Object.keys(projectChanges).length > 0;
 
@@ -1215,7 +1340,8 @@ const EventService = {
         availableDepartmentIDs: updatedProject
           ? this._parseArray_(updatedProject.AvailableDepartmentIDs)
           : [],
-        procurementIntegration: procurementIntegration
+        procurementIntegration: procurementIntegration,
+        workflowProgress: workflowProgressAfter
       },
       {
         message: workflowMoved
@@ -1410,6 +1536,26 @@ const EventService = {
       });
     }
 
+    if (project && event.WorkflowStepID &&
+        String(project.CurrentStepID || '') === String(event.WorkflowStepID)) {
+      const refreshedProgress = this._getWorkflowRuleProgress_(project, user.TenantID);
+      const nextStepStatus = refreshedProgress.configured && refreshedProgress.stageComplete
+        ? 'COMPLETED' : 'IN_PROGRESS';
+      if (String(project.CurrentStepStatus || '').toUpperCase() !== nextStepStatus) {
+        const beforeStatus = Object.assign({}, project);
+        restoredProject = ProjectRepository.update(project.ID, {
+          CurrentStepStatus: nextStepStatus,
+          UpdatedAt: now
+        });
+        AuditService.log({
+          TenantID: user.TenantID, UserID: user.ID,
+          Action: Constants.ACTION.UPDATE, EntityType: Constants.ENTITY.PROJECT,
+          EntityID: project.ID, OldData: beforeStatus, NewData: restoredProject,
+          Reason: 'بازمحاسبه تکمیل مرحله پس از ابطال رویداد'
+        });
+      }
+    }
+
     AuditService.log({
       TenantID: user.TenantID,
       UserID: user.ID,
@@ -1466,7 +1612,7 @@ const EventService = {
       PermissionService.hasPermission(user.ID, 'PROCUREMENT_MANAGE', user);
     if (!canManageIntegration && String(event.CreatedBy || '') !== String(user.ID)) {
       throw ErrorHandler.create(Constants.ERROR.PERMISSION_DENIED,
-        'فقط ثبت‌کننده رویداد یا کاربر دارای مجوز ویرایش رویداد/مدیریت تدارکات می‌تواند اتصال را دوباره اجرا کند.');
+        'فقط ثبت‌کننده رویداد یا کاربر دارای مجوز ویرایش رویداد/مدیریت تأمین می‌تواند اتصال را دوباره اجرا کند.');
     }
     if (event.ProjectID) {
       var project = ProjectRepository.findById(event.ProjectID);
@@ -1483,29 +1629,33 @@ const EventService = {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع رویداد پیدا نشد.');
     }
     var settings = ProcurementEventIntegrationService._find_(eventType.ID, user.TenantID);
-    if (!settings || String(settings.Action || 'NONE').toUpperCase() !== 'RECALCULATE_CONFIRMED_NEEDS') {
+    if (!settings || String(settings.Action || 'NONE').toUpperCase() !== 'RECALCULATE_CONFIRMED_NEEDS' ||
+        !String(settings.ConfirmedQuantityInformationTypeID || '').trim()) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR,
-        'اجرای مجدد خودکار فقط برای محاسبه نیاز قطعی پشتیبانی می‌شود؛ عملیات دیگر باید پس از بررسی دستی اصلاح شوند.');
+        'برای این رویداد اتصال فعال تعداد قطعی به اطلاعات مرکزی تعریف نشده است.');
     }
-    var stored = EventDataRepository.findByEventId(eventId);
-    var dynamicData = {};
-    if (stored && stored.DataJSON) {
-      try { dynamicData = JSON.parse(String(stored.DataJSON)); }
-      catch (error) {
-        throw ErrorHandler.create(Constants.ERROR.INTERNAL_ERROR, 'اطلاعات پویای رویداد قابل خواندن نیست.');
-      }
-    }
-    if (!dynamicData || typeof dynamicData !== 'object' || Array.isArray(dynamicData)) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'داده‌های پویای رویداد معتبر نیستند.');
-    }
-    ProcurementEventIntegrationService.validate(eventType, dynamicData, event.ProjectID || '', params || {});
-    var result = ProcurementEventIntegrationService.apply(eventType, event, dynamicData, params || {});
+    var responses = (FormRepository.findResponsesByEvent(eventId) || [])
+      .filter(function(row) { return String(row.TenantID) === String(user.TenantID); })
+      .map(function(row) {
+        var values = {};
+        try {
+          values = JSON.parse(String(row.ResponseJSON || '{}'));
+        } catch (error) {
+          throw ErrorHandler.create(Constants.ERROR.INTERNAL_ERROR, 'پاسخ فرم ذخیره‌شده قابل خواندن نیست.');
+        }
+        if (!values || typeof values !== 'object' || Array.isArray(values)) {
+          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ساختار پاسخ فرم ذخیره‌شده معتبر نیست.');
+        }
+        return { FormID: row.FormID, Values: values };
+      });
+    ProcurementEventIntegrationService.validate(eventType, responses, event.ProjectID || '', params || {});
+    var result = ProcurementEventIntegrationService.apply(eventType, event, params || {});
     AuditService.log({
       TenantID: user.TenantID, UserID: user.ID, Action: 'PROCUREMENT_INTEGRATION_RETRY',
       EntityType: 'EVENT', EntityID: event.ID, NewData: result,
-      Reason: 'اجرای مجدد محاسبه نیاز ملزومات'
+      Reason: 'اجرای مجدد محاسبه نیاز از اطلاعات مرکزی ثبت‌شده در فرم رویداد'
     });
     return Response.success({ EventID: event.ID, status: 'SUCCEEDED', result: result && result.data !== undefined ? result.data : result });
-  },
+  }
 
 };

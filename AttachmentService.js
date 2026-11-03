@@ -446,7 +446,6 @@ const AttachmentService = {
         attachment
       );
 
-
     AuditService.log({
 
       TenantID:

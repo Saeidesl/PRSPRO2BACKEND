@@ -27,7 +27,10 @@ const EventTypeService = {
     if (!eventType) return eventType;
 
     const result = Object.assign({}, eventType);
-    result.ConnectionType = String(result.ConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT' ? 'INDEPENDENT' : 'PROJECT';
+    const connectionType = String(result.ConnectionType || 'PROJECT').toUpperCase();
+    result.ConnectionType = connectionType === 'INDEPENDENT' ? 'INDEPENDENT' : 'PROJECT';
+    delete result.TargetDesignCaseStatus;
+    delete result.TransitionsToProduction;
     const self = this;
 
     this.ARRAY_FIELDS.forEach(function(field) {
@@ -42,10 +45,13 @@ const EventTypeService = {
 
     result.AllowVoid =
       this._toBoolean_(result.AllowVoid);
-    result.UseProjectColors = this._toBoolean_(result.UseProjectColors);
-    result.UseProjectSizes = this._toBoolean_(result.UseProjectSizes);
+    delete result.UseProjectColors;
+    delete result.UseProjectSizes;
     result.TrackVariantQuantity = this._toBoolean_(result.TrackVariantQuantity);
     result.IsWorkCompletion = this._toBoolean_(result.IsWorkCompletion);
+    result.AllowOnDraft = this._toBoolean_(result.AllowOnDraft);
+    result.AmendableFormIDs = this._parseArray_(result.AmendableFormIDs);
+    result.IsFormAmendment = this._toBoolean_(result.IsFormAmendment);
 
     return result;
   },
@@ -61,15 +67,16 @@ const EventTypeService = {
         );
       }
     });
+    if (result.AmendableFormIDs !== undefined) result.AmendableFormIDs = JSON.stringify(this._parseArray_(result.AmendableFormIDs));
 
     [
       'MovesProjectToStep',
       'AllowAttachments',
       'AllowVoid',
-      'UseProjectColors',
-      'UseProjectSizes',
       'TrackVariantQuantity',
-      'IsWorkCompletion'
+      'IsWorkCompletion',
+      'AllowOnDraft',
+      'IsFormAmendment'
     ].forEach(function(field) {
       if (result[field] !== undefined) {
         result[field] = self._toBoolean_(result[field]);
@@ -77,6 +84,31 @@ const EventTypeService = {
     });
 
     return result;
+  },
+
+  _validateAmendableForms_: function(data, tenantId) {
+    const enabled = this._toBoolean_(data.IsFormAmendment);
+    const ids = this._parseArray_(data.AmendableFormIDs);
+    if (!enabled && ids.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای انتخاب فرم‌های قابل اصلاح، ابتدا گزینه رویداد اصلاحی را فعال کنید.');
+    }
+    if (!enabled) return;
+    if (String(data.ConnectionType || 'PROJECT').toUpperCase() !== 'PROJECT') {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'رویداد اصلاح فرم باید به پروژه متصل باشد.');
+    }
+    if (!ids.length) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'حداقل یک فرم مجاز برای اصلاح انتخاب کنید.');
+    }
+    const unique = {};
+    ids.forEach(function(id) {
+      Validator.id(id, 'AmendableFormIDs');
+      if (unique[String(id)]) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فرم تکراری در فهرست اصلاح انتخاب شده است.');
+      unique[String(id)] = true;
+      const form = FormRepository.findForm(id);
+      if (!form || String(form.TenantID) !== String(tenantId) || String(form.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'یکی از فرم‌های انتخاب‌شده معتبر یا فعال نیست.');
+      }
+    });
   },
 
   _validateDepartmentReference_: function(id, tenantId, fieldName) {
@@ -381,6 +413,7 @@ const EventTypeService = {
     }
 
     this._validateReferences_(data, user.TenantID);
+    this._validateAmendableForms_(data, user.TenantID);
 
     const now = new Date().toISOString();
 
@@ -415,9 +448,10 @@ const EventTypeService = {
         data.AvailableDepartmentIDs
       ),
       AllowVoid: this._toBoolean_(data.AllowVoid),
-      UseProjectColors: this._toBoolean_(data.UseProjectColors),
-      UseProjectSizes: this._toBoolean_(data.UseProjectSizes),
       TrackVariantQuantity: this._toBoolean_(data.TrackVariantQuantity),
+      AllowOnDraft: this._toBoolean_(data.AllowOnDraft),
+      IsFormAmendment: this._toBoolean_(data.IsFormAmendment),
+      AmendableFormIDs: this._parseArray_(data.AmendableFormIDs),
       Status: data.Status || Constants.STATUS.ACTIVE,
       CreatedAt: now,
       UpdatedAt: now
@@ -450,7 +484,9 @@ const EventTypeService = {
       'EVENT_TYPE_MANAGE'
     );
 
-    EventTypeValidator.validateUpdate(data);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      EventTypeValidator.validateUpdate(data);
+    }
 
     const existing = EventTypeRepository.findById(id);
 
@@ -463,6 +499,9 @@ const EventTypeService = {
         'نوع رویداد مورد نظر پیدا نشد.'
       );
     }
+
+    // Validate partial updates against the effective full configuration.
+    EventTypeValidator.validateUpdate(Object.assign({}, this._normalize_(existing), data));
 
     if (
       data.Code !== undefined &&
@@ -484,11 +523,16 @@ const EventTypeService = {
       }
     }
 
-    this._validateReferences_(data, user.TenantID);
+    this._validateReferences_(Object.assign({}, this._normalize_(existing), data), user.TenantID);
+    this._validateAmendableForms_(Object.assign({}, this._normalize_(existing), data), user.TenantID);
 
-    if (data.ConnectionType !== undefined) {
-      data.ConnectionType = String(data.ConnectionType || 'PROJECT').toUpperCase();
-    }
+    delete data.TargetDesignCaseStatus;
+    delete data.TransitionsToProduction;
+
+    const requestedConnectionType = data.ConnectionType !== undefined
+      ? data.ConnectionType : existing.ConnectionType;
+    data.ConnectionType = String(requestedConnectionType || 'PROJECT').toUpperCase() === 'INDEPENDENT'
+      ? 'INDEPENDENT' : 'PROJECT';
 
     const updateData = {};
 
@@ -496,7 +540,9 @@ const EventTypeService = {
       if (
         key !== 'ID' &&
         key !== 'TenantID' &&
-        key !== 'CreatedAt'
+        key !== 'CreatedAt' &&
+        key !== 'UseProjectColors' &&
+        key !== 'UseProjectSizes'
       ) {
         updateData[key] = data[key];
       }

@@ -1,0 +1,32 @@
+const ProjectInformationRepository = {
+  VALUE_SHEET: '30_ProjectInformation',
+  HISTORY_SHEET: '31_ProjectInformationHistory',
+  getAll: function() { return GoogleSheetsRepository.getAll(this.VALUE_SHEET); },
+  findById: function(id) { return GoogleSheetsRepository.findById(this.VALUE_SHEET, id); },
+  findByProject: function(projectId) { return this.getAll().filter(function(row) { return String(row.ProjectID) === String(projectId); }); },
+  findAnyByProjectAndType: function(projectId,typeId) {
+    return this.getAll().find(function(row) { return String(row.ProjectID)===String(projectId) && String(row.InformationTypeID)===String(typeId); }) || null;
+  },
+  findByProjectAndType: function(projectId,typeId) {
+    return this.getAll().find(function(row) { return String(row.ProjectID)===String(projectId) && String(row.InformationTypeID)===String(typeId) && String(row.Status || 'ACTIVE')==='ACTIVE'; }) || null;
+  },
+  insert: function(row) { return GoogleSheetsRepository.insert(this.VALUE_SHEET,row); },
+  update: function(id,data) { return GoogleSheetsRepository.updateById(this.VALUE_SHEET,id,data); },
+  getAllHistory: function() { return GoogleSheetsRepository.getAll(this.HISTORY_SHEET); },
+  findHistory: function(valueId) {
+    return this.getAllHistory().filter(function(row) { return String(row.ProjectInformationID)===String(valueId); }).sort(function(a,b) { return Number(a.Revision || 0)-Number(b.Revision || 0); });
+  },
+  insertHistory: function(row) { return GoogleSheetsRepository.insert(this.HISTORY_SHEET,row); },
+  SYNC_LOG_SHEET: '38_ProjectReferenceSyncLog',
+  getAllSyncLogs: function() { return GoogleSheetsRepository.getAll(this.SYNC_LOG_SHEET); },
+  findSyncLog: function(sourceId,targetId,typeId,tenantId) {
+    return this.getAllSyncLogs().filter(function(row) {
+      return String(row.SourceProjectID)===String(sourceId) &&
+        String(row.TargetProjectID)===String(targetId) &&
+        String(row.InformationTypeID)===String(typeId) &&
+        (tenantId === undefined || String(row.TenantID)===String(tenantId));
+    }).sort(function(a,b) { return String(b.CreatedAt||'').localeCompare(String(a.CreatedAt||'')); })[0] || null;
+  },
+  insertSyncLog: function(row) { return GoogleSheetsRepository.insert(this.SYNC_LOG_SHEET,row); },
+  updateSyncLog: function(id,data) { return GoogleSheetsRepository.updateById(this.SYNC_LOG_SHEET,id,data); }
+};

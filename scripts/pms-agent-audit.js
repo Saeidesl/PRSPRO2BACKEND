@@ -46,9 +46,12 @@ check('CONFIRMED-QUANTITY-ACTION', 'The integration supports recalculation from 
   ]));
 check('CONFIRMED-QUANTITY-VALIDATION', 'Confirmed quantity must be numeric and greater than zero and the event must belong to a project.',
   includesAll(integration, [
+    /_quantity_: function\(value\)/,
     /!isFinite\(quantity\) \|\| quantity <= 0/,
     /محاسبه نیاز قطعی فقط برای رویداد مرتبط با پروژه مجاز است/,
-    /event\.ProjectID, event\.ID, read\('ConfirmedQuantity'\)/
+    /_quantityFromResponses_\(typeId,formResponses\)/,
+    /saved\.SourceEventID/,
+    /event\.ProjectID,event\.ID,quantity/
   ]));
 check('TENANT-PROJECT-BOUNDARY', 'Material recalculation verifies the source event belongs to the same tenant and project.',
   includesAll(planner, [
@@ -76,8 +79,9 @@ check('PROCUREMENT-PARTIAL-QUANTITIES', 'Procurement summaries clamp ordered/rec
   ]));
 check('INTEGRATION-REGRESSION-TESTS', 'Automated tests cover validation and confirmed-quantity integration.',
   includesAll(integrationTests, [
-    /validates confirmed quantity mapping before event persistence/,
-    /applies confirmed quantity integration to the material planner/
+    /validates a numeric single central information type and prepared form quantity/,
+    /applies confirmed quantity only from central information saved by the same event/,
+    /does not reuse a central value written by an older or different event/
   ]));
 check('PLANNING-REGRESSION-TESTS', 'Automated tests cover confirmed need creation, replay safety, and source-event voiding.',
   includesAll(planningTests, [

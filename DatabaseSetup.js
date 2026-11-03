@@ -7,7 +7,7 @@
 
 const APP_CONFIG = {
 
-  VERSION: '1.1.4',
+  VERSION: '1.1.8',
 
   DEFAULT_TENANT: {
     NAME: 'شرکت اصلی',
@@ -55,22 +55,22 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','ColorSizeJSON','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','RunNumber','SourceProjectID','RecordState','ReferencePolicyJSON','ReferenceSourceRevision']
     },
 
     WORKFLOWS: {
       name: '09_Workflows',
-      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt','WorkflowType','LifecycleState','PublishedVersion','DraftVersion','RepeatReferencePolicyJSON','PublishedRepeatReferencePolicyJSON']
     },
 
     WORKFLOW_STEPS: {
       name: '10_WorkflowSteps',
-      headers: ['ID','TenantID','WorkflowID','Name','Code','StepOrder','Status','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','WorkflowID','Name','Code','StepOrder','Status','CreatedAt','UpdatedAt','WorkflowVersion']
     },
 
     EVENT_TYPES: {
       name: '11_EventTypes',
-      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','UseProjectColors','UseProjectSizes','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion']
+      headers: ['ID','TenantID','Name','Code','Version','Description','DepartmentID','Category','WorkflowStepID','MovesProjectToStep','AllowAttachments','Status','CreatedAt','UpdatedAt','ConnectionType','TargetDepartmentID','TargetProjectStatus','AllowedDepartmentIDs','AllowedUserIDs','AvailableDepartmentIDs','AllowVoid','TrackVariantQuantity','TargetStepStatus','IsWorkCompletion','AllowOnDraft','IsFormAmendment','AmendableFormIDs']
     },
 
     EVENT_FIELDS: {
@@ -80,12 +80,57 @@ const APP_CONFIG = {
 
     EVENTS: {
       name: '13_Events',
-      headers: ['ID','TenantID','ProjectID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON','PreviousCurrentStepStatus','IdempotencyKey','IdempotencyStatus']
+      headers: ['ID','TenantID','ProjectID','WorkflowID','WorkflowVersion','WorkflowStepID','EventTypeID','EventTypeVersion','PerformedBy','CreatedBy','DepartmentID','OccurredAt','CreatedAt','Description','Status','Color','Size','VariantQuantity','PreviousStepID','PreviousProjectStatus','PreviousAvailableDepartmentIDs','PreviousSnapshotCaptured','VariantDetailsJSON','PreviousCurrentStepStatus','IdempotencyKey','IdempotencyStatus']
     },
 
     EVENT_DATA: {
       name: '14_EventData',
       headers: ['ID','EventID','DataJSON','CreatedAt']
+    },
+
+    INFORMATION_TYPES: {
+      name: '28_InformationTypes',
+      headers: ['ID','TenantID','Code','Name','Description','Cardinality','DataType','ValidationRuleJSON','OptionsJSON','Status','Revision','CreatedBy','CreatedAt','UpdatedAt','ShowOnCard']
+    },
+
+    INFORMATION_TYPE_COLUMNS: {
+      name: '29_InformationTypeColumns',
+      headers: ['ID','TenantID','InformationTypeID','Code','Name','DataType','IsRequired','OptionsJSON','ValidationRuleJSON','ColumnOrder','Status','CreatedAt','UpdatedAt']
+    },
+
+    PROJECT_INFORMATION: {
+      name: '30_ProjectInformation',
+      headers: ['ID','TenantID','ProjectID','InformationTypeID','ValueJSON','Revision','Status','SourceEventID','CreatedBy','UpdatedBy','CreatedAt','UpdatedAt']
+    },
+
+    PROJECT_INFORMATION_HISTORY: {
+      name: '31_ProjectInformationHistory',
+      headers: ['ID','TenantID','ProjectInformationID','ProjectID','InformationTypeID','Revision','Action','OldValueJSON','NewValueJSON','SourceEventID','Reason','ActorUserID','CreatedAt']
+    },
+
+    FORMS: {
+      name: '32_Forms',
+      headers: ['ID','TenantID','Code','Name','Description','Version','Status','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    FORM_FIELDS: {
+      name: '33_FormFields',
+      headers: ['ID','TenantID','FormID','InformationTypeID','FieldOrder','GroupName','LabelOverride','HelpText','IsRequired','VisibilityRuleJSON','Status','CreatedAt','UpdatedAt']
+    },
+
+    EVENT_TYPE_FORMS: {
+      name: '34_EventTypeForms',
+      headers: ['ID','TenantID','EventTypeID','FormID','IsRequired','FieldOrder','Status','CreatedBy','CreatedAt','UpdatedAt']
+    },
+
+    EVENT_FORM_DATA: {
+      name: '35_EventFormData',
+      headers: ['ID','TenantID','EventID','FormID','FormVersion','ResponseJSON','DefinitionSnapshotJSON','CreatedBy','CreatedAt']
+    },
+
+    PRINT_TEMPLATES: {
+      name: '36_PrintTemplates',
+      headers: ['ID','TenantID','Code','Name','Description','Status','Version','DefinitionJSON','CreatedBy','CreatedAt','UpdatedBy','UpdatedAt']
     },
 
     ATTACHMENTS: {
@@ -96,6 +141,21 @@ const APP_CONFIG = {
     AUDIT_LOGS: {
       name: '16_AuditLogs',
       headers: ['ID','TenantID','UserID','Action','EntityType','EntityID','OldData','NewData','Reason','CreatedAt']
+    },
+
+
+    WORKFLOW_STEP_EVENT_RULES: {
+      name: '37_WorkflowStepEventRules',
+      headers: [
+        'ID','TenantID','WorkflowID','WorkflowVersion','WorkflowStepID',
+        'EventTypeID','RequirementMode','DataSource','SequenceMode',
+        'GroupKey','GroupOrder','EventOrder','Status','CreatedAt','UpdatedAt'
+      ]
+    },
+
+    PROJECT_REFERENCE_SYNC_LOG: {
+      name: '38_ProjectReferenceSyncLog',
+      headers: ['ID','TenantID','SourceProjectID','TargetProjectID','InformationTypeID','Policy','SourceRevision','TargetRevision','Action','ConflictJSON','IdempotencyKey','ActorUserID','CreatedAt']
     },
 
     WORKFLOW_STEP_DEPARTMENTS: {
@@ -114,7 +174,7 @@ const APP_CONFIG = {
 
     EVENT_TYPE_PROCUREMENT_SETTINGS: {
       name: '23_EventTypeProcurementSettings',
-      headers: ['ID','TenantID','EventTypeID','Action','FieldMapJSON','Status','CreatedBy','CreatedAt','UpdatedAt']
+      headers: ['ID','TenantID','EventTypeID','Action','FieldMapJSON','Status','CreatedBy','CreatedAt','UpdatedAt','ConfirmedQuantityInformationTypeID']
     },
 
     MATERIAL_NEEDS: {
@@ -503,11 +563,21 @@ function setupDatabase() {
 
   try {
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    // Always initialize the explicitly configured staging database when an ID is set.
+    // This prevents a manual setup run from accidentally targeting a different active sheet.
+    const configuredSpreadsheetId =
+      typeof AppConfig !== 'undefined' &&
+      AppConfig.DATABASE &&
+      AppConfig.DATABASE.SPREADSHEET_ID
+        ? String(AppConfig.DATABASE.SPREADSHEET_ID).trim()
+        : '';
+    const ss = configuredSpreadsheetId
+      ? SpreadsheetApp.openById(configuredSpreadsheetId)
+      : SpreadsheetApp.getActiveSpreadsheet();
 
     if (!ss) {
       throw new Error(
-        'Spreadsheet پیدا نشد. اسکریپت را از داخل Google Sheet اجرا کن.'
+        'Spreadsheet پیدا نشد. شناسه دیتابیس در AppConfig را بررسی کن.'
       );
     }
 
@@ -777,6 +847,13 @@ function applyAllValidations_(ss) {
   setListValidation_(ss, '12_EventFields', 6, APP_CONFIG.FIELD_TYPES);
   setBooleanValidation_(ss, '12_EventFields', 7);
   setListValidation_(ss, '12_EventFields', 12, ['ACTIVE','INACTIVE']);
+  setListValidation_(ss, '28_InformationTypes', 6, ['SINGLE','MULTIPLE']);
+  setListValidation_(ss, '28_InformationTypes', 10, ['ACTIVE','INACTIVE','DELETED']);
+  setListValidation_(ss, '29_InformationTypeColumns', 11, ['ACTIVE','INACTIVE','DELETED']);
+  setListValidation_(ss, '30_ProjectInformation', 7, ['ACTIVE','DELETED']);
+  setListValidation_(ss, '32_Forms', 7, ['ACTIVE','INACTIVE','DELETED']);
+  setListValidation_(ss, '33_FormFields', 11, ['ACTIVE','INACTIVE','DELETED']);
+  setListValidation_(ss, '34_EventTypeForms', 7, ['ACTIVE','INACTIVE','DELETED']);
   setListValidation_(ss, '13_Events', 12, ['ACTIVE','VOID']);
   setListValidation_(ss, '15_Attachments', 3, APP_CONFIG.ATTACHMENT_ENTITY_TYPES);
   setListValidation_(ss, '15_Attachments', 8, APP_CONFIG.STORAGE_PROVIDERS);

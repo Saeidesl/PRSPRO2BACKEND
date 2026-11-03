@@ -15,36 +15,10 @@ const ProjectService = {
     return date.toISOString();
   },
 
-  _normalizeColorSizeJSON_: function(value) {
-    if (value === undefined || value === null || String(value).trim() === '') return JSON.stringify({ colors: [], sizes: [] });
-    let parsed;
-    try { parsed = typeof value === 'string' ? JSON.parse(value) : value; }
-    catch (error) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'ساختار رنگ‌بندی و سایزبندی معتبر نیست.');
-    }
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.colors) ||
-        !Array.isArray(parsed.sizes) || parsed.colors.length > 100 || parsed.sizes.length > 100) {
-      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فهرست رنگ‌ها و سایزها معتبر نیست.');
-    }
-    function clean(list, maxLength) {
-      const seen = {};
-      return list.map(function(item) {
-        const value = String(item || '').trim();
-        if (!value || value.length > maxLength) {
-          throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نام رنگ یا سایز خالی یا بیش از حد طولانی است.');
-        }
-        const key = value.toLocaleLowerCase();
-        if (seen[key]) return '';
-        seen[key] = true;
-        return value;
-      }).filter(Boolean);
-    }
-    return JSON.stringify({ colors: clean(parsed.colors, 80), sizes: clean(parsed.sizes, 40) });
-  },
-
   projectFormLookups: function(params) {
     const user = AccessControlService.getCurrentUser(params || {});
     const tenantId = String(user.TenantID || '');
+    const informationTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; }).map(function(item) { return { ID: item.ID, Code: item.Code, Name: item.Name, DataType: item.DataType || 'text' }; });
     const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
         String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
@@ -62,12 +36,15 @@ const ProjectService = {
     // round-trip just to load workflows. Keep filtering tenant-scoped here.
     const workflows = (WorkflowRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
-        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+        (Number(item.PublishedVersion || 0) > 0 || String(item.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED');
     }).map(function(item) {
       return {
         ID: item.ID,
         Name: item.Name || item.Title || item.WorkflowName || item.Code || String(item.ID),
         Code: item.Code || '',
+        Version: Number(item.PublishedVersion || item.Version || 1),
+        WorkflowType: item.WorkflowType || 'INITIAL',
         Status: item.Status || 'ACTIVE'
       };
     });
@@ -135,6 +112,8 @@ const ProjectService = {
       departments: departments,
       users: users,
       workflows: workflows,
+      informationTypes: informationTypes,
+      referenceProjects: (ProjectRepository.getAll() || []).filter(function(item) { return String(item.TenantID) === tenantId && String(item.RecordState || 'ACTIVE').toUpperCase() === 'ACTIVE' && this._isProjectAvailableToUser_(item, user); }, this).map(function(item) { return { ID: item.ID, ProjectCode: item.ProjectCode || '', Title: item.Title || '' }; }),
       projectStatuses: projectStatuses
     });
   },
@@ -169,6 +148,21 @@ const ProjectService = {
       return { ID: item.ID, Name: item.Name || item.Title || item.Code || String(item.ID) };
     });
 
+    // Read-only workflow choices are included for users editing projects.
+    // This endpoint is already protected by PROJECT_VIEW and remains tenant-scoped.
+    const workflows = (WorkflowRepository.getAll() || []).filter(function(item) {
+      return String(item.TenantID) === tenantId &&
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    }).map(function(item) {
+      return {
+        ID: item.ID,
+        Name: item.Name || item.Title || item.Code || String(item.ID),
+        Code: item.Code || '',
+        Version: item.Version || 1,
+        Status: item.Status || 'ACTIVE'
+      };
+    });
+
     const workflowSteps = (WorkflowStepRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
         String(item.Status || 'ACTIVE').toUpperCase() !== 'DELETED';
@@ -199,6 +193,7 @@ const ProjectService = {
       users: users,
       departments: departments,
       eventTypes: eventTypes,
+      workflows: workflows,
       workflowSteps: workflowSteps,
       projectStatuses: projectStatuses
     });
@@ -223,6 +218,60 @@ const ProjectService = {
     });
   },
 
+  validateProjectCodeFromEvent: function(projectId, code, tenantId) {
+    const value = String(code || '').trim();
+    if (!value || value.length > 100) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'کد پروژه معتبر نیست.');
+    }
+    const project = ProjectRepository.findById(projectId);
+    if (!project || String(project.TenantID) !== String(tenantId)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
+    }
+    return true;
+  },
+
+  updateProjectCodeFromEvent: function(projectId, code, eventId, user, lockAlreadyHeld) {
+    const value = String(code || '').trim();
+    const lock = lockAlreadyHeld ? null : LockService.getScriptLock();
+    if (lock) lock.waitLock(30000);
+    try {
+      const project = ProjectRepository.findById(projectId);
+      if (!project || String(project.TenantID) !== String(user.TenantID) ||
+          !this._isProjectAvailableToUser_(project, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
+      }
+      const event = EventRepository.findById(eventId);
+      if (!event || String(event.TenantID) !== String(user.TenantID) ||
+          String(event.ProjectID) !== String(projectId)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مرتبط با این پروژه پیدا نشد.');
+      }
+      this.validateProjectCodeFromEvent(projectId, value, user.TenantID);
+      if (String(project.ProjectCode || '').trim().toLowerCase() === value.toLowerCase()) return project;
+      const duplicate = ProjectRepository.getAll().some(function(item) {
+        return String(item.TenantID) === String(user.TenantID) &&
+          String(item.ID) !== String(projectId) &&
+          String(item.ProjectCode || '').trim().toLowerCase() === value.toLowerCase();
+      });
+      if (duplicate) {
+        throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
+      }
+      const updated = ProjectRepository.update(projectId, {
+        ProjectCode: value,
+        UpdatedAt: new Date().toISOString()
+      });
+      AuditService.log({
+        TenantID:user.TenantID, UserID:user.ID, Action:Constants.ACTION.UPDATE,
+        EntityType:Constants.ENTITY.PROJECT, EntityID:projectId,
+        OldData:{ProjectCode:project.ProjectCode || ''},
+        NewData:{ProjectCode:value},
+        Reason:'ویرایش کد پروژه از فرم رویداد ' + String(eventId || '')
+      });
+      return updated;
+    } finally {
+      if (lock) lock.releaseLock();
+    }
+  },
+
   list: function(params) {
 
     const user =
@@ -233,17 +282,59 @@ const ProjectService = {
     const projects =
       ProjectRepository.getAll();
 
+    const canViewAllProjects = AccessControlService.isAdmin(user) ||
+      PermissionService.hasPermission(user.ID, 'PROJECT_VIEW', user);
     const tenantProjects =
       projects.filter(function(project) {
-
-        return String(project.TenantID) === String(user.TenantID) &&
-          ProjectService._isProjectAvailableToUser_(project, user);
-
+        if (String(project.TenantID) !== String(user.TenantID) ||
+            !ProjectService._isProjectAvailableToUser_(project, user)) return false;
+        if (!canViewAllProjects) {
+          return String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT' &&
+            String(project.CreatedBy || '') === String(user.ID || '');
+        }
+        return true;
       });
 
-    return Response.success(
-      tenantProjects
-    );
+    // Build the project-card projection in bulk to avoid per-card API calls.
+    const cardTypes = (typeof InformationTypeRepository !== 'undefined'
+      ? InformationTypeRepository.findByTenant(user.TenantID) : []).filter(function(type) {
+        return String(type.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+          (type.ShowOnCard === true || String(type.ShowOnCard).toLowerCase() === 'true');
+      });
+    if (cardTypes.length && typeof ProjectInformationRepository !== 'undefined') {
+      const typeById = Object.create(null);
+      const columnsByType = Object.create(null);
+      cardTypes.forEach(function(type) {
+        const typeId = String(type.ID);
+        typeById[typeId] = type;
+        columnsByType[typeId] = InformationTypeRepository.findColumns(type.ID).filter(function(column) {
+          return String(column.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        });
+      });
+      const projectById = Object.create(null);
+      tenantProjects.forEach(function(project) {
+        projectById[String(project.ID)] = project;
+        project.CardInformation = [];
+      });
+      (ProjectInformationRepository.getAll() || []).forEach(function(row) {
+        const projectId = String(row.ProjectID || '');
+        const typeId = String(row.InformationTypeID || '');
+        const project = projectById[projectId];
+        const type = typeById[typeId];
+        if (!project || !type || String(row.TenantID) !== String(user.TenantID) ||
+            String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
+        let value = row.ValueJSON;
+        if (typeof value === 'string') { try { value = JSON.parse(value); } catch (error) {} }
+        if (value === null || value === undefined || value === '' ||
+            (Array.isArray(value) && !value.length)) return;
+        project.CardInformation.push({
+          InformationTypeID:type.ID, Name:type.Name, DataType:type.DataType,
+          Cardinality:type.Cardinality, Value:value, Columns:columnsByType[typeId] || []
+        });
+      });
+    }
+
+    return Response.success(tenantProjects);
 
   },
 
@@ -317,31 +408,42 @@ const ProjectService = {
 
     }
 
-    /*
-     * ProjectCode فقط داخل Tenant جاری باید یکتا باشد.
-     */
-
-    const existingProjects =
-      ProjectRepository.getAll();
-
-    const duplicate =
-      existingProjects.some(function(item) {
-
-        return String(item.TenantID) ===
-          String(tenantId) &&
-          String(item.ProjectCode) ===
-          String(project.ProjectCode).trim();
-
+    if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') {
+      const now = new Date().toISOString();
+      const draft = {
+        ID: 'PRJ_' + Utilities.getUuid().replace(/-/g, ''),
+        TenantID: tenantId,
+        ProjectCode: '',
+        Title: String(project.Title || '').trim(),
+        Description: String(project.Description || ''),
+        WorkflowID: '',
+        WorkflowVersion: '',
+        CurrentStepID: '',
+        CurrentStepStatus: '',
+        Status: '',
+        Quantity: '',
+        AvailableDepartmentIDs: JSON.stringify([]),
+        AllowedUserIDs: JSON.stringify([]),
+        NotifyEnabled: true,
+        RecordState: 'DRAFT',
+        CreatedBy: user.ID,
+        CreatedAt: this._normalizeCreatedAt_(project.CreatedAt, now),
+        UpdatedAt: now
+      };
+      if (typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+        GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+      }
+      const createdDraft = ProjectRepository.insert(draft);
+      AuditService.log({
+        TenantID: tenantId, UserID: user.ID, Action: Constants.ACTION.CREATE,
+        EntityType: Constants.ENTITY.PROJECT, EntityID: draft.ID,
+        OldData: null, NewData: createdDraft, Reason: 'ایجاد پیش‌نویس پروژه'
       });
-
-    if (duplicate) {
-
-      throw ErrorHandler.create(
-        Constants.ERROR.DUPLICATE,
-        'کد پروژه قبلاً در این Tenant ثبت شده است.'
-      );
-
+      return Response.success(createdDraft, { message: 'پیش‌نویس پروژه ایجاد شد.' });
     }
+
+    // Duplicate validation is performed atomically with insertion below,
+    // using the same case-insensitive tenant-scoped rule as project updates.
 
     // Reading the workflow list in one range is faster than scanning the ID
     // column and then reading the matching row separately.
@@ -360,8 +462,9 @@ const ProjectService = {
     }
 
     if (
-      String(workflow.TenantID) !==
-      String(tenantId)
+      String(workflow.TenantID) !== String(tenantId) ||
+      String(workflow.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE' ||
+      !(Number(workflow.PublishedVersion || 0) > 0 || String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED')
     ) {
 
       throw ErrorHandler.create(
@@ -371,10 +474,12 @@ const ProjectService = {
 
     }
 
-    const firstStep =
-      WorkflowStepRepository.findFirstByWorkflowId(
-        workflow.ID
-      );
+    const workflowVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+    const firstStep = WorkflowStepRepository.findByWorkflowId(workflow.ID).filter(function(step) {
+      return String(step.TenantID) === String(tenantId) &&
+        String(step.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+        Number(step.WorkflowVersion || 1) <= workflowVersion;
+    })[0] || null;
 
     if (!firstStep) {
 
@@ -395,6 +500,32 @@ const ProjectService = {
         'مرحله Workflow معتبر نیست.'
       );
 
+    }
+
+    var sourceProject = null;
+    var referencePolicy = {};
+    if (String(workflow.WorkflowType || 'INITIAL').toUpperCase() === 'REPEAT') {
+      var sourceId = String(project.SourceProjectID || '').trim();
+      if (!sourceId) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای پروژه تکراری، انتخاب پروژه مرجع الزامی است.');
+      sourceProject = ProjectRepository.findById(sourceId);
+      if (!sourceProject || String(sourceProject.TenantID) !== String(tenantId) || String(sourceProject.RecordState || 'ACTIVE').toUpperCase() !== 'ACTIVE' || !this._isProjectAvailableToUser_(sourceProject, user)) {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مرجع پیدا نشد یا دسترسی به آن مجاز نیست.');
+      }
+      if (String(sourceProject.ID) === String(project.ID || '')) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه نمی‌تواند مرجع خودش باشد.');
+      try { referencePolicy = JSON.parse(workflow.PublishedRepeatReferencePolicyJSON || workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
+      var overrides = project.ReferencePolicyJSON || {};
+      if (typeof overrides === 'string') { try { overrides = JSON.parse(overrides); } catch (parseError) { overrides = {}; } }
+      if (overrides && typeof overrides === 'object' && !Array.isArray(overrides)) Object.keys(overrides).forEach(function(key) { referencePolicy[key] = overrides[key]; });
+      var validInformationTypes = InformationTypeRepository.findByTenant(tenantId).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+      Object.keys(overrides || {}).forEach(function(key) {
+        if (!validInformationTypes.some(function(item) { return String(item.ID) === String(key); })) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع اطلاعات انتخاب‌شده برای سیاست مرجع معتبر نیست.');
+      });
+      Object.keys(referencePolicy).forEach(function(key) {
+        referencePolicy[key] = String(referencePolicy[key] || 'INDEPENDENT').toUpperCase();
+        if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(referencePolicy[key]) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+      });
+    } else if (String(project.SourceProjectID || '').trim()) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'اتصال پروژه مرجع فقط برای گردش‌کار تولید تکراری مجاز است.');
     }
 
     const departmentIds = Array.isArray(project.AvailableDepartmentIDs)
@@ -493,8 +624,6 @@ const ProjectService = {
           ? ''
           : Number(project.Quantity),
 
-      ColorSizeJSON: this._normalizeColorSizeJSON_(project.ColorSizeJSON),
-
       Description:
         project.Description ||
         '',
@@ -507,9 +636,7 @@ const ProjectService = {
       WorkflowID:
         workflow.ID,
 
-      WorkflowVersion:
-        workflow.Version ||
-        1,
+      WorkflowVersion: workflowVersion,
 
       CurrentStepID:
         firstStep.ID,
@@ -526,14 +653,69 @@ const ProjectService = {
         this._normalizeCreatedAt_(project.CreatedAt, now),
 
       UpdatedAt:
-        now
+        now,
+
+      RecordState:
+        'ACTIVE',
+      SourceProjectID: sourceProject ? sourceProject.ID : '',
+      ReferencePolicyJSON: sourceProject ? JSON.stringify(referencePolicy) : '{}',
+      ReferenceSourceRevision: sourceProject ? new Date().toISOString() : ''
 
     };
 
-    const created =
-      ProjectRepository.insert(
-        newProject
-      );
+    if (typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+      GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+    }
+    let created;
+    const createLock = LockService.getScriptLock();
+    createLock.waitLock(30000);
+    try {
+      const requestedCode = String(newProject.ProjectCode || '').trim().toLowerCase();
+      const duplicateCode = ProjectRepository.getAll().some(function(item) {
+        return String(item.TenantID) === String(tenantId) &&
+          String(item.ProjectCode || '').trim().toLowerCase() === requestedCode;
+      });
+      if (duplicateCode) {
+        throw ErrorHandler.create(
+          Constants.ERROR.DUPLICATE,
+          'کد پروژه قبلاً در این Tenant ثبت شده است.'
+        );
+      }
+      created = ProjectRepository.insert(newProject);
+      if (sourceProject && typeof ProjectInformationRepository !== 'undefined') {
+        var referenceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
+        referenceRows.forEach(function(row) {
+          if (String(row.TenantID) !== String(tenantId) || String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
+          var infoType = InformationTypeRepository.findById(row.InformationTypeID);
+          if (!infoType) return;
+          var policy = String(referencePolicy[String(row.InformationTypeID)] || referencePolicy[String(infoType.Code || '')] || 'INDEPENDENT').toUpperCase();
+          if (policy !== 'INITIAL_COPY' || ProjectInformationService._isFileBased_(row.InformationTypeID, infoType)) return;
+          if (ProjectInformationRepository.findAnyByProjectAndType(created.ID, row.InformationTypeID)) return;
+          var approvedRevision = ProjectInformationRepository.findHistory(row.ID).filter(function(historyRow) {
+            return String(historyRow.TenantID) === String(tenantId) &&
+              String(historyRow.Action || '').toUpperCase() === 'APPROVED';
+          }).sort(function(a,b) { return Number(b.Revision || 0) - Number(a.Revision || 0); })[0];
+          if (!approvedRevision || !approvedRevision.NewValueJSON) return;
+          var approvedValueJSON = String(approvedRevision.NewValueJSON);
+          var copyNow = new Date().toISOString();
+          var copy = ProjectInformationRepository.insert({
+            ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: approvedValueJSON,
+            Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
+            CreatedAt: copyNow, UpdatedAt: copyNow
+          });
+          ProjectInformationRepository.insertHistory({
+            ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+            ProjectInformationID: copy.ID, ProjectID: created.ID, InformationTypeID: row.InformationTypeID,
+            Revision: 1, Action: 'INITIAL_COPY', OldValueJSON: '', NewValueJSON: approvedValueJSON,
+            SourceEventID: '', Reason: 'کپی نسخه تأییدشده ' + approvedRevision.Revision + ' از پروژه مرجع ' + sourceProject.ID,
+            ActorUserID: user.ID, CreatedAt: copyNow
+          });
+        });
+      }
+    } finally {
+      createLock.releaseLock();
+    }
 
     AuditService.log({
 
@@ -612,19 +794,19 @@ const ProjectService = {
       );
     }
 
-    // کد پروژه و گردش‌کار پس از ایجاد هویت ثابت پروژه هستند.
-    if (
-      data.ProjectCode !== undefined &&
-      String(data.ProjectCode).trim() !== String(existing.ProjectCode || '').trim()
-    ) {
-      throw ErrorHandler.create(
-        Constants.ERROR.VALIDATION_ERROR,
-        'کد پروژه پس از ایجاد قابل تغییر نیست.'
-      );
+    const isDraft = String(existing.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT';
+    const completesDraft = isDraft && String(data.RecordState || '').toUpperCase() === 'ACTIVE';
+
+    if (!isDraft && data.RecordState !== undefined &&
+        String(data.RecordState).toUpperCase() !== 'ACTIVE') {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'پروژه تکمیل‌شده دوباره به پیش‌نویس تبدیل نمی‌شود.');
     }
 
+    // کد موقت و کد قطعی یک فیلد واحد هستند و در هر زمان قابل تغییرند.
+    // یکتایی نهایی درست پیش از نوشتن و درون قفل بررسی می‌شود.
+
     if (
-      data.WorkflowID !== undefined &&
+      !isDraft && data.WorkflowID !== undefined &&
       String(data.WorkflowID || '').trim() !== String(existing.WorkflowID || '').trim()
     ) {
       throw ErrorHandler.create(
@@ -634,6 +816,25 @@ const ProjectService = {
     }
 
     const updateData = {};
+    if (data.ReferencePolicyJSON !== undefined) {
+      var referenceOverrides = data.ReferencePolicyJSON;
+      if (typeof referenceOverrides === 'string') { try { referenceOverrides = JSON.parse(referenceOverrides); } catch (error) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.'); } }
+      if (!referenceOverrides || typeof referenceOverrides !== 'object' || Array.isArray(referenceOverrides)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+      var activeReferenceTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+      Object.keys(referenceOverrides).forEach(function(typeId) {
+        var validType = activeReferenceTypes.some(function(item) { return String(item.ID) === String(typeId); });
+        var policy = String(referenceOverrides[typeId] || '').toUpperCase();
+        if (!validType || ['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(policy) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+        referenceOverrides[typeId] = policy;
+      });
+      if (!String(existing.SourceProjectID || '').trim()) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این پروژه به پروژه مرجع متصل نیست.');
+      updateData.ReferencePolicyJSON = JSON.stringify(referenceOverrides);
+    }
+
+    if (data.ProjectCode !== undefined) {
+      updateData.ProjectCode = String(data.ProjectCode || '').trim();
+    }
+    if (completesDraft) updateData.RecordState = 'ACTIVE';
 
     if (data.WorkflowID !== undefined) {
       const requestedWorkflowId = String(data.WorkflowID || '').trim();
@@ -665,8 +866,8 @@ const ProjectService = {
         if (
           !workflow ||
           String(workflow.TenantID) !== String(user.TenantID) ||
-          String(workflow.Status || Constants.STATUS.ACTIVE).toUpperCase() !==
-            String(Constants.STATUS.ACTIVE).toUpperCase()
+          String(workflow.Status || Constants.STATUS.ACTIVE).toUpperCase() !== String(Constants.STATUS.ACTIVE).toUpperCase() ||
+          !(Number(workflow.PublishedVersion || 0) > 0 || String(workflow.LifecycleState || 'PUBLISHED').toUpperCase() === 'PUBLISHED')
         ) {
           throw ErrorHandler.create(
             Constants.ERROR.INVALID_WORKFLOW,
@@ -674,7 +875,12 @@ const ProjectService = {
           );
         }
 
-        const firstStep = WorkflowStepRepository.findFirstByWorkflowId(workflow.ID);
+        const workflowVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+        const firstStep = WorkflowStepRepository.findByWorkflowId(workflow.ID).filter(function(step) {
+          return String(step.TenantID) === String(user.TenantID) &&
+            String(step.Status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+            Number(step.WorkflowVersion || 1) <= workflowVersion;
+        })[0] || null;
 
         if (
           !firstStep ||
@@ -687,7 +893,7 @@ const ProjectService = {
         }
 
         updateData.WorkflowID = workflow.ID;
-        updateData.WorkflowVersion = workflow.Version || 1;
+        updateData.WorkflowVersion = workflowVersion;
         updateData.CurrentStepID = firstStep.ID;
       }
     }
@@ -702,11 +908,6 @@ const ProjectService = {
       updateData.Title =
         data.Title;
 
-    }
-
-    // رنگ‌بندی و سایزبندی پس از ایجاد پروژه نیز از مسیر ویرایش قابل به‌روزرسانی است.
-    if (data.ColorSizeJSON !== undefined) {
-      updateData.ColorSizeJSON = this._normalizeColorSizeJSON_(data.ColorSizeJSON);
     }
 
     if (data.Quantity !== undefined) {
@@ -807,11 +1008,32 @@ const ProjectService = {
     updateData.UpdatedAt =
       new Date().toISOString();
 
-    const updated =
-      ProjectRepository.update(
-        id,
-        updateData
-      );
+    if (updateData.RecordState !== undefined &&
+        typeof GoogleSheetsRepository !== 'undefined' && GoogleSheetsRepository.ensureColumn) {
+      GoogleSheetsRepository.ensureColumn('08_Projects', 'RecordState');
+    }
+    let updated;
+    const changesProjectCode = Object.prototype.hasOwnProperty.call(updateData, 'ProjectCode') &&
+      String(updateData.ProjectCode || '').trim().toLowerCase() !==
+        String(existing.ProjectCode || '').trim().toLowerCase();
+    const codeLock = changesProjectCode ? LockService.getScriptLock() : null;
+    if (codeLock) codeLock.waitLock(30000);
+    try {
+      if (changesProjectCode) {
+        const requestedCode = String(updateData.ProjectCode || '').trim();
+        const duplicateCode = ProjectRepository.getAll().some(function(item) {
+          return String(item.TenantID) === String(user.TenantID) &&
+            String(item.ID) !== String(id) &&
+            String(item.ProjectCode || '').trim().toLowerCase() === requestedCode.toLowerCase();
+        });
+        if (duplicateCode) {
+          throw ErrorHandler.create(Constants.ERROR.DUPLICATE, 'کد پروژه قبلاً در این Tenant ثبت شده است.');
+        }
+      }
+      updated = ProjectRepository.update(id, updateData);
+    } finally {
+      if (codeLock) codeLock.releaseLock();
+    }
 
     AuditService.log({
 
