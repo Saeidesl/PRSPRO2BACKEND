@@ -591,11 +591,6 @@ const WorkflowService = {
     if (data.WorkflowVersion !== undefined && Number(data.WorkflowVersion) !== version) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نسخه درخواستی با نسخه پیش‌نویس معتبر گردش‌کار مطابقت ندارد.');
     }
-    if (isPublished && !workflow.DraftVersion) {
-      WorkflowStepEventRuleRepository.cloneWorkflowVersion(
-        workflowId, publishedVersion, version, user.TenantID
-      );
-    }
     const normalizedRules = WorkflowStepEventRuleValidator.validate(data.rules);
     normalizedRules.forEach(function(rule) {
       const eventType = EventTypeRepository.findById(rule.EventTypeID);
@@ -605,6 +600,11 @@ const WorkflowService = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'یکی از انواع رویداد انتخاب‌شده معتبر یا فعال نیست.');
       }
     });
+    if (isPublished && !workflow.DraftVersion) {
+      WorkflowStepEventRuleRepository.cloneWorkflowVersion(
+        workflowId, publishedVersion, version, user.TenantID
+      );
+    }
     const now = new Date().toISOString();
     const stored = normalizedRules.map(function(rule) {
       return Object.assign({}, rule, {
