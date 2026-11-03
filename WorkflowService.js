@@ -185,6 +185,7 @@ const WorkflowService = {
         1,
 
       WorkflowType: String(data.WorkflowType || 'INITIAL').toUpperCase(),
+      RepeatReferencePolicyJSON: JSON.stringify(data.RepeatReferencePolicyJSON || {}),
       LifecycleState: 'DRAFT',
       PublishedVersion: '',
       DraftVersion: Number(data.Version || 1),
