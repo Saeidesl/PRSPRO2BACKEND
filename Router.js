@@ -667,6 +667,12 @@ const Router = {
       return InformationTypeService.createColumn(decodeURIComponent(informationTypeColumnCreateMatch[1]), body, params);
     }
 
+    const projectReferenceResolveMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)\/resolve-reference$/);
+    if (projectReferenceResolveMatch) {
+      AccessControlService.require(params, 'PROJECT_EDIT');
+      return ProjectInformationService.resolveReferenceConflict(decodeURIComponent(projectReferenceResolveMatch[1]), decodeURIComponent(projectReferenceResolveMatch[2]), body, params);
+    }
+
     const projectInformationApproveMatch = path.match(/^\/projects\/([^/]+)\/information\/([^/]+)\/approve$/);
     if (projectInformationApproveMatch) {
       AccessControlService.require(params, 'PROJECT_EDIT');
