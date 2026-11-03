@@ -19,9 +19,12 @@ const ProjectInformationRepository = {
   insertHistory: function(row) { return GoogleSheetsRepository.insert(this.HISTORY_SHEET,row); },
   SYNC_LOG_SHEET: '38_ProjectReferenceSyncLog',
   getAllSyncLogs: function() { return GoogleSheetsRepository.getAll(this.SYNC_LOG_SHEET); },
-  findSyncLog: function(sourceId,targetId,typeId) {
+  findSyncLog: function(sourceId,targetId,typeId,tenantId) {
     return this.getAllSyncLogs().filter(function(row) {
-      return String(row.SourceProjectID)===String(sourceId) && String(row.TargetProjectID)===String(targetId) && String(row.InformationTypeID)===String(typeId);
+      return String(row.SourceProjectID)===String(sourceId) &&
+        String(row.TargetProjectID)===String(targetId) &&
+        String(row.InformationTypeID)===String(typeId) &&
+        (tenantId === undefined || String(row.TenantID)===String(tenantId));
     }).sort(function(a,b) { return String(b.CreatedAt||'').localeCompare(String(a.CreatedAt||'')); })[0] || null;
   },
   insertSyncLog: function(row) { return GoogleSheetsRepository.insert(this.SYNC_LOG_SHEET,row); }
