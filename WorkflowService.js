@@ -334,6 +334,10 @@ const WorkflowService = {
 
     });
 
+    if (data.RepeatReferencePolicyJSON !== undefined) {
+      updateData.RepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
+    }
+
     /*
      * TenantID هرگز از ورودی قابل تغییر نیست.
      */
@@ -702,6 +706,7 @@ const WorkflowService = {
     const updated = WorkflowRepository.update(workflowId, {
       Version: version,
       PublishedVersion: version,
+      PublishedRepeatReferencePolicyJSON: JSON.stringify((function(value){ if(typeof value==='string'){try{return JSON.parse(value||'{}');}catch(error){return {};}} return value && typeof value==='object' && !Array.isArray(value) ? value : {}; })(workflow.RepeatReferencePolicyJSON)),
       DraftVersion: '',
       LifecycleState: 'PUBLISHED',
       Status: Constants.STATUS.ACTIVE,
