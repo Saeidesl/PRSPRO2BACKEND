@@ -610,24 +610,18 @@ const WorkflowService = {
         UpdatedAt: now
       });
     });
-    const lock = LockService.getScriptLock();
-    lock.waitLock(10000);
-    try {
-      WorkflowStepEventRuleRepository.replaceForStepVersion(stepId, version, user.TenantID, stored);
-      const workflowPatch = {};
-      if (String(workflow.LifecycleState || '').toUpperCase() === 'PUBLISHED') {
-        workflowPatch.DraftVersion = version;
-        workflowPatch.LifecycleState = 'DRAFT';
-      } else if (!workflow.DraftVersion) {
-        workflowPatch.DraftVersion = version;
-        workflowPatch.LifecycleState = 'DRAFT';
-      }
-      if (Object.keys(workflowPatch).length) {
-        workflowPatch.UpdatedAt = now;
-        WorkflowRepository.update(workflowId, workflowPatch);
-      }
-    } finally {
-      lock.releaseLock();
+    WorkflowStepEventRuleRepository.replaceForStepVersion(workflowId, stepId, version, user.TenantID, stored);
+    const workflowPatch = {};
+    if (String(workflow.LifecycleState || '').toUpperCase() === 'PUBLISHED') {
+      workflowPatch.DraftVersion = version;
+      workflowPatch.LifecycleState = 'DRAFT';
+    } else if (!workflow.DraftVersion) {
+      workflowPatch.DraftVersion = version;
+      workflowPatch.LifecycleState = 'DRAFT';
+    }
+    if (Object.keys(workflowPatch).length) {
+      workflowPatch.UpdatedAt = now;
+      WorkflowRepository.update(workflowId, workflowPatch);
     }
     AuditService.log({
       TenantID: user.TenantID, UserID: user.ID,
