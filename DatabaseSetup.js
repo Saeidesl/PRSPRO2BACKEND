@@ -55,12 +55,12 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','RunNumber','SourceProjectID','RecordState']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','RunNumber','SourceProjectID','RecordState','ReferencePolicyJSON','ReferenceSourceRevision']
     },
 
     WORKFLOWS: {
       name: '09_Workflows',
-      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt','WorkflowType','LifecycleState','PublishedVersion','DraftVersion']
+      headers: ['ID','TenantID','Name','Code','Version','Status','CreatedAt','UpdatedAt','WorkflowType','LifecycleState','PublishedVersion','DraftVersion','RepeatReferencePolicyJSON']
     },
 
     WORKFLOW_STEPS: {
