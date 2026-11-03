@@ -777,7 +777,8 @@ const EventService = {
     }
     const projectEvents = (EventRepository.findByProjectId(project.ID) || []).filter(function(item) {
       return String(item.TenantID) === String(tenantId) &&
-        String(item.Status || '').toUpperCase() !== String(Constants.STATUS.VOID).toUpperCase();
+        String(item.Status || '').toUpperCase() !== String(Constants.STATUS.VOID).toUpperCase() &&
+        (!item.WorkflowStepID || String(item.WorkflowStepID) === String(project.CurrentStepID));
     });
     let sourceEvents = [];
     if (project.SourceProjectID) {
@@ -1219,6 +1220,9 @@ const EventService = {
     }
 
     const created = EventRepository.insert(newEvent);
+    const workflowProgressAfter = project
+      ? this._getWorkflowRuleProgress_(project, user.TenantID)
+      : null;
 
     if (validatedFormResponses.length) {
       FormService.saveEventResponses(created, validatedFormResponses, user, requestParams);
@@ -1253,6 +1257,11 @@ const EventService = {
     Object.keys(projectChanges).forEach(function(key) {
       projectUpdate[key] = projectChanges[key];
     });
+
+    if (workflowProgressAfter && workflowProgressAfter.configured &&
+        workflowProgressAfter.stageComplete && projectChanges.CurrentStepID === undefined) {
+      projectChanges.CurrentStepStatus = 'COMPLETED';
+    }
 
     const hasProjectChanges = Object.keys(projectChanges).length > 0;
 
@@ -1331,7 +1340,8 @@ const EventService = {
         availableDepartmentIDs: updatedProject
           ? this._parseArray_(updatedProject.AvailableDepartmentIDs)
           : [],
-        procurementIntegration: procurementIntegration
+        procurementIntegration: procurementIntegration,
+        workflowProgress: workflowProgressAfter
       },
       {
         message: workflowMoved
@@ -1524,6 +1534,26 @@ const EventService = {
         NewData: restoredProject,
         Reason: 'بازگردانی وضعیت پروژه پس از ابطال رویداد: ' + reason
       });
+    }
+
+    if (project && event.WorkflowStepID &&
+        String(project.CurrentStepID || '') === String(event.WorkflowStepID)) {
+      const refreshedProgress = this._getWorkflowRuleProgress_(project, user.TenantID);
+      const nextStepStatus = refreshedProgress.configured && refreshedProgress.stageComplete
+        ? 'COMPLETED' : 'IN_PROGRESS';
+      if (String(project.CurrentStepStatus || '').toUpperCase() !== nextStepStatus) {
+        const beforeStatus = Object.assign({}, project);
+        restoredProject = ProjectRepository.update(project.ID, {
+          CurrentStepStatus: nextStepStatus,
+          UpdatedAt: now
+        });
+        AuditService.log({
+          TenantID: user.TenantID, UserID: user.ID,
+          Action: Constants.ACTION.UPDATE, EntityType: Constants.ENTITY.PROJECT,
+          EntityID: project.ID, OldData: beforeStatus, NewData: restoredProject,
+          Reason: 'بازمحاسبه تکمیل مرحله پس از ابطال رویداد'
+        });
+      }
     }
 
     AuditService.log({
