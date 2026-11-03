@@ -18,6 +18,7 @@ const ProjectService = {
   projectFormLookups: function(params) {
     const user = AccessControlService.getCurrentUser(params || {});
     const tenantId = String(user.TenantID || '');
+    const informationTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; }).map(function(item) { return { ID: item.ID, Code: item.Code, Name: item.Name, DataType: item.DataType || 'text' }; });
     const departments = (DepartmentRepository.getAll() || []).filter(function(item) {
       return String(item.TenantID) === tenantId &&
         String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
@@ -111,6 +112,7 @@ const ProjectService = {
       departments: departments,
       users: users,
       workflows: workflows,
+      informationTypes: informationTypes,
       referenceProjects: (ProjectRepository.getAll() || []).filter(function(item) { return String(item.TenantID) === tenantId && String(item.RecordState || 'ACTIVE').toUpperCase() === 'ACTIVE' && this._isProjectAvailableToUser_(item, user); }, this).map(function(item) { return { ID: item.ID, ProjectCode: item.ProjectCode || '', Title: item.Title || '' }; }),
       projectStatuses: projectStatuses
     });
