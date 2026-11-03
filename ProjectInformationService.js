@@ -128,6 +128,7 @@ const ProjectInformationService = {
         row=Object.assign({},row,{Value:this._parse(row.ValueJSON,null)});
       }
       var approved=row.ID?this._latestApproval_(row.ID,user.TenantID):null;
+      row.ReferenceSyncLog=String(project.SourceProjectID||'').trim()?ProjectInformationRepository.findSyncLog(project.SourceProjectID,projectId,type.ID):null;
       row.ApprovedRevision=approved?Number(approved.Revision||0):0;
       row.IsApproved=!!(approved && Number(approved.Revision||0)===Number(row.Revision||0) && String(row.Status||'ACTIVE')==='ACTIVE');
       row.InformationType=type;
