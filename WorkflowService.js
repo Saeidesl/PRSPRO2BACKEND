@@ -498,8 +498,19 @@ const WorkflowService = {
         ? Number(data.StepOrder)
         : existingSteps.length + 1;
 
-    const now =
-      new Date().toISOString();
+    const now = new Date().toISOString();
+    const isPublished = String(workflow.LifecycleState || '').toUpperCase() === 'PUBLISHED';
+    const publishedVersion = Number(workflow.PublishedVersion || workflow.Version || 1);
+    const workflowVersion = Number(workflow.DraftVersion || (isPublished ? publishedVersion + 1 : workflow.Version || 1));
+
+    if (isPublished && !workflow.DraftVersion) {
+      WorkflowStepEventRuleRepository.cloneWorkflowVersion(workflowId, publishedVersion, workflowVersion, user.TenantID);
+      WorkflowRepository.update(workflowId, {
+        DraftVersion: workflowVersion,
+        LifecycleState: 'DRAFT',
+        UpdatedAt: now
+      });
+    }
 
     const step = {
 
@@ -523,7 +534,7 @@ const WorkflowService = {
       StepOrder:
         stepOrder,
 
-      WorkflowVersion: Number(workflow.DraftVersion || workflow.Version || 1),
+      WorkflowVersion: workflowVersion,
 
       Status:
         data.Status ||
