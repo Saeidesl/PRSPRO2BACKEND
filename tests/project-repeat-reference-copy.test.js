@@ -33,6 +33,7 @@ test('saving central information automatically synchronizes live-reference child
   const block = source.slice(start, end);
   assert.match(block, /this\._syncLiveReference_\(project,type,current,user\)/);
   assert.match(source, /_syncLiveReference_: function\(sourceProject,type,sourceInfo,user\)/);
+  assert.match(source, /previous\.Action\)==='CONFLICT_RESOLVED_LOCAL'/);
 });
 
 test('live reference conflict resolution uses current source revision, not manual approval', () => {
