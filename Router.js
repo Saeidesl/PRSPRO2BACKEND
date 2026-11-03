@@ -833,7 +833,7 @@ const Router = {
     }
 
 
-    const workflowEventRulesMatch = path.match(/^\\/workflows\\/([^/]+)\\/steps\\/([^/]+)\\/event-rules$/);
+    const workflowEventRulesMatch = path.match(/^\/workflows\/([^/]+)\/steps\/([^/]+)\/event-rules$/);
     if (workflowEventRulesMatch) {
       AccessControlService.require(params, 'WORKFLOW_MANAGE');
       return WorkflowService.saveStepEventRules(
