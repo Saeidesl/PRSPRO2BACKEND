@@ -153,6 +153,11 @@ const APP_CONFIG = {
       ]
     },
 
+    PROJECT_REFERENCE_SYNC_LOG: {
+      name: '38_ProjectReferenceSyncLog',
+      headers: ['ID','TenantID','SourceProjectID','TargetProjectID','InformationTypeID','Policy','SourceRevision','TargetRevision','Action','ConflictJSON','IdempotencyKey','ActorUserID','CreatedAt']
+    },
+
     WORKFLOW_STEP_DEPARTMENTS: {
       name: '17_WorkflowStepDepartments',
       headers: [
