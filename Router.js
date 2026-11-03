@@ -198,6 +198,9 @@ const Router = {
         AccessControlService.require(params, 'EVENT_VIEW');
         return EventService.listByProject(projectId, params);
       }
+      if (parts[3] === 'workflow-progress') {
+        return EventService.workflowProgress(projectId, params);
+      }
 
       if (parts[3] === 'material-specifications') {
         return MaterialPlanningService.listSpecifications(projectId, params);
