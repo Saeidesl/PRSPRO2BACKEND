@@ -689,7 +689,7 @@ const ProjectService = {
           var infoType = InformationTypeRepository.findById(row.InformationTypeID);
           if (!infoType) return;
           var policy = String(referencePolicy[String(row.InformationTypeID)] || referencePolicy[String(infoType.Code || '')] || 'INDEPENDENT').toUpperCase();
-          if (policy !== 'INITIAL_COPY' || ['image','file'].indexOf(String(infoType.DataType || '').toLowerCase()) !== -1) return;
+          if (policy !== 'INITIAL_COPY' || ProjectInformationService._isFileBased_(row.InformationTypeID, infoType)) return;
           if (ProjectInformationRepository.findAnyByProjectAndType(created.ID, row.InformationTypeID)) return;
           var copyNow = new Date().toISOString();
           var copy = ProjectInformationRepository.insert({
