@@ -111,7 +111,7 @@ const ProjectInformationService = {
     return value.map(function(row,index){return validateRow(row,index+1);}).filter(function(row){return !isEmpty(row);});
   },
   list: function(projectId,params){
-    var user=this._user(params);this._project(projectId,user.TenantID,user);
+    var user=this._user(params),project=this._project(projectId,user.TenantID,user);
     var saved=ProjectInformationRepository.findByProject(projectId).filter(function(row){
       return String(row.TenantID)===String(user.TenantID);
     });
