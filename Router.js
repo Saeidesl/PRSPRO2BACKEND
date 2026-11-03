@@ -242,6 +242,12 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
       }
 
+
+      if (parts[3] === 'steps' && parts[5] === 'event-rules') {
+        AccessControlService.require(params, 'WORKFLOW_MANAGE');
+        return WorkflowService.getStepEventRules(workflowId, decodeURIComponent(parts[4]), params);
+      }
+
       if (parts[3] === 'management-data') {
         AccessControlService.require(params, 'WORKFLOW_MANAGE');
         return WorkflowService.managementData(workflowId, params);
@@ -619,6 +625,11 @@ const Router = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'گردش‌کار مورد نظر پیدا نشد.');
       }
 
+
+      if (parts[3] === 'publish') {
+        return WorkflowService.publish(workflowId, params);
+      }
+
       if (parts[3] === 'steps') {
         return WorkflowService.createStep(workflowId, body, params);
       }
@@ -819,6 +830,18 @@ const Router = {
         AccessControlService.require(params, 'PROJECT_CREATE');
       }
       return ProjectService.update(decodeURIComponent(projectUpdateMatch[1]), body, params);
+    }
+
+
+    const workflowEventRulesMatch = path.match(/^\\/workflows\\/([^/]+)\\/steps\\/([^/]+)\\/event-rules$/);
+    if (workflowEventRulesMatch) {
+      AccessControlService.require(params, 'WORKFLOW_MANAGE');
+      return WorkflowService.saveStepEventRules(
+        decodeURIComponent(workflowEventRulesMatch[1]),
+        decodeURIComponent(workflowEventRulesMatch[2]),
+        body,
+        params
+      );
     }
 
     if (path.indexOf('/workflows/') === 0) {
