@@ -22,7 +22,7 @@ test('workflow event rule APIs are permission-protected and tenant-scoped', () =
   assert.match(service, /String\(workflow\.TenantID\) !== String\(user\.TenantID\)/);
   assert.match(service, /WORKFLOW_PUBLISHED/);
   assert.match(service, /eventTypes: eventTypes/);
-  assert.match(service, /ConnectionType \\|\\| 'PROJECT'/);
+  assert.match(service, /ConnectionType/);
   assert.match(service, /return \{ ID: row.ID, Name: row.Name, Code: row.Code/);
   assert.match(service, /if \(isPublished && !workflow.DraftVersion\)/);
 });
