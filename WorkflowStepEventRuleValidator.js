@@ -5,6 +5,8 @@ const WorkflowStepEventRuleValidator = {
     }
     const seen = Object.create(null);
     const groups = Object.create(null);
+    const strictOrders = Object.create(null);
+    let stepSequenceMode = '';
     return rules.map(function(input, index) {
       const rule = input || {};
       Validator.required(rule.EventTypeID, 'EventTypeID');
@@ -21,6 +23,10 @@ const WorkflowStepEventRuleValidator = {
       if (['STRICT','FREE','GROUPED'].indexOf(sequence) === -1) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'حالت ترتیب رویداد معتبر نیست.');
       }
+      if (stepSequenceMode && stepSequenceMode !== sequence) {
+        throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'برای هر مرحله فقط یک مدل ترتیب رویداد قابل انتخاب است.');
+      }
+      stepSequenceMode = sequence;
       if ((requirement === 'REFERENCE' && source !== 'SOURCE_PROJECT') ||
           (requirement === 'NOT_REQUIRED' && source !== 'NONE') ||
           ((requirement === 'REQUIRED' || requirement === 'OPTIONAL') && source === 'NONE')) {
@@ -31,6 +37,10 @@ const WorkflowStepEventRuleValidator = {
       const eventOrder = Number(rule.EventOrder || 0);
       if (sequence === 'STRICT' && (!Number.isInteger(eventOrder) || eventOrder < 1 || groupKey || groupOrder)) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'در ترتیب اجباری، ترتیب هر رویداد باید یکتا و بدون گروه باشد.');
+      }
+      if (sequence === 'STRICT') {
+        if (strictOrders[String(eventOrder)]) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شماره ترتیب رویداد تکراری است.');
+        strictOrders[String(eventOrder)] = true;
       }
       if (sequence === 'FREE' && (groupKey || groupOrder || eventOrder)) {
         throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'در ترتیب آزاد، شماره ترتیب و گروه نباید تعیین شود.');
