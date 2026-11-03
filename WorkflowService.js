@@ -545,8 +545,7 @@ const WorkflowService = {
       }
     );
 
-  }
-
+  },
 
   getStepEventRules: function(workflowId, stepId, params) {
     Validator.id(workflowId, 'WorkflowID');
