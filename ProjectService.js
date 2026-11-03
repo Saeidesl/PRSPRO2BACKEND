@@ -682,37 +682,66 @@ const ProjectService = {
         );
       }
       created = ProjectRepository.insert(newProject);
+      var referenceCopySummary = { copied: [], skippedFiles: [], skippedEmpty: [] };
       if (sourceProject && typeof ProjectInformationRepository !== 'undefined') {
         var referenceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
+        var syncLogs = [];
         referenceRows.forEach(function(row) {
           if (String(row.TenantID) !== String(tenantId) || String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
           var infoType = InformationTypeRepository.findById(row.InformationTypeID);
-          if (!infoType) return;
+          if (!infoType || String(infoType.TenantID) !== String(tenantId) || String(infoType.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
           var policy = String(referencePolicy[String(row.InformationTypeID)] || referencePolicy[String(infoType.Code || '')] || 'INDEPENDENT').toUpperCase();
-          if (policy !== 'INITIAL_COPY' || ProjectInformationService._isFileBased_(row.InformationTypeID, infoType)) return;
+          if (policy !== 'INITIAL_COPY' && policy !== 'LIVE_SYNC') return;
           if (ProjectInformationRepository.findAnyByProjectAndType(created.ID, row.InformationTypeID)) return;
-          var approvedRevision = ProjectInformationRepository.findHistory(row.ID).filter(function(historyRow) {
-            return String(historyRow.TenantID) === String(tenantId) &&
-              String(historyRow.Action || '').toUpperCase() === 'APPROVED';
-          }).sort(function(a,b) { return Number(b.Revision || 0) - Number(a.Revision || 0); })[0];
-          if (!approvedRevision || !approvedRevision.NewValueJSON) return;
-          var approvedValueJSON = String(approvedRevision.NewValueJSON);
+          if (ProjectInformationService._isFileBased_(row.InformationTypeID, infoType)) {
+            referenceCopySummary.skippedFiles.push({ informationTypeId: row.InformationTypeID, name: infoType.Name || infoType.Code || row.InformationTypeID });
+            if (policy === 'LIVE_SYNC') {
+              var skippedAt = new Date().toISOString();
+              syncLogs.push({
+                ID: 'PRSL_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+                SourceProjectID: sourceProject.ID, TargetProjectID: created.ID, InformationTypeID: row.InformationTypeID,
+                Policy: policy, SourceRevision: Number(row.Revision || 0), TargetRevision: '',
+                Action: 'SKIPPED_FILE', ConflictJSON: '', IdempotencyKey: [sourceProject.ID, created.ID, row.InformationTypeID, row.Revision].join('|'),
+                ActorUserID: user.ID, CreatedAt: skippedAt
+              });
+            }
+            return;
+          }
+          var currentValueJSON = String(row.ValueJSON || '');
+          if (!currentValueJSON) {
+            referenceCopySummary.skippedEmpty.push({ informationTypeId: row.InformationTypeID, name: infoType.Name || infoType.Code || row.InformationTypeID });
+            return;
+          }
           var copyNow = new Date().toISOString();
           var copy = ProjectInformationRepository.insert({
             ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
-            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: approvedValueJSON,
+            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: currentValueJSON,
             Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
             CreatedAt: copyNow, UpdatedAt: copyNow
           });
           ProjectInformationRepository.insertHistory({
             ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
             ProjectInformationID: copy.ID, ProjectID: created.ID, InformationTypeID: row.InformationTypeID,
-            Revision: 1, Action: 'INITIAL_COPY', OldValueJSON: '', NewValueJSON: approvedValueJSON,
-            SourceEventID: '', Reason: 'کپی نسخه تأییدشده ' + approvedRevision.Revision + ' از پروژه مرجع ' + sourceProject.ID,
+            Revision: 1, Action: policy === 'LIVE_SYNC' ? 'REFERENCE_SYNC' : 'INITIAL_COPY',
+            OldValueJSON: '', NewValueJSON: currentValueJSON, SourceEventID: '',
+            Reason: 'کپی مقدار جاری اطلاعات از پروژه مرجع ' + sourceProject.ID + '؛ بدون نیاز به تأیید دستی.',
             ActorUserID: user.ID, CreatedAt: copyNow
           });
+          referenceCopySummary.copied.push({ informationTypeId: row.InformationTypeID, name: infoType.Name || infoType.Code || row.InformationTypeID, policy: policy });
+          if (policy === 'LIVE_SYNC') {
+            syncLogs.push({
+              ID: 'PRSL_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+              SourceProjectID: sourceProject.ID, TargetProjectID: created.ID, InformationTypeID: row.InformationTypeID,
+              Policy: policy, SourceRevision: Number(row.Revision || 0), TargetRevision: 1,
+              Action: 'SYNCED', ConflictJSON: '',
+              IdempotencyKey: [sourceProject.ID, created.ID, row.InformationTypeID, row.Revision].join('|'),
+              ActorUserID: user.ID, CreatedAt: copyNow
+            });
+          }
         });
+        syncLogs.forEach(function(log) { ProjectInformationRepository.insertSyncLog(log); });
       }
+      created.ReferenceCopySummary = referenceCopySummary;
     } finally {
       createLock.releaseLock();
     }
