@@ -754,6 +754,128 @@ const EventService = {
     });
   },
 
+  _getWorkflowRuleProgress_: function(project, tenantId) {
+    if (!project || !project.WorkflowID || !project.CurrentStepID ||
+        typeof WorkflowStepEventRuleRepository === 'undefined') {
+      return { configured: false, rules: [], completed: [], remaining: [], sequenceMode: 'FREE', stageComplete: true };
+    }
+    const version = Number(project.WorkflowVersion || 1);
+    const rules = WorkflowStepEventRuleRepository.findByStepAndVersion(project.CurrentStepID, version)
+      .filter(function(rule) {
+        return String(rule.TenantID) === String(tenantId) &&
+          String(rule.WorkflowID) === String(project.WorkflowID) &&
+          Number(rule.WorkflowVersion || 1) === version &&
+          String(rule.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      }).sort(function(a, b) {
+        const mode = String(a.SequenceMode || 'STRICT').toUpperCase();
+        return mode === 'STRICT'
+          ? Number(a.EventOrder || 0) - Number(b.EventOrder || 0)
+          : Number(a.GroupOrder || 0) - Number(b.GroupOrder || 0);
+      });
+    if (!rules.length) {
+      return { configured: false, rules: [], completed: [], remaining: [], sequenceMode: 'FREE', stageComplete: true };
+    }
+    const projectEvents = (EventRepository.findByProjectId(project.ID) || []).filter(function(item) {
+      return String(item.TenantID) === String(tenantId) &&
+        String(item.Status || '').toUpperCase() !== String(Constants.STATUS.VOID).toUpperCase();
+    });
+    let sourceEvents = [];
+    if (project.SourceProjectID) {
+      sourceEvents = (EventRepository.findByProjectId(project.SourceProjectID) || []).filter(function(item) {
+        return String(item.TenantID) === String(tenantId) &&
+          String(item.Status || '').toUpperCase() !== String(Constants.STATUS.VOID).toUpperCase();
+      });
+    }
+    const completed = [];
+    const remaining = [];
+    const normalized = rules.map(function(rule) {
+      const mode = String(rule.RequirementMode || 'REQUIRED').toUpperCase();
+      const source = mode === 'REFERENCE' ? sourceEvents : projectEvents;
+      const matching = source.some(function(item) {
+        return String(item.EventTypeID) === String(rule.EventTypeID);
+      });
+      const satisfied = mode === 'NOT_REQUIRED' || (mode === 'REFERENCE' ? matching : matching);
+      const item = {
+        eventTypeId: String(rule.EventTypeID),
+        requirementMode: mode,
+        dataSource: String(rule.DataSource || 'NEW_EVENT').toUpperCase(),
+        sequenceMode: String(rule.SequenceMode || 'STRICT').toUpperCase(),
+        eventOrder: Number(rule.EventOrder || 0),
+        groupKey: String(rule.GroupKey || ''),
+        groupOrder: Number(rule.GroupOrder || 0),
+        satisfied: satisfied
+      };
+      if (satisfied) completed.push(item); else if (mode !== 'NOT_REQUIRED') remaining.push(item);
+      return item;
+    });
+    return {
+      configured: true,
+      rules: normalized,
+      completed: completed,
+      remaining: remaining,
+      sequenceMode: normalized[0].sequenceMode,
+      stageComplete: remaining.filter(function(item) { return item.requirementMode === 'REQUIRED' || item.requirementMode === 'REFERENCE'; }).length === 0
+    };
+  },
+
+  _validateWorkflowEvent_: function(project, eventType, tenantId) {
+    const progress = this._getWorkflowRuleProgress_(project, tenantId);
+    if (!progress.configured) return progress;
+    const typeId = String(eventType.ID);
+    const rule = progress.rules.find(function(item) { return item.eventTypeId === typeId; });
+    if (!rule) {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این رویداد در قواعد مرحله فعلی گردش‌کار تعریف نشده است.');
+    }
+    if (rule.requirementMode === 'REFERENCE' || rule.requirementMode === 'NOT_REQUIRED') {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این مورد از پروژه مرجع تأمین می‌شود و نباید به‌عنوان رویداد جدید ثبت شود.');
+    }
+    if (rule.satisfied) {
+      throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'این رویداد قبلاً برای مرحله فعلی ثبت شده است.');
+    }
+    const requiredIncomplete = progress.rules.filter(function(item) {
+      return item.requirementMode === 'REQUIRED' && !item.satisfied;
+    });
+    if (rule.sequenceMode === 'STRICT') {
+      const earlierRequired = requiredIncomplete.some(function(item) {
+        return item.eventOrder < rule.eventOrder;
+      });
+      if (earlierRequired) {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'ابتدا رویدادهای اجباری با ترتیب قبلی را ثبت کنید.');
+      }
+    } else if (rule.sequenceMode === 'GROUPED') {
+      const firstPendingGroup = requiredIncomplete.reduce(function(min, item) {
+        return Math.min(min, item.groupOrder || 0);
+      }, Infinity);
+      if (isFinite(firstPendingGroup) && rule.groupOrder > firstPendingGroup) {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_STATUS, 'ابتدا رویدادهای اجباری گروه قبلی را تکمیل کنید.');
+      }
+    }
+    return progress;
+  },
+
+  workflowProgress: function(projectId, params) {
+    Validator.id(projectId, 'ProjectID');
+    const user = AccessControlService.getCurrentUser(params || {});
+    const project = ProjectRepository.findById(projectId);
+    if (!project || String(project.TenantID) !== String(user.TenantID) ||
+        !ProjectService._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مورد نظر پیدا نشد.');
+    }
+    const progress = this._getWorkflowRuleProgress_(project, user.TenantID);
+    const eventTypes = EventTypeRepository.getAll().filter(function(item) {
+      return String(item.TenantID) === String(user.TenantID);
+    });
+    const names = Object.create(null);
+    eventTypes.forEach(function(item) { names[String(item.ID)] = item.Name || item.Code || item.ID; });
+    progress.rules = progress.rules.map(function(item) {
+      return Object.assign({}, item, { eventTypeName: names[item.eventTypeId] || item.eventTypeId });
+    });
+    progress.stepName = project.CurrentStepID
+      ? ((WorkflowStepRepository.findById(project.CurrentStepID) || {}).Name || '')
+      : '';
+    return Response.success(progress);
+  },
+
   // ثبت رویداد با جلوگیری از ایجاد تکراری هنگام تکرار درخواست شبکه
   create: function(event, params) {
     Validator.object(event, 'event');
