@@ -25,6 +25,8 @@ test('workflow event rule APIs are permission-protected and tenant-scoped', () =
   assert.match(service, /ConnectionType/);
   assert.match(service, /return \{ ID: row.ID, Name: row.Name, Code: row.Code/);
   assert.match(service, /if \(isPublished && !workflow.DraftVersion\)/);
+  assert.match(service, /Number\(item.WorkflowVersion \|\| 1\) <= version/);
+  assert.match(service, /Number\(step.WorkflowVersion \|\| 1\) <= requestedVersion/);
 });
 
 test('workflow event rule validator enforces requirement, source and ordering compatibility', () => {
