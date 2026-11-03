@@ -676,6 +676,31 @@ const ProjectService = {
         );
       }
       created = ProjectRepository.insert(newProject);
+      if (sourceProject && typeof ProjectInformationRepository !== 'undefined') {
+        var referenceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
+        referenceRows.forEach(function(row) {
+          if (String(row.TenantID) !== String(tenantId) || String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
+          var infoType = InformationTypeRepository.findById(row.InformationTypeID);
+          if (!infoType) return;
+          var policy = String(referencePolicy[String(row.InformationTypeID)] || referencePolicy[String(infoType.Code || '')] || 'INDEPENDENT').toUpperCase();
+          if (policy !== 'INITIAL_COPY' || ['image','file'].indexOf(String(infoType.DataType || '').toLowerCase()) !== -1) return;
+          if (ProjectInformationRepository.findAnyByProjectAndType(created.ID, row.InformationTypeID)) return;
+          var copyNow = new Date().toISOString();
+          var copy = ProjectInformationRepository.insert({
+            ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: String(row.ValueJSON || ''),
+            Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
+            CreatedAt: copyNow, UpdatedAt: copyNow
+          });
+          ProjectInformationRepository.insertHistory({
+            ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
+            ProjectInformationID: copy.ID, ProjectID: created.ID, InformationTypeID: row.InformationTypeID,
+            Revision: 1, Action: 'INITIAL_COPY', OldValueJSON: '', NewValueJSON: String(row.ValueJSON || ''),
+            SourceEventID: '', Reason: 'کپی اولیه از پروژه مرجع ' + sourceProject.ID,
+            ActorUserID: user.ID, CreatedAt: copyNow
+          });
+        });
+      }
     } finally {
       createLock.releaseLock();
     }
