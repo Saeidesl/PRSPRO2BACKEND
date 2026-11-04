@@ -784,6 +784,65 @@ const ProjectService = {
 
 
 
+  _copyReferenceImageValue_: function(value, sourceProjectId, targetProjectId, user) {
+    if (value === undefined || value === null || value === '') return value;
+    if (Array.isArray(value)) {
+      return value.map(function(item) {
+        return ProjectService._copyReferenceImageValue_(item, sourceProjectId, targetProjectId, user);
+      });
+    }
+    if (typeof value !== 'object') return value;
+    var attachmentId = String(value.AttachmentID || value.ID || '');
+    if (!attachmentId) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'شناسه تصویر در اطلاعات مرجع معتبر نیست.');
+    var sourceAttachment = AttachmentRepository.findById(attachmentId);
+    if (!sourceAttachment ||
+        String(sourceAttachment.TenantID) !== String(user.TenantID) ||
+        String(sourceAttachment.EntityType || '').toUpperCase() !== 'PROJECT' ||
+        String(sourceAttachment.EntityID) !== String(sourceProjectId) ||
+        String(sourceAttachment.MimeType || '').toLowerCase().indexOf('image/') !== 0) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'تصویر انتخاب‌شده به پروژه مرجع تعلق ندارد یا معتبر نیست.');
+    }
+    var copied = AttachmentService.copyProjectImage(attachmentId, targetProjectId, { user: user });
+    return {
+      AttachmentID: String(copied.ID),
+      FileName: String(copied.FileName || ''),
+      MimeType: String(copied.MimeType || ''),
+      FileSize: Number(copied.FileSize || 0),
+      AttachmentType: String(copied.AttachmentType || 'INFORMATION').toUpperCase()
+    };
+  },
+
+
+  _copyReferenceInformationImages_: function(value, type, typeId, sourceProjectId, targetProjectId, user) {
+    var columns = InformationTypeRepository.findColumns(typeId).filter(function(col) {
+      return String(col.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    });
+    if (!columns.length) {
+      if (String(type.DataType || '').toLowerCase() !== 'image') return null;
+      return this._copyReferenceImageValue_(value, sourceProjectId, targetProjectId, user);
+    }
+    var hasFileField = columns.some(function(col) {
+      return String(col.DataType || '').toLowerCase() === 'file';
+    });
+    if (hasFileField) return null;
+    var imageCodes = columns.filter(function(col) {
+      return String(col.DataType || '').toLowerCase() === 'image';
+    }).map(function(col) { return String(col.Code); });
+    if (!imageCodes.length) return null;
+    var clone = function(row) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+      var result = Object.assign({}, row);
+      imageCodes.forEach(function(code) {
+        if (Object.prototype.hasOwnProperty.call(result, code)) {
+          result[code] = ProjectService._copyReferenceImageValue_(result[code], sourceProjectId, targetProjectId, user);
+        }
+      });
+      return result;
+    };
+    return Array.isArray(value) ? value.map(clone) : clone(value);
+  },
+
+
   copyReferenceInformationType: function(projectId, typeId, params) {
     var user = AccessControlService.getCurrentUser(params || {});
     var project = ProjectRepository.findById(projectId);
@@ -803,12 +862,20 @@ const ProjectService = {
       var items = Array.isArray(state.items) ? state.items : [];
       var item = items.find(function(entry) { return String(entry.informationTypeId) === String(typeId); });
       if (!item) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع اطلاعات در برنامه کپی این پروژه وجود ندارد.');
-      if (['COPIED','INDEPENDENT','EMPTY','SKIPPED_FILE'].indexOf(String(item.status)) !== -1) {
-        return Response.success({ projectId: projectId, item: item, items: items, completed: items.every(function(entry) { return entry.status !== 'PENDING' && entry.status !== 'FAILED'; }) });
-      }
       var type = InformationTypeRepository.findById(typeId);
       if (!type || String(type.TenantID) !== String(user.TenantID) || String(type.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع اطلاعات معتبر یا فعال نیست.');
+      }
+      var activeColumns = InformationTypeRepository.findColumns(typeId).filter(function(col) {
+        return String(col.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      });
+      var hasImageFields = String(type.DataType || '').toLowerCase() === 'image' ||
+        activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'image'; });
+      var hasFileFields = String(type.DataType || '').toLowerCase() === 'file' ||
+        activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'file'; });
+      if (['COPIED','INDEPENDENT','EMPTY'].indexOf(String(item.status)) !== -1 ||
+          (String(item.status) === 'SKIPPED_FILE' && (!hasImageFields || hasFileFields))) {
+        return Response.success({ projectId: projectId, item: item, items: items, completed: items.every(function(entry) { return entry.status !== 'PENDING' && entry.status !== 'FAILED'; }) });
       }
       var policyMap = {};
       try { policyMap = JSON.parse(project.ReferencePolicyJSON || '{}'); } catch (policyError) { policyMap = {}; }
@@ -822,7 +889,7 @@ const ProjectService = {
         var sourceInfo = ProjectInformationRepository.findByProjectAndType(source.ID, type.ID);
         if (!sourceInfo || !String(sourceInfo.ValueJSON || '')) {
           item.status = 'EMPTY';
-        } else if (ProjectInformationService._isFileBased_(type.ID, type)) {
+        } else if (ProjectInformationService._isFileBased_(type.ID, type) && (!hasImageFields || hasFileFields)) {
           item.status = 'SKIPPED_FILE';
         } else {
           var existing = ProjectInformationRepository.findAnyByProjectAndType(project.ID, type.ID);
@@ -831,9 +898,15 @@ const ProjectService = {
             item.targetRevision = Number(existing.Revision || 1);
           } else {
             var now = new Date().toISOString();
+            var sourceValue = ProjectInformationService._parse(sourceInfo.ValueJSON, null);
+            var copiedValue = hasImageFields
+              ? this._copyReferenceInformationImages_(sourceValue, type, type.ID, source.ID, project.ID, user)
+              : sourceValue;
+            var copiedValueJSON = JSON.stringify(copiedValue);
+            if (copiedValueJSON.length > 45000) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'حجم اطلاعات تصویری پس از کپی بیش از ظرفیت مجاز است.');
             var copied = ProjectInformationRepository.insert({
               ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: user.TenantID,
-              ProjectID: project.ID, InformationTypeID: type.ID, ValueJSON: String(sourceInfo.ValueJSON || ''),
+              ProjectID: project.ID, InformationTypeID: type.ID, ValueJSON: copiedValueJSON,
               Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
               CreatedAt: now, UpdatedAt: now
             });
@@ -841,7 +914,7 @@ const ProjectService = {
               ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: user.TenantID,
               ProjectInformationID: copied.ID, ProjectID: project.ID, InformationTypeID: type.ID,
               Revision: 1, Action: policy === 'LIVE_SYNC' ? 'REFERENCE_SYNC' : 'INITIAL_COPY',
-              OldValueJSON: '', NewValueJSON: String(sourceInfo.ValueJSON || ''), SourceEventID: '',
+              OldValueJSON: '', NewValueJSON: copiedValueJSON, SourceEventID: '',
               Reason: 'کپی مقدار جاری اطلاعات از پروژه مرجع ' + source.ID + '؛ بدون نیاز به تأیید دستی.',
               ActorUserID: user.ID, CreatedAt: now
             });
