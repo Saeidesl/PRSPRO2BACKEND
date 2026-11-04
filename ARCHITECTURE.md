@@ -60,3 +60,37 @@
 - تصویر نمایه باید به AttachmentID موجود در 15_Attachments و متعلق به همان پروژه اشاره کند؛ از کپی فایل یا اعتماد به metadata ارسالی کلاینت اجتناب شود. AttachmentService.listProjectImages باید با انتخاب صریح تصویر مورد استفاده در کارت یکپارچه شود.
 - کارت پروژه باید فیلدهای نمایشی قابل تنظیم را از مقادیر جاری پرونده بخواند؛ snapshot رویداد، SourceEventID، تاریخچه، idempotency و tenant isolation حفظ شوند.
 - ثبت رویداد نباید RecordState یا گردش‌کار را خودکار فعال/تغییر دهد. اجرای تغییرات و آزمون فقط در staging انجام می‌شود؛ انتشار تولید نیازمند تأیید جداگانه کاربر است.
+
+ 
+## 2026-11-04 — انتقال امن تصاویر اطلاعات مرکزی در کپی پروژه
+
+### محدوده و نتیجه
+- مخزن: `Saeidesl/PRSPRO2BACKEND`، شاخه `main`؛ Frontend مرتبط: `Saeidesl/PRSPRO2`، شاخه `main`.
+- وضعیت: قابلیت در محیط واقعی توسط کاربر آزمایش و موفقیت انتقال کامل تأیید شد.
+- کپی تصویرها در همان جریان مرجع پروژه انجام می‌شود؛ فایل مقصد مستقل و دارای AttachmentID جدید است.
+
+### نقشه Backend
+- `ProjectService.js:create`: ساخت برنامه کپی `ReferenceCopyStatusJSON` برای انواع اطلاعات مرکزی و افزودن آیتم `__PROJECT_PROFILE_IMAGE__` در صورت وجود تصویر نمایه.
+- `ProjectService.js:copyReferenceInformationType(projectId, typeId, params)`: پردازش مرحله‌ای آیتم‌های برنامه از مسیر API موجود؛ ثبت وضعیت، تاریخچه و SyncLog.
+- `ProjectService.js:_copyReferenceImageValue_`: اعتبارسنجی AttachmentID مبدأ و جایگزینی آن با metadata پیوست مقصد.
+- `ProjectService.js:_copyReferenceInformationImages_`: کپی فیلدهای تصویر در مقادیر تک‌مقداری/چندردیفی و حفظ سایر فیلدها.
+- `AttachmentService.js:copyProjectImage(sourceAttachmentId, targetProjectId, user)`: بررسی tenant، دسترسی به هر دو پروژه، MIME تصویری و نوع پیوست؛ ایجاد رکورد پیوست مستقل مقصد و ثبت Audit.
+- `GoogleDriveStorage.js:copyFile(storageKey, fileName)`: کپی native فایل Drive با `File.makeCopy`.
+- `StorageRepository.js:copyFile`: facade برای کپی storage.
+- `AttachmentRepository.js` و شیت `15_Attachments`: نگهداری metadata؛ ستون `SourceAttachmentID` برای idempotency و بازیابی پیوست مقصد در retry.
+- `DatabaseSetup.js`: تعریف افزایشی ستون `SourceAttachmentID` در ساختار ATTACHMENTS.
+- `Router.js`: مسیر موجود `POST /projects/:projectId/reference-copy/:typeId` و کنترل دسترسی حفظ شده است.
+
+### Implementation Logs
+- علت اولیه: انواع دارای image/file در مسیر کپی قدیمی به `SKIPPED_FILE` می‌رفتند.
+- برنامه کپی اصلاح شد تا انواع دارای ستون تصویر حتی اگر ستون فایل غیرتصویری دیگری نیز داشته باشند قابل انتقال باشند؛ نوع‌های صرفاً فایل خارج از محدوده باقی می‌مانند.
+- فایل‌های تصویر با کپی native در Drive مستقل می‌شوند و metadata مقصد به `EntityType=PROJECT` و `EntityID` پروژه کپی‌شده متصل می‌شود.
+- شناسه‌های تصویر در `30_ProjectInformation.ValueJSON` با AttachmentID جدید مقصد جایگزین و تاریخچه در `31_ProjectInformationHistory` حفظ می‌شود.
+- ستون `SourceAttachmentID` در `15_Attachments` برای جلوگیری از کپی تکراری هنگام retry به‌کار می‌رود.
+- خطای runtime ناشی از ارجاع به متغیر تعریف‌نشده `hasFileFields` رفع شد؛ بررسی نحوی `ProjectService.js` موفق بود.
+- Frontend امکان ارسال مجدد وضعیت قدیمی `SKIPPED_FILE` را اضافه کرد تا پروژه‌های قبلی قابل بازیابی باشند.
+- پذیرش نهایی: کاربر در 2026-11-04 تأیید کرد کپی اطلاعات کامل و موفق انجام شده است.
+
+### محدودیت اعتبارسنجی
+- بررسی نحوی فایل Backend پس از اصلاح خطای runtime موفق بود.
+- اجرای مستقل تمام تست‌های خودکار و E2E در این محیط انجام نشد؛ تست واقعی کاربر مبنای پذیرش نهایی است.
