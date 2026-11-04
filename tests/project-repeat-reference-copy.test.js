@@ -7,23 +7,42 @@ const path = require('node:path');
 
 const read = (name) => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
 
-test('repeat project copies current active central information without manual approval history', () => {
+test('repeat project creation persists a per-information copy plan instead of copying inline', () => {
   const source = read('ProjectService.js');
   const start = source.indexOf('created = ProjectRepository.insert(newProject)');
   const end = source.indexOf('createLock.releaseLock()', start);
   const block = source.slice(start, end);
-  assert.match(block, /policy !== 'INITIAL_COPY' && policy !== 'LIVE_SYNC'/);
-  assert.match(block, /var currentValueJSON = String\(row\.ValueJSON \|\| ''\)/);
-  assert.match(block, /ValueJSON: currentValueJSON/);
-  assert.doesNotMatch(block, /findHistory\(row\.ID\)/);
-  assert.doesNotMatch(block, /APPROVED/);
+  assert.match(block, /ReferenceCopyStatusJSON/);
+  assert.match(block, /ReferenceCopyPlan/);
+  assert.match(block, /PENDING/);
+  assert.match(block, /SKIPPED_FILE/);
+  assert.doesNotMatch(block, /ProjectInformationRepository\.insert\(/);
+});
+
+test('repeat project copies one information type at a time with history and live-sync idempotency', () => {
+  const source = read('ProjectService.js');
+  const start = source.indexOf('copyReferenceInformationType: function');
+  const end = source.indexOf('  update: function(id, data, params)', start);
+  const block = source.slice(start, end);
+  assert.match(block, /ProjectInformationRepository\.insert\(/);
+  assert.match(block, /ProjectInformationRepository\.insertHistory\(/);
+  assert.match(block, /ProjectInformationRepository\.insertSyncLog\(/);
+  assert.match(block, /LockService\.getScriptLock\(\)/);
+  assert.match(block, /\['COPIED','INDEPENDENT','EMPTY','SKIPPED_FILE'\]/);
+  assert.match(block, /status = 'FAILED'/);
+});
+
+test('repeat project create requests use a stable operation key to recover lost responses', () => {
+  const source = read('ProjectService.js');
+  assert.match(source, /ReferenceCopyOperationID/);
+  assert.match(source, /درخواست قبلی ایجاد پروژه بازیابی شد/);
 });
 
 test('repeat project initializes live-sync baseline and idempotency log', () => {
   const source = read('ProjectService.js');
   assert.match(source, /policy === 'LIVE_SYNC'/);
   assert.match(source, /Action: 'SYNCED'/);
-  assert.match(source, /ProjectInformationRepository\.insertSyncLog\(log\)/);
+  assert.match(source, /ProjectInformationRepository\.insertSyncLog\(/);
 });
 
 test('saving central information automatically synchronizes live-reference children', () => {
