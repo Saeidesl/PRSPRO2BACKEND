@@ -410,6 +410,24 @@ const ProjectService = {
 
     }
 
+    var operationId = String(project.ReferenceCopyOperationID || '').trim();
+    if (operationId) {
+      var priorOperation = (ProjectRepository.getAll() || []).find(function(item) {
+        return String(item.TenantID) === String(tenantId) &&
+          String(item.ReferenceCopyOperationID || '') === operationId;
+      });
+      if (priorOperation) {
+        var priorResponse = Object.assign({}, priorOperation);
+        try {
+          var priorCopyState = JSON.parse(priorOperation.ReferenceCopyStatusJSON || '{}');
+          priorResponse.ReferenceCopyPlan = Array.isArray(priorCopyState.items) ? priorCopyState.items : [];
+        } catch (priorStateError) {
+          priorResponse.ReferenceCopyPlan = [];
+        }
+        return Response.success(priorResponse, { message: 'درخواست قبلی ایجاد پروژه بازیابی شد.' });
+      }
+    }
+
     if (String(project.RecordState || 'ACTIVE').toUpperCase() === 'DRAFT') {
       const now = new Date().toISOString();
       const draft = {
@@ -662,7 +680,8 @@ const ProjectService = {
         'ACTIVE',
       SourceProjectID: sourceProject ? sourceProject.ID : '',
       ReferencePolicyJSON: sourceProject ? JSON.stringify(referencePolicy) : '{}',
-      ReferenceSourceRevision: sourceProject ? new Date().toISOString() : ''
+      ReferenceSourceRevision: sourceProject ? new Date().toISOString() : '',
+      ReferenceCopyOperationID: sourceProject ? operationId : ''
 
     };
 
@@ -687,7 +706,7 @@ const ProjectService = {
       if (sourceProject) {
         if (typeof GoogleSheetsRepository.ensureColumn === 'function') {
           GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyStatusJSON');
-          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyCompletedAt');
+          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyCompletedAt');\n          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyOperationID');
         }
         var sourceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
         var sourceByType = Object.create(null);
