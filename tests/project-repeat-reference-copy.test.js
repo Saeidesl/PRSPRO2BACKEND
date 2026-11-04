@@ -9,7 +9,7 @@ const read = (name) => fs.readFileSync(path.join(__dirname, '..', name), 'utf8')
 
 test('repeat project creation persists a per-information copy plan instead of copying inline', () => {
   const source = read('ProjectService.js');
-  const start = source.indexOf('created = ProjectRepository.insert(newProject)');
+  const start = source.indexOf('var sourceRows = ProjectInformationRepository.findByProject(sourceProject.ID)');
   const end = source.indexOf('createLock.releaseLock()', start);
   const block = source.slice(start, end);
   assert.match(block, /ReferenceCopyStatusJSON/);
