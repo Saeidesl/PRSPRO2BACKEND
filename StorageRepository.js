@@ -9,6 +9,11 @@ const StorageRepository = {
   },
 
 
+  copyFile: function(storageKey, fileName) {
+    return GoogleDriveStorage.copyFile(storageKey, fileName);
+  },
+
+
   getFile: function(storageKey) {
 
     return GoogleDriveStorage.getFile(
