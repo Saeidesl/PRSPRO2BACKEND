@@ -45,6 +45,8 @@ const ProjectService = {
         Code: item.Code || '',
         Version: Number(item.PublishedVersion || item.Version || 1),
         WorkflowType: item.WorkflowType || 'INITIAL',
+        RepeatReferencePolicyJSON: item.RepeatReferencePolicyJSON || '{}',
+        PublishedRepeatReferencePolicyJSON: item.PublishedRepeatReferencePolicyJSON || item.RepeatReferencePolicyJSON || '{}',
         Status: item.Status || 'ACTIVE'
       };
     });
