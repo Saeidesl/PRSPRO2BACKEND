@@ -813,7 +813,7 @@ const ProjectService = {
         String(sourceAttachment.MimeType || '').toLowerCase().indexOf('image/') !== 0) {
       throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'تصویر انتخاب‌شده به پروژه مرجع تعلق ندارد یا معتبر نیست.');
     }
-    var copied = AttachmentService.copyProjectImage(attachmentId, targetProjectId, { user: user });
+    var copied = AttachmentService.copyProjectImage(attachmentId, targetProjectId, user);
     return {
       AttachmentID: String(copied.ID),
       FileName: String(copied.FileName || ''),
