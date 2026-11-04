@@ -163,6 +163,24 @@ const GoogleDriveStorage = {
   },
 
 
+  copyFile: function(storageKey, fileName) {
+    Validator.required(storageKey, 'StorageKey');
+    Validator.required(fileName, 'نام فایل مقصد');
+    const source = this.getFile(storageKey);
+    const folder = this.getRootFolder_();
+    const copied = source.makeCopy(String(fileName), folder);
+    return {
+      storageProvider: 'GOOGLE_DRIVE',
+      storageKey: copied.getId(),
+      fileId: copied.getId(),
+      fileName: copied.getName(),
+      mimeType: copied.getMimeType(),
+      fileSize: copied.getSize(),
+      url: copied.getUrl()
+    };
+  },
+
+
   getFile: function(storageKey) {
 
     Validator.required(
