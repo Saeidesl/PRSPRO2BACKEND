@@ -706,7 +706,8 @@ const ProjectService = {
       if (sourceProject) {
         if (typeof GoogleSheetsRepository.ensureColumn === 'function') {
           GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyStatusJSON');
-          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyCompletedAt');\n          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyOperationID');
+          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyCompletedAt');
+          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyOperationID');
         }
         var sourceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
         var sourceByType = Object.create(null);
