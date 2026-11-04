@@ -744,6 +744,25 @@ const ProjectService = {
             sourceRevision: sourceInfo ? Number(sourceInfo.Revision || 0) : 0
           };
         });
+        var sourceProfileImage = (AttachmentRepository.getAll() || []).filter(function(attachment) {
+          return String(attachment.TenantID) === String(tenantId) &&
+            String(attachment.EntityType || '').toUpperCase() === 'PROJECT' &&
+            String(attachment.EntityID) === String(sourceProject.ID) &&
+            String(attachment.AttachmentType || '').toUpperCase() === 'PROFILE' &&
+            String(attachment.MimeType || '').toLowerCase().indexOf('image/') === 0 &&
+            ['DELETED','VOID'].indexOf(String(attachment.Status || 'ACTIVE').toUpperCase()) === -1;
+        }).sort(function(a, b) {
+          return new Date(b.UploadedAt || 0).getTime() - new Date(a.UploadedAt || 0).getTime();
+        })[0];
+        if (sourceProfileImage) {
+          copyPlan.push({
+            informationTypeId: '__PROJECT_PROFILE_IMAGE__',
+            name: 'تصویر نمایه پروژه',
+            policy: 'INITIAL_COPY',
+            status: 'PENDING',
+            sourceRevision: 0
+          });
+        }
         newProject.ReferenceCopyStatusJSON = JSON.stringify({ items: copyPlan, updatedAt: now });
         created = ProjectRepository.insert(newProject);
         created.ReferenceCopyPlan = copyPlan;
@@ -873,6 +892,38 @@ const ProjectService = {
       var items = Array.isArray(state.items) ? state.items : [];
       var item = items.find(function(entry) { return String(entry.informationTypeId) === String(typeId); });
       if (!item) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع اطلاعات در برنامه کپی این پروژه وجود ندارد.');
+      if (String(typeId) === '__PROJECT_PROFILE_IMAGE__') {
+        var profileImage = (AttachmentRepository.getAll() || []).filter(function(attachment) {
+          return String(attachment.TenantID) === String(user.TenantID) &&
+            String(attachment.EntityType || '').toUpperCase() === 'PROJECT' &&
+            String(attachment.EntityID) === String(source.ID) &&
+            String(attachment.AttachmentType || '').toUpperCase() === 'PROFILE' &&
+            String(attachment.MimeType || '').toLowerCase().indexOf('image/') === 0 &&
+            ['DELETED','VOID'].indexOf(String(attachment.Status || 'ACTIVE').toUpperCase()) === -1;
+        }).sort(function(a, b) {
+          return new Date(b.UploadedAt || 0).getTime() - new Date(a.UploadedAt || 0).getTime();
+        })[0];
+        if (profileImage) {
+          AttachmentService.copyProjectImage(String(profileImage.ID), project.ID, user);
+          item.status = 'COPIED';
+        } else {
+          item.status = 'EMPTY';
+        }
+        item.processedAt = new Date().toISOString();
+        item.error = '';
+        state.updatedAt = item.processedAt;
+        state.items = items;
+        var profileCopyDone = items.every(function(entry) {
+          return ['PENDING','FAILED','PROCESSING'].indexOf(String(entry.status)) === -1;
+        });
+        ProjectRepository.update(project.ID, {
+          ReferenceCopyStatusJSON: JSON.stringify(state),
+          ReferenceCopyCompletedAt: profileCopyDone ? item.processedAt : ''
+        });
+        return Response.success({
+          projectId: project.ID, item: item, items: items, completed: profileCopyDone
+        }, { message: 'تصویر نمایه پروژه کپی شد.' });
+      }
       var type = InformationTypeRepository.findById(typeId);
       if (!type || String(type.TenantID) !== String(user.TenantID) || String(type.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع اطلاعات معتبر یا فعال نیست.');
