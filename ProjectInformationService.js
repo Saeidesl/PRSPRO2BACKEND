@@ -113,12 +113,12 @@ const ProjectInformationService = {
   list: function(projectId,params){
     var user=this._user(params),project=this._project(projectId,user.TenantID,user);
     var saved=ProjectInformationRepository.findByProject(projectId).filter(function(row){
-      return String(row.TenantID)===String(user.TenantID);
+      return String(row.TenantID)===String(user.TenantID) && String(row.Status || 'ACTIVE').toUpperCase()==='ACTIVE';
     });
     var savedByType=Object.create(null);
     saved.forEach(function(row){savedByType[String(row.InformationTypeID)]=row;});
     var definitions=InformationTypeRepository.findByTenant(user.TenantID).filter(function(type){
-      return String(type.Status || 'ACTIVE')==='ACTIVE';
+      return String(type.Status || 'ACTIVE').toUpperCase()==='ACTIVE';
     });
     var rows=definitions.map(function(type){
       var row=savedByType[String(type.ID)];
