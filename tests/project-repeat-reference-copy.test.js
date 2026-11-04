@@ -32,6 +32,16 @@ test('repeat project copies one information type at a time with history and live
   assert.match(block, /status = 'FAILED'/);
 });
 
+test('project information list includes active copied values regardless of status casing and ignores deleted rows', () => {
+  const source = read('ProjectInformationService.js');
+  const start = source.indexOf('  list: function(projectId,params)');
+  const end = source.indexOf('  get: function(projectId,typeId,params)', start);
+  const block = source.slice(start, end);
+  assert.match(block, /String\(row\.Status \|\| 'ACTIVE'\)\.toUpperCase\(\)==='ACTIVE'/);
+  assert.match(block, /String\(type\.Status \|\| 'ACTIVE'\)\.toUpperCase\(\)==='ACTIVE'/);
+  assert.match(block, /row\.Value=this\._parse\(row\.ValueJSON,null\)/);
+});
+
 test('repeat project create requests use a stable operation key to recover lost responses', () => {
   const source = read('ProjectService.js');
   assert.match(source, /ReferenceCopyOperationID/);
