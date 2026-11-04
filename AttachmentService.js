@@ -47,6 +47,76 @@ const AttachmentService = {
     return type === 'EVENT';
   },
 
+  copyProjectImage: function(sourceAttachmentId, targetProjectId, params) {
+    var user = AccessControlService.getCurrentUser(params || {});
+    var source = AttachmentRepository.findById(sourceAttachmentId);
+    var target = ProjectRepository.findById(targetProjectId);
+    if (!source || !target ||
+        String(source.TenantID) !== String(user.TenantID) ||
+        String(target.TenantID) !== String(user.TenantID) ||
+        String(source.EntityType || '').toUpperCase() !== 'PROJECT' ||
+        String(source.MimeType || '').toLowerCase().indexOf('image/') !== 0 ||
+        ['DELETED','VOID'].indexOf(String(source.Status || 'ACTIVE').toUpperCase()) !== -1 ||
+        !ProjectService._isProjectAvailableToUser_(target, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'تصویر پروژه مرجع پیدا نشد یا دسترسی مجاز نیست.');
+    }
+    var sourceProject = ProjectRepository.findById(source.EntityID);
+    if (!sourceProject || String(sourceProject.TenantID) !== String(user.TenantID) ||
+        !ProjectService._isProjectAvailableToUser_(sourceProject, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'دسترسی به پروژه مرجع مجاز نیست.');
+    }
+    var sourceType = String(source.AttachmentType || 'PROFILE').toUpperCase();
+    if (['PROFILE','INFORMATION'].indexOf(sourceType) === -1) {
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'فقط تصاویر اطلاعات مرکزی یا تصویر نمایه قابل کپی هستند.');
+    }
+
+    if (GoogleSheetsRepository.ensureColumn) {
+      GoogleSheetsRepository.ensureColumn('15_Attachments', 'SourceAttachmentID');
+    }
+    var existing = (AttachmentRepository.getAll() || []).find(function(item) {
+      return String(item.TenantID) === String(user.TenantID) &&
+        String(item.EntityType || '').toUpperCase() === 'PROJECT' &&
+        String(item.EntityID) === String(targetProjectId) &&
+        String(item.SourceAttachmentID || '') === String(sourceAttachmentId) &&
+        String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    });
+    if (existing) return existing;
+
+    var fileName = this._buildProjectFileName_(target, source.FileName, sourceType);
+    var storage = StorageRepository.copyFile(source.StorageKey, fileName);
+    var now = new Date().toISOString();
+    var clone = {
+      ID: 'ATT_' + Utilities.getUuid().replace(/-/g, ''),
+      TenantID: user.TenantID,
+      EntityType: 'PROJECT',
+      EntityID: target.ID,
+      FileName: storage.fileName,
+      MimeType: storage.mimeType,
+      FileSize: storage.fileSize,
+      StorageProvider: 'GOOGLE_DRIVE',
+      StorageKey: storage.storageKey,
+      UploadedBy: user.ID,
+      UploadedAt: now,
+      Status: Constants.STATUS.ACTIVE,
+      AttachmentType: sourceType,
+      SourceAttachmentID: String(sourceAttachmentId)
+    };
+    try {
+      var created = AttachmentRepository.insert(clone);
+      AuditService.log({
+        TenantID: user.TenantID, UserID: user.ID, Action: Constants.ACTION.UPLOAD,
+        EntityType: Constants.ENTITY.ATTACHMENT, EntityID: created.ID,
+        OldData: null, NewData: created,
+        Reason: 'کپی تصویر از پروژه مرجع ' + sourceProject.ID + ' به پروژه ' + target.ID
+      });
+      return created;
+    } catch (error) {
+      try { StorageRepository.delete(storage.storageKey); } catch (cleanupError) {}
+      throw error;
+    }
+  },
+
+
   list: function(params) {
 
     const currentUser =
