@@ -1,35 +1,42 @@
 ## 🎯 Current Objective
 
-افزودن بخش مستقل «اطلاعات مرکزی پروژه» به صفحه جزئیات پروژه تا مقادیر جاری کپی‌شده از پروژه مرجع و سایر اطلاعات مرکزی در UI نمایش داده شوند؛ پاسخ فرم‌های رویدادمحور همچنان در بخش جداگانه خود باقی بماند.
+انتقال مستقل و امن تصاویر ثبت‌شده در اطلاعات مرکزی از پروژه مرجع به پروژه تکراری؛ با ایجاد فایل Drive و AttachmentID مستقل برای پروژه مقصد و حفظ مالکیت، ساختار داده و قابلیت retry.
 
 ## 🗺️ Technical Spec & Architecture Map (DO NOT DELETE)
 
 ### مخازن و شاخه فعال
 - Frontend: `Saeidesl/PRSPRO2`، شاخه `main`.
 - Backend: `Saeidesl/PRSPRO2BACKEND`، شاخه `main`.
+- تغییرات این فاز فقط روی `main` انجام می‌شود.
 
-### مدل داده و APIهای موجود
-- انواع اطلاعات: `28_InformationTypes` و `29_InformationTypeColumns`.
-- مقادیر جاری: `30_ProjectInformation.ValueJSON`.
-- تاریخچه: `31_ProjectInformationHistory`.
-- `ProjectInformationService.js:list(projectId, params)` انواع اطلاعات فعال Tenant را با مقدار جاری، تعریف و ستون‌ها برمی‌گرداند.
-- `Router.js`: مسیر موجود `GET /projects/:projectId/information` با مجوز `PROJECT_VIEW` به سرویس فوق متصل است.
-- مسیرهای موجود جزئیات، ذخیره، تاریخچه و حذف منطقی اطلاعات حفظ شوند؛ API موازی ایجاد نشود.
+### مسیر کپی پروژه و API موجود
+- `ProjectService.js:create`: ایجاد پروژه تکراری، ساخت `ReferenceCopyStatusJSON` و `ReferenceCopyPlan` بر اساس سیاست Workflow.
+- `ProjectService.js:copyReferenceInformationType(projectId, typeId, params)`: کپی هر نوع اطلاعات مرکزی و ثبت تاریخچه/SyncLog؛ اکنون انواع فایل/تصویر را به `SKIPPED_FILE` می‌برد.
+- `Router.js`: مسیر موجود `POST /projects/:projectId/reference-copy/:typeId` به متد بالا متصل است و کنترل دسترسی `PROJECT_EDIT` یا fallback مجاز `PROJECT_CREATE` را اعمال می‌کند.
+- `js/modules/projects.js` در Frontend، برنامه کپی را اجرا و وضعیت را نمایش می‌دهد؛ API جدید یا مسیر موازی لازم نیست.
 
-### Frontend و علت کشف‌شده
-- `pages/project-detail.html`: کارت `project-forms-list` فقط پاسخ فرم‌های رویدادمحور را نمایش می‌دهد؛ container اطلاعات مرکزی وجود ندارد.
-- `js/modules/project-detail.js`: توابع `loadProjectInformation`, `renderProjectInformation`, `openProjectInformationForm`, `openProjectInformationHistory` موجودند؛ اما container حذف شده و `loadProjectInformation` در چرخه بارگذاری صفحه فراخوانی نمی‌شود.
-- `tests/project-information-dossier.test.js`: تست قدیمی نبود `project-information-list` را الزام می‌کند و باید اصلاح شود.
-- بخش اطلاعات مرکزی باید جدا از فرم‌های ثبت‌شده نمایش داده شود و scalar، جدول‌های چندردیفی، پیوست، ویرایش و تاریخچه را حفظ کند.
-- `index.html`: cache-busting ماژول جزئیات پروژه پس از تغییر به‌روز شود.
+### مدل اطلاعات و پیوست
+- اطلاعات مرکزی: `28_InformationTypes`, `29_InformationTypeColumns`, `30_ProjectInformation.ValueJSON`, `31_ProjectInformationHistory`.
+- `ProjectInformationService.js:_isFileBased_(typeId, type)`: تشخیص نوع‌های دارای `image/file`.
+- `ProjectInformationService.js:_scalar(value, dataType, ...)`: اعتبارسنجی reference شامل `AttachmentID`, `FileName`, `MimeType`, `FileSize`, `AttachmentType` و کنترل تعلق به همان پروژه و tenant.
+- `AttachmentService.js:upload(data, params)`: الگوی فعلی ایجاد فایل در Drive و metadata در شیت پیوست‌ها.
+- `AttachmentRepository.js`: شیت `15_Attachments` و متدهای `findById`, `insert`, `update`.
+- `StorageRepository.js`: دسترسی به storage provider.
+- `GoogleDriveStorage.js:getFile(storageKey)`: دریافت فایل Drive؛ `uploadBase64(data)`: ساخت فایل جدید. برای انتقال باید از کپی native سمت سرور استفاده شود تا فایل از مرورگر عبور نکند.
+
+### قرارداد فنی و ایمنی
+- فایل تصویر کپی‌شده باید فایل مستقل Drive باشد و AttachmentID جدید بگیرد؛ attachment منبع نباید در مقصد reuse شود.
+- metadata پیوست مقصد: همان TenantID، `EntityType=PROJECT`، `EntityID=ProjectID مقصد`، AttachmentType مناسب، وضعیت ACTIVE، نام و MIME معتبر، UploadedBy کاربر جاری.
+- فقط فیلدهای تصویری `image` در اطلاعات مرکزی و تصویر نمایه پروژه در محدوده‌اند؛ اسناد غیرتصویری خارج از تغییر باقی بمانند.
+- بازنویسی reference باید ساختار SINGLE/MULTIPLE و ردیف‌های چندستونی را حفظ کند.
+- کپی باید idempotent و retry-safe باشد؛ شکست میانی نباید reference خراب یا پیوست تکراری باقی بگذارد.
+- tenant isolation، کنترل دسترسی پروژه، Audit، سیاست‌های Workflow و مسیر فعلی API حفظ شوند.
 
 ## 📋 Macro-Task Queue & Implementation Log
 
-- [x] **تسک ۱ — کشف علت و معماری اتصال**
-  - *Log:* بررسی `TODO4.md`، `ARCHITECTURE.md`، `ProjectInformationService.js`، `Router.js`، `pages/project-detail.html` و `js/modules/project-detail.js` نشان داد API سمت سرور آماده است؛ پنل اطلاعات مرکزی از HTML حذف شده و بارگذاری آن نیز از چرخه صفحه قطع شده است. تست فعلی حذف پنل را تثبیت کرده و باید به قرارداد جدید تغییر کند.
-- [ ] **تسک ۲ — ساخت و اتصال پنل مستقل اطلاعات مرکزی (IN PROGRESS)**
-  - افزودن کارت مستقل، اتصال بارگذاری/تازه‌سازی/خطا/حالت خالی و حفظ نمایش داده‌های جاری، چندردیفی، پیوست، ویرایش و تاریخچه.
-- [ ] **تسک ۳ — آزمون و تثبیت رابط**
-  - اصلاح تست‌های قدیمی و افزودن پوشش تفکیک اطلاعات مرکزی از فرم‌های رویدادی، داده کپی‌شده، ریسپانسیو و cache-busting.
-- [ ] **تسک ۴ — اعتبارسنجی و انتشار**
-  - اجرای تست‌های Frontend و QA بین‌مخزنی، بررسی CI و انتشار روی main؛ تحویل برای تست کاربر.
+- [x] **تسک ۱ — کشف علت و معماری انتقال تصویر**
+  - *Log:* فایل‌های `ProjectService.js`, `ProjectInformationService.js`, `AttachmentService.js`, `AttachmentRepository.js`, `StorageRepository.js`, `GoogleDriveStorage.js` و `Router.js` بررسی شدند. علت قطعی عدم انتقال، شرط `ProjectInformationService._isFileBased_` در `ProjectService.copyReferenceInformationType` است که نوع‌های دارای image/file را `SKIPPED_FILE` می‌کند. داده مرکزی AttachmentID را ذخیره می‌کند؛ metadata در `15_Attachments` و فایل در Google Drive است. تصمیم معماری: کپی server-side فایل تصویر و ایجاد metadata/شناسه مستقل برای پروژه مقصد در همان جریان کپی فعلی.
+- [ ] **تسک ۲ — پیاده‌سازی کپی امن تصویر در Backend (IN PROGRESS)**
+  - افزودن قابلیت کپی native فایل Drive، ساخت Attachment مقصد با کنترل مالکیت/tenant، بازنویسی AttachmentID در ValueJSON و ثبت وضعیت idempotent؛ پشتیبانی از تصویر نمایه و مقادیر چندردیفی.
+- [ ] **تسک ۳ — آزمون و انتشار بین‌مخزنی**
+  - تست تصویر تکی/چندردیفی، فایل مستقل، retry، عدم تغییر فایل‌های غیرتصویری، tenant isolation و کنترل مجوز؛ اجرای تست‌ها و CI و هماهنگی نمایش پیشرفت در Frontend.
