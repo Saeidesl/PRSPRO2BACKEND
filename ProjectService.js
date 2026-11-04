@@ -515,13 +515,8 @@ const ProjectService = {
       }
       if (String(sourceProject.ID) === String(project.ID || '')) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه نمی‌تواند مرجع خودش باشد.');
       try { referencePolicy = JSON.parse(workflow.PublishedRepeatReferencePolicyJSON || workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
-      var overrides = project.ReferencePolicyJSON || {};
-      if (typeof overrides === 'string') { try { overrides = JSON.parse(overrides); } catch (parseError) { overrides = {}; } }
-      if (overrides && typeof overrides === 'object' && !Array.isArray(overrides)) Object.keys(overrides).forEach(function(key) { referencePolicy[key] = overrides[key]; });
+      // The workflow is the only source of truth; ignore client policy overrides.
       var validInformationTypes = InformationTypeRepository.findByTenant(tenantId).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
-      Object.keys(overrides || {}).forEach(function(key) {
-        if (!validInformationTypes.some(function(item) { return String(item.ID) === String(key); })) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع اطلاعات انتخاب‌شده برای سیاست مرجع معتبر نیست.');
-      });
       Object.keys(referencePolicy).forEach(function(key) {
         referencePolicy[key] = String(referencePolicy[key] || 'INDEPENDENT').toUpperCase();
         if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(referencePolicy[key]) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
