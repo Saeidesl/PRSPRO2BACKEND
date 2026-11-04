@@ -140,6 +140,20 @@ const Router = {
       return ProjectService.projectFormLookups(params);
     }
 
+    const projectReferenceCopyMatch = path.match(/^\\/projects\\/([^/]+)\\/reference-copy\\/([^/]+)$/);
+    if (projectReferenceCopyMatch) {
+      var copyProjectId = decodeURIComponent(projectReferenceCopyMatch[1]);
+      try {
+        AccessControlService.require(params, 'PROJECT_EDIT');
+      } catch (copyPermissionError) {
+        var copyUser = AccessControlService.getCurrentUser(params || {});
+        var copyProject = ProjectRepository.findById(copyProjectId);
+        if (!copyProject || String(copyProject.TenantID) !== String(copyUser.TenantID) || String(copyProject.CreatedBy || '') !== String(copyUser.ID || '')) throw copyPermissionError;
+        AccessControlService.require(params, 'PROJECT_CREATE');
+      }
+      return ProjectService.copyReferenceInformationType(copyProjectId, decodeURIComponent(projectReferenceCopyMatch[2]), params);
+    }
+
     if (path === '/projects') {
       this.requireAny(params, ['PROJECT_VIEW', 'PROJECT_CREATE']);
       return ProjectService.list(params);

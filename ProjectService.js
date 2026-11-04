@@ -684,67 +684,39 @@ const ProjectService = {
           'کد پروژه قبلاً در این Tenant ثبت شده است.'
         );
       }
-      created = ProjectRepository.insert(newProject);
-      var referenceCopySummary = { copied: [], skippedFiles: [], skippedEmpty: [] };
-      if (sourceProject && typeof ProjectInformationRepository !== 'undefined') {
-        var referenceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
-        var syncLogs = [];
-        referenceRows.forEach(function(row) {
-          if (String(row.TenantID) !== String(tenantId) || String(row.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
-          var infoType = InformationTypeRepository.findById(row.InformationTypeID);
-          if (!infoType || String(infoType.TenantID) !== String(tenantId) || String(infoType.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
-          var policy = String(referencePolicy[String(row.InformationTypeID)] || referencePolicy[String(infoType.Code || '')] || 'INDEPENDENT').toUpperCase();
-          if (policy !== 'INITIAL_COPY' && policy !== 'LIVE_SYNC') return;
-          if (ProjectInformationRepository.findAnyByProjectAndType(created.ID, row.InformationTypeID)) return;
-          if (ProjectInformationService._isFileBased_(row.InformationTypeID, infoType)) {
-            referenceCopySummary.skippedFiles.push({ informationTypeId: row.InformationTypeID, name: infoType.Name || infoType.Code || row.InformationTypeID });
-            if (policy === 'LIVE_SYNC') {
-              var skippedAt = new Date().toISOString();
-              syncLogs.push({
-                ID: 'PRSL_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
-                SourceProjectID: sourceProject.ID, TargetProjectID: created.ID, InformationTypeID: row.InformationTypeID,
-                Policy: policy, SourceRevision: Number(row.Revision || 0), TargetRevision: '',
-                Action: 'SKIPPED_FILE', ConflictJSON: '', IdempotencyKey: [sourceProject.ID, created.ID, row.InformationTypeID, row.Revision].join('|'),
-                ActorUserID: user.ID, CreatedAt: skippedAt
-              });
-            }
-            return;
-          }
-          var currentValueJSON = String(row.ValueJSON || '');
-          if (!currentValueJSON) {
-            referenceCopySummary.skippedEmpty.push({ informationTypeId: row.InformationTypeID, name: infoType.Name || infoType.Code || row.InformationTypeID });
-            return;
-          }
-          var copyNow = new Date().toISOString();
-          var copy = ProjectInformationRepository.insert({
-            ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
-            ProjectID: created.ID, InformationTypeID: row.InformationTypeID, ValueJSON: currentValueJSON,
-            Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
-            CreatedAt: copyNow, UpdatedAt: copyNow
-          });
-          ProjectInformationRepository.insertHistory({
-            ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
-            ProjectInformationID: copy.ID, ProjectID: created.ID, InformationTypeID: row.InformationTypeID,
-            Revision: 1, Action: policy === 'LIVE_SYNC' ? 'REFERENCE_SYNC' : 'INITIAL_COPY',
-            OldValueJSON: '', NewValueJSON: currentValueJSON, SourceEventID: '',
-            Reason: 'کپی مقدار جاری اطلاعات از پروژه مرجع ' + sourceProject.ID + '؛ بدون نیاز به تأیید دستی.',
-            ActorUserID: user.ID, CreatedAt: copyNow
-          });
-          referenceCopySummary.copied.push({ informationTypeId: row.InformationTypeID, name: infoType.Name || infoType.Code || row.InformationTypeID, policy: policy });
-          if (policy === 'LIVE_SYNC') {
-            syncLogs.push({
-              ID: 'PRSL_' + Utilities.getUuid().replace(/-/g, ''), TenantID: tenantId,
-              SourceProjectID: sourceProject.ID, TargetProjectID: created.ID, InformationTypeID: row.InformationTypeID,
-              Policy: policy, SourceRevision: Number(row.Revision || 0), TargetRevision: 1,
-              Action: 'SYNCED', ConflictJSON: '',
-              IdempotencyKey: [sourceProject.ID, created.ID, row.InformationTypeID, row.Revision].join('|'),
-              ActorUserID: user.ID, CreatedAt: copyNow
-            });
+      if (sourceProject) {
+        if (typeof GoogleSheetsRepository.ensureColumn === 'function') {
+          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyStatusJSON');
+          GoogleSheetsRepository.ensureColumn('08_Projects', 'ReferenceCopyCompletedAt');
+        }
+        var sourceRows = ProjectInformationRepository.findByProject(sourceProject.ID) || [];
+        var sourceByType = Object.create(null);
+        sourceRows.forEach(function(row) {
+          if (String(row.TenantID) === String(tenantId) && String(row.Status || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+            sourceByType[String(row.InformationTypeID)] = row;
           }
         });
-        syncLogs.forEach(function(log) { ProjectInformationRepository.insertSyncLog(log); });
+        var copyPlan = InformationTypeRepository.findByTenant(tenantId).filter(function(type) {
+          return String(type.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        }).map(function(type) {
+          var policy = String(referencePolicy[String(type.ID)] || 'INDEPENDENT').toUpperCase();
+          var sourceInfo = sourceByType[String(type.ID)] || null;
+          var status = policy === 'INDEPENDENT' ? 'INDEPENDENT' : (!sourceInfo || !String(sourceInfo.ValueJSON || '') ? 'EMPTY' : (ProjectInformationService._isFileBased_(type.ID, type) ? 'SKIPPED_FILE' : 'PENDING'));
+          return {
+            informationTypeId: String(type.ID),
+            name: String(type.Name || type.Code || type.ID),
+            policy: policy,
+            status: status,
+            sourceRevision: sourceInfo ? Number(sourceInfo.Revision || 0) : 0
+          };
+        });
+        newProject.ReferenceCopyStatusJSON = JSON.stringify({ items: copyPlan, updatedAt: now });
+        created = ProjectRepository.insert(newProject);
+        created.ReferenceCopyPlan = copyPlan;
+        created.ReferenceCopySummary = { pending: copyPlan.filter(function(item) { return item.status === 'PENDING'; }).length, completed: copyPlan.filter(function(item) { return item.status !== 'PENDING'; }).length, total: copyPlan.length };
+      } else {
+        created = ProjectRepository.insert(newProject);
       }
-      created.ReferenceCopySummary = referenceCopySummary;
     } finally {
       createLock.releaseLock();
     }
@@ -787,6 +759,107 @@ const ProjectService = {
 
   },
 
+
+
+  copyReferenceInformationType: function(projectId, typeId, params) {
+    var user = AccessControlService.getCurrentUser(params || {});
+    var project = ProjectRepository.findById(projectId);
+    if (!project || String(project.TenantID) !== String(user.TenantID) || !this._isProjectAvailableToUser_(project, user)) {
+      throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه پیدا نشد یا دسترسی مجاز نیست.');
+    }
+    var sourceId = String(project.SourceProjectID || '').trim();
+    if (!sourceId) throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'این پروژه کپی مرجع ندارد.');
+    var source = ProjectRepository.findById(sourceId);
+    if (!source || String(source.TenantID) !== String(user.TenantID)) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مرجع پیدا نشد.');
+    var lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    try {
+      project = ProjectRepository.findById(projectId);
+      var state = {};
+      try { state = JSON.parse(project.ReferenceCopyStatusJSON || '{}'); } catch (parseError) { state = {}; }
+      var items = Array.isArray(state.items) ? state.items : [];
+      var item = items.find(function(entry) { return String(entry.informationTypeId) === String(typeId); });
+      if (!item) throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع اطلاعات در برنامه کپی این پروژه وجود ندارد.');
+      if (['COPIED','INDEPENDENT','EMPTY','SKIPPED_FILE'].indexOf(String(item.status)) !== -1) {
+        return Response.success({ projectId: projectId, item: item, items: items, completed: items.every(function(entry) { return entry.status !== 'PENDING' && entry.status !== 'FAILED'; }) });
+      }
+      var type = InformationTypeRepository.findById(typeId);
+      if (!type || String(type.TenantID) !== String(user.TenantID) || String(type.Status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+        throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'نوع اطلاعات معتبر یا فعال نیست.');
+      }
+      var policyMap = {};
+      try { policyMap = JSON.parse(project.ReferencePolicyJSON || '{}'); } catch (policyError) { policyMap = {}; }
+      var policy = String(policyMap[String(type.ID)] || 'INDEPENDENT').toUpperCase();
+      if (policy !== String(item.policy).toUpperCase() || ['INITIAL_COPY','LIVE_SYNC','INDEPENDENT'].indexOf(policy) === -1) {
+        throw ErrorHandler.create(Constants.ERROR.INVALID_OPERATION, 'سیاست ثبت‌شده پروژه با برنامه کپی مطابقت ندارد.');
+      }
+      if (policy === 'INDEPENDENT') {
+        item.status = 'INDEPENDENT';
+      } else {
+        var sourceInfo = ProjectInformationRepository.findByProjectAndType(source.ID, type.ID);
+        if (!sourceInfo || !String(sourceInfo.ValueJSON || '')) {
+          item.status = 'EMPTY';
+        } else if (ProjectInformationService._isFileBased_(type.ID, type)) {
+          item.status = 'SKIPPED_FILE';
+        } else {
+          var existing = ProjectInformationRepository.findAnyByProjectAndType(project.ID, type.ID);
+          if (existing && String(existing.Status || 'ACTIVE').toUpperCase() === 'ACTIVE') {
+            item.status = 'COPIED';
+            item.targetRevision = Number(existing.Revision || 1);
+          } else {
+            var now = new Date().toISOString();
+            var copied = ProjectInformationRepository.insert({
+              ID: 'PINF_' + Utilities.getUuid().replace(/-/g, ''), TenantID: user.TenantID,
+              ProjectID: project.ID, InformationTypeID: type.ID, ValueJSON: String(sourceInfo.ValueJSON || ''),
+              Revision: 1, Status: 'ACTIVE', SourceEventID: '', CreatedBy: user.ID, UpdatedBy: user.ID,
+              CreatedAt: now, UpdatedAt: now
+            });
+            ProjectInformationRepository.insertHistory({
+              ID: 'PINH_' + Utilities.getUuid().replace(/-/g, ''), TenantID: user.TenantID,
+              ProjectInformationID: copied.ID, ProjectID: project.ID, InformationTypeID: type.ID,
+              Revision: 1, Action: policy === 'LIVE_SYNC' ? 'REFERENCE_SYNC' : 'INITIAL_COPY',
+              OldValueJSON: '', NewValueJSON: String(sourceInfo.ValueJSON || ''), SourceEventID: '',
+              Reason: 'کپی مقدار جاری اطلاعات از پروژه مرجع ' + source.ID + '؛ بدون نیاز به تأیید دستی.',
+              ActorUserID: user.ID, CreatedAt: now
+            });
+            if (policy === 'LIVE_SYNC') {
+              ProjectInformationRepository.insertSyncLog({
+                ID: 'PRSL_' + Utilities.getUuid().replace(/-/g, ''), TenantID: user.TenantID,
+                SourceProjectID: source.ID, TargetProjectID: project.ID, InformationTypeID: type.ID,
+                Policy: policy, SourceRevision: Number(sourceInfo.Revision || 0), TargetRevision: 1,
+                Action: 'SYNCED', ConflictJSON: '',
+                IdempotencyKey: [source.ID, project.ID, type.ID, sourceInfo.Revision].join('|'),
+                ActorUserID: user.ID, CreatedAt: now
+              });
+            }
+            item.status = 'COPIED';
+            item.targetRevision = 1;
+          }
+        }
+      }
+      item.processedAt = new Date().toISOString();
+      item.error = '';
+      state.updatedAt = item.processedAt;
+      state.items = items;
+      var allDone = items.every(function(entry) { return ['PENDING','FAILED','PROCESSING'].indexOf(String(entry.status)) === -1; });
+      ProjectRepository.update(project.ID, {
+        ReferenceCopyStatusJSON: JSON.stringify(state),
+        ReferenceCopyCompletedAt: allDone ? item.processedAt : ''
+      });
+      return Response.success({ projectId: project.ID, item: item, items: items, completed: allDone }, { message: 'وضعیت کپی اطلاعات به‌روزرسانی شد.' });
+    } catch (error) {
+      try {
+        var latest = ProjectRepository.findById(projectId), latestState = JSON.parse(latest.ReferenceCopyStatusJSON || '{}');
+        var failed = (latestState.items || []).find(function(entry) { return String(entry.informationTypeId) === String(typeId); });
+        if (failed) { failed.status = 'FAILED'; failed.error = String(error && error.message || error); failed.processedAt = new Date().toISOString(); }
+        latestState.updatedAt = new Date().toISOString();
+        ProjectRepository.update(projectId, { ReferenceCopyStatusJSON: JSON.stringify(latestState), ReferenceCopyCompletedAt: '' });
+      } catch (persistError) {}
+      throw error;
+    } finally {
+      lock.releaseLock();
+    }
+  },
 
   update: function(id, data, params) {
 
