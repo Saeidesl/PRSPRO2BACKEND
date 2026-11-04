@@ -11,7 +11,9 @@
 
 ### مسیر کپی پروژه و API موجود
 - `ProjectService.js:create`: ایجاد پروژه تکراری، ساخت `ReferenceCopyStatusJSON` و `ReferenceCopyPlan` بر اساس سیاست Workflow.
-- `ProjectService.js:copyReferenceInformationType(projectId, typeId, params)`: کپی هر نوع اطلاعات مرکزی و ثبت تاریخچه/SyncLog؛ اکنون انواع فایل/تصویر را به `SKIPPED_FILE` می‌برد.
+- `ProjectService.js:create`: انواع دارای فیلد تصویر و فاقد فیلد فایل را در برنامه کپی با وضعیت `PENDING` قرار می‌دهد تا Frontend جریان موجود را اجرا کند؛ ترکیب دارای فیلد فایل همچنان `SKIPPED_FILE` می‌ماند.
+- `ProjectService.js:_copyReferenceImageValue_` و `_copyReferenceInformationImages_`: کپی تصویرهای تکی و چندردیفی و جایگزینی AttachmentID با شناسه جدید مقصد.
+- `ProjectService.js:copyReferenceInformationType(projectId, typeId, params)`: کپی مقدار مرکزی، تاریخچه و SyncLog؛ کپی تصویر در همان جریان و با حفظ سیاست Workflow.
 - `Router.js`: مسیر موجود `POST /projects/:projectId/reference-copy/:typeId` به متد بالا متصل است و کنترل دسترسی `PROJECT_EDIT` یا fallback مجاز `PROJECT_CREATE` را اعمال می‌کند.
 - `js/modules/projects.js` در Frontend، برنامه کپی را اجرا و وضعیت را نمایش می‌دهد؛ API جدید یا مسیر موازی لازم نیست.
 
@@ -22,7 +24,10 @@
 - `AttachmentService.js:upload(data, params)`: الگوی فعلی ایجاد فایل در Drive و metadata در شیت پیوست‌ها.
 - `AttachmentRepository.js`: شیت `15_Attachments` و متدهای `findById`, `insert`, `update`.
 - `StorageRepository.js`: دسترسی به storage provider.
-- `GoogleDriveStorage.js:getFile(storageKey)`: دریافت فایل Drive؛ `uploadBase64(data)`: ساخت فایل جدید. برای انتقال باید از کپی native سمت سرور استفاده شود تا فایل از مرورگر عبور نکند.
+- `GoogleDriveStorage.js:copyFile(storageKey, fileName)`: کپی native فایل Drive با `File.makeCopy`؛ فایل جدید در پوشه اصلی ذخیره می‌شود.
+- `StorageRepository.js:copyFile(storageKey, fileName)`: دسترسی یکپارچه به کپی فایل.
+- `AttachmentService.js:copyProjectImage(sourceAttachmentId, targetProjectId, user)`: کنترل tenant و دسترسی به هر دو پروژه، بررسی نوع تصویر، جلوگیری از کپی تکراری با `SourceAttachmentID`، ایجاد metadata مستقل مقصد و ثبت Audit.
+- `DatabaseSetup.js:APP_CONFIG.SHEETS.ATTACHMENTS`: ستون افزایشی `SourceAttachmentID` برای نگاشت امن و idempotent فایل مبدأ/مقصد؛ در اجرای عادی نیز `GoogleSheetsRepository.ensureColumn` پیش از ثبت کپی آن را اضافه می‌کند.
 
 ### قرارداد فنی و ایمنی
 - فایل تصویر کپی‌شده باید فایل مستقل Drive باشد و AttachmentID جدید بگیرد؛ attachment منبع نباید در مقصد reuse شود.
