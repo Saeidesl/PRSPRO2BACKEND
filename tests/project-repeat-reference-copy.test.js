@@ -55,3 +55,22 @@ test('project form lookups return workflow repeat-reference policies for fronten
   assert.match(block, /RepeatReferencePolicyJSON: item\.RepeatReferencePolicyJSON/);
   assert.match(block, /PublishedRepeatReferencePolicyJSON: item\.PublishedRepeatReferencePolicyJSON/);
 });
+
+
+test('project creation ignores client policy overrides and uses workflow policy only', () => {
+  const source = read('ProjectService.js');
+  const start = source.indexOf("try { referencePolicy = JSON.parse(workflow.PublishedRepeatReferencePolicyJSON");
+  const end = source.indexOf("Object.keys(referencePolicy).forEach", start);
+  const block = source.slice(start, end);
+  assert.match(block, /ignore client policy overrides/);
+  assert.doesNotMatch(block, /project\.ReferencePolicyJSON/);
+});
+
+test('workflow policy edits validate active tenant information types and update published policy snapshot', () => {
+  const source = read('WorkflowService.js');
+  const start = source.indexOf('  update: function(id, data, params)');
+  const end = source.indexOf('  getSteps: function(workflowId, params)', start);
+  const block = source.slice(start, end);
+  assert.match(block, /InformationTypeRepository\.findByTenant\(user\.TenantID\)/);
+  assert.match(block, /updateData\.PublishedRepeatReferencePolicyJSON = JSON\.stringify\(repeatPolicy\)/);
+});
