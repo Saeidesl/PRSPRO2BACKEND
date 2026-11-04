@@ -417,6 +417,9 @@ const ProjectService = {
           String(item.ReferenceCopyOperationID || '') === operationId;
       });
       if (priorOperation) {
+        if (!this._isProjectAvailableToUser_(priorOperation, user)) {
+          throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'درخواست قبلی ایجاد پروژه پیدا نشد.');
+        }
         var priorResponse = Object.assign({}, priorOperation);
         try {
           var priorCopyState = JSON.parse(priorOperation.ReferenceCopyStatusJSON || '{}');
