@@ -47,8 +47,8 @@ const AttachmentService = {
     return type === 'EVENT';
   },
 
-  copyProjectImage: function(sourceAttachmentId, targetProjectId, params) {
-    var user = AccessControlService.getCurrentUser(params || {});
+  copyProjectImage: function(sourceAttachmentId, targetProjectId, user) {
+    if (!user || !user.ID || !user.TenantID) throw ErrorHandler.create(Constants.ERROR.UNAUTHORIZED, 'کاربر جاری معتبر نیست.');
     var source = AttachmentRepository.findById(sourceAttachmentId);
     var target = ProjectRepository.findById(targetProjectId);
     if (!source || !target ||
