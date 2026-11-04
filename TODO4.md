@@ -5,9 +5,9 @@
 ## 🗺️ Technical Spec & Architecture Map (DO NOT DELETE)
 
 ### مخازن و شاخه مجاز
-- Frontend: `Saeidesl/PRSPRO2`، فقط شاخه `feature/design-case-preproduction`.
-- Backend: `Saeidesl/PRSPRO2BACKEND`، فقط شاخه `feature/design-case-preproduction`.
-- تغییر مستقیم `main` ممنوع است.
+- Frontend: `Saeidesl/PRSPRO2`، شاخه فعال `main`.
+- Backend: `Saeidesl/PRSPRO2BACKEND`، شاخه فعال `main`.
+- شاخه کاری فعال و مقصد انتشار: `main`؛ از این مرحله به بعد تغییرات فقط روی `main` ثبت شوند.
 - Workspace قبلی همین شاخه خوانده شد؛ Task 2 قبلی هنوز به تأیید کاربر نرسیده بود. کاربر در تست اعلام کرد کپی موفق نبوده و دامنه فعلی جایگزین برنامه قبلی شد.
 
 ### مدل داده و سیاست مرجع
