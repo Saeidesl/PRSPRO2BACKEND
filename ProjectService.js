@@ -724,7 +724,18 @@ const ProjectService = {
         }).map(function(type) {
           var policy = String(referencePolicy[String(type.ID)] || 'INDEPENDENT').toUpperCase();
           var sourceInfo = sourceByType[String(type.ID)] || null;
-          var status = policy === 'INDEPENDENT' ? 'INDEPENDENT' : (!sourceInfo || !String(sourceInfo.ValueJSON || '') ? 'EMPTY' : (ProjectInformationService._isFileBased_(type.ID, type) ? 'SKIPPED_FILE' : 'PENDING'));
+          var activeColumns = InformationTypeRepository.findColumns(type.ID).filter(function(col) {
+            return String(col.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+          });
+          var hasImageFields = String(type.DataType || '').toLowerCase() === 'image' ||
+            activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'image'; });
+          var hasFileFields = String(type.DataType || '').toLowerCase() === 'file' ||
+            activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'file'; });
+          var requiresFileSkip = ProjectInformationService._isFileBased_(type.ID, type) &&
+            (!hasImageFields || hasFileFields);
+          var status = policy === 'INDEPENDENT' ? 'INDEPENDENT' :
+            (!sourceInfo || !String(sourceInfo.ValueJSON || '') ? 'EMPTY' :
+              (requiresFileSkip ? 'SKIPPED_FILE' : 'PENDING'));
           return {
             informationTypeId: String(type.ID),
             name: String(type.Name || type.Code || type.ID),
