@@ -518,8 +518,11 @@ const ProjectService = {
       // The workflow is the only source of truth; ignore client policy overrides.
       var validInformationTypes = InformationTypeRepository.findByTenant(tenantId).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
       Object.keys(referencePolicy).forEach(function(key) {
-        referencePolicy[key] = String(referencePolicy[key] || 'INDEPENDENT').toUpperCase();
-        if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(referencePolicy[key]) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
+        var type = validInformationTypes.find(function(item) { return String(item.ID) === String(key) || String(item.Code || '') === String(key); });
+        var policy = String(referencePolicy[key] || 'INDEPENDENT').toUpperCase();
+        if (!type || ['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(policy) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع اطلاعات یا سیاست مرجع Workflow معتبر نیست.');
+        if (String(type.ID) !== String(key)) delete referencePolicy[key];
+        referencePolicy[String(type.ID)] = policy;
       });
     } else if (String(project.SourceProjectID || '').trim()) {
       throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'اتصال پروژه مرجع فقط برای گردش‌کار تولید تکراری مجاز است.');
@@ -843,18 +846,7 @@ const ProjectService = {
 
     const updateData = {};
     if (data.ReferencePolicyJSON !== undefined) {
-      var referenceOverrides = data.ReferencePolicyJSON;
-      if (typeof referenceOverrides === 'string') { try { referenceOverrides = JSON.parse(referenceOverrides); } catch (error) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.'); } }
-      if (!referenceOverrides || typeof referenceOverrides !== 'object' || Array.isArray(referenceOverrides)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
-      var activeReferenceTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
-      Object.keys(referenceOverrides).forEach(function(typeId) {
-        var validType = activeReferenceTypes.some(function(item) { return String(item.ID) === String(typeId); });
-        var policy = String(referenceOverrides[typeId] || '').toUpperCase();
-        if (!validType || ['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(policy) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
-        referenceOverrides[typeId] = policy;
-      });
-      if (!String(existing.SourceProjectID || '').trim()) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'این پروژه به پروژه مرجع متصل نیست.');
-      updateData.ReferencePolicyJSON = JSON.stringify(referenceOverrides);
+      throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست کپی اطلاعات فقط از تنظیمات Workflow قابل تغییر است.');
     }
 
     if (data.ProjectCode !== undefined) {
