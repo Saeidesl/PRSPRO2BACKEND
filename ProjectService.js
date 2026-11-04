@@ -944,7 +944,7 @@ const ProjectService = {
         var sourceInfo = ProjectInformationRepository.findByProjectAndType(source.ID, type.ID);
         if (!sourceInfo || !String(sourceInfo.ValueJSON || '')) {
           item.status = 'EMPTY';
-        } else if (ProjectInformationService._isFileBased_(type.ID, type) && (!hasImageFields || hasFileFields)) {
+        } else if (ProjectInformationService._isFileBased_(type.ID, type) && !hasImageFields) {
           item.status = 'SKIPPED_FILE';
         } else {
           var existing = ProjectInformationRepository.findAnyByProjectAndType(project.ID, type.ID);
