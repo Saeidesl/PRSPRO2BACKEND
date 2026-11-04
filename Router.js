@@ -609,6 +609,28 @@ const Router = {
       return MaterialPlanningService.createSpecification(projectId, body, params);
     }
 
+    const projectReferenceCopyMatch = path.match(/^\/projects\/([^/]+)\/reference-copy\/([^/]+)$/);
+    if (projectReferenceCopyMatch) {
+      const copyProjectId = decodeURIComponent(projectReferenceCopyMatch[1]);
+      try {
+        AccessControlService.require(params, 'PROJECT_EDIT');
+      } catch (copyPermissionError) {
+        const copyUser = AccessControlService.getCurrentUser(params || {});
+        const copyProject = ProjectRepository.findById(copyProjectId);
+        if (!copyProject ||
+            String(copyProject.TenantID) !== String(copyUser.TenantID) ||
+            String(copyProject.CreatedBy || '') !== String(copyUser.ID || '')) {
+          throw copyPermissionError;
+        }
+        AccessControlService.require(params, 'PROJECT_CREATE');
+      }
+      return ProjectService.copyReferenceInformationType(
+        copyProjectId,
+        decodeURIComponent(projectReferenceCopyMatch[2]),
+        params
+      );
+    }
+
     if (path === '/projects') {
       AccessControlService.require(params, 'PROJECT_CREATE');
       return ProjectService.create(body, params);

@@ -55,7 +55,7 @@ const APP_CONFIG = {
 
     PROJECTS: {
       name: '08_Projects',
-      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','RunNumber','SourceProjectID','RecordState','ReferencePolicyJSON','ReferenceSourceRevision']
+      headers: ['ID','TenantID','ProjectCode','Title','Description','WorkflowID','WorkflowVersion','CurrentStepID','Status','CreatedBy','CreatedAt','UpdatedAt','Quantity','AvailableDepartmentIDs','AllowedUserIDs','NotifyEnabled','CurrentStepStatus','RunNumber','SourceProjectID','RecordState' ,'ReferencePolicyJSON','ReferenceSourceRevision','ReferenceCopyStatusJSON','ReferenceCopyCompletedAt','ReferenceCopyOperationID']
     },
 
     WORKFLOWS: {
@@ -582,6 +582,7 @@ function setupDatabase() {
     }
 
     createAllSheets_(ss);
+    ensureProjectReferenceCopySchema_(ss);
     backfillPurchaseOrderSurplus_(ss);
     applyAllFormatting_(ss);
     applyAllValidations_(ss);
@@ -682,6 +683,27 @@ function ensureHeaders_(sheet, headers) {
     }
     sheet.getRange(1, startColumn, 1, missing.length).setValues([missing]);
   }
+}
+
+
+/**
+ * Ensure the resumable duplicate-project copy tracking columns exist.
+ * This is intentionally additive: existing project rows and all existing
+ * columns/values are preserved. It also repairs older databases when setupDatabase runs.
+ */
+function ensureProjectReferenceCopySchema_(ss) {
+  const sheet = ss.getSheetByName(APP_CONFIG.SHEETS.PROJECTS.name);
+  if (!sheet) {
+    throw new Error('شیت 08_Projects برای ارتقای ساختار کپی پروژه تکراری پیدا نشد.');
+  }
+
+  ensureHeaders_(sheet, [
+    'ReferenceCopyStatusJSON',
+    'ReferenceCopyCompletedAt',
+    'ReferenceCopyOperationID'
+  ]);
+
+  Logger.log('ساختار پیگیری کپی پروژه تکراری در 08_Projects بررسی و تکمیل شد.');
 }
 
 
