@@ -93,3 +93,17 @@ test('workflow policy edits validate active tenant information types and update 
   assert.match(block, /InformationTypeRepository\.findByTenant\(user\.TenantID\)/);
   assert.match(block, /updateData\.PublishedRepeatReferencePolicyJSON = JSON\.stringify\(repeatPolicy\)/);
 });
+
+test('reference copy operation is exposed as POST, never as a mutating GET', () => {
+  const router = read('Router.js');
+  const getStart = router.indexOf('  get: function(path, params)');
+  const postStart = router.indexOf('  post: function(path, body, params)');
+  assert.ok(getStart >= 0 && postStart > getStart);
+  const getBlock = router.slice(getStart, postStart);
+  const postBlock = router.slice(postStart);
+  assert.doesNotMatch(getBlock, /reference-copy/);
+  assert.match(postBlock, /reference-copy/);
+  assert.match(postBlock, /ProjectService\.copyReferenceInformationType/);
+  assert.match(postBlock, /AccessControlService\.require\(params, 'PROJECT_EDIT'\)/);
+  assert.match(postBlock, /AccessControlService\.require\(params, 'PROJECT_CREATE'\)/);
+});
