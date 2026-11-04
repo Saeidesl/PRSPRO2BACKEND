@@ -45,3 +45,13 @@ test('live reference conflict resolution uses current source revision, not manua
   assert.match(block, /String\(sourceInfo\.ValueJSON\|\|''\)/);
   assert.doesNotMatch(block, /_latestApproval_|approval\./);
 });
+
+
+test('project form lookups return workflow repeat-reference policies for frontend defaults', () => {
+  const source = read('ProjectService.js');
+  const start = source.indexOf('const workflows = (WorkflowRepository.getAll()');
+  const end = source.indexOf('const projectStatuses', start);
+  const block = source.slice(start, end);
+  assert.match(block, /RepeatReferencePolicyJSON: item\.RepeatReferencePolicyJSON/);
+  assert.match(block, /PublishedRepeatReferencePolicyJSON: item\.PublishedRepeatReferencePolicyJSON/);
+});
