@@ -11,7 +11,8 @@
 
 ### مسیر کپی پروژه و API موجود
 - `ProjectService.js:create`: ایجاد پروژه تکراری، ساخت `ReferenceCopyStatusJSON` و `ReferenceCopyPlan` بر اساس سیاست Workflow.
-- `ProjectService.js:create`: انواع دارای فیلد تصویر و فاقد فیلد فایل را در برنامه کپی با وضعیت `PENDING` قرار می‌دهد تا Frontend جریان موجود را اجرا کند؛ ترکیب دارای فیلد فایل همچنان `SKIPPED_FILE` می‌ماند.
+- `ProjectService.js:create`: انواع دارای فیلد تصویر و فاقد فیلد فایل را در برنامه کپی با وضعیت `PENDING` قرار می‌دهد؛ اگر پروژه مرجع تصویر نمایه داشته باشد، یک آیتم داخلی `__PROJECT_PROFILE_IMAGE__` نیز به همان برنامه اضافه می‌شود تا Frontend جریان موجود را اجرا کند؛ ترکیب دارای فیلد فایل همچنان `SKIPPED_FILE` می‌ماند.
+- `ProjectService.js:copyReferenceInformationType`: آیتم ویژه `__PROJECT_PROFILE_IMAGE__` را نیز از همان endpoint پردازش می‌کند؛ آخرین تصویر نمایه فعال پروژه مرجع به‌صورت مستقل کپی می‌شود.
 - `ProjectService.js:_copyReferenceImageValue_` و `_copyReferenceInformationImages_`: کپی تصویرهای تکی و چندردیفی و جایگزینی AttachmentID با شناسه جدید مقصد.
 - `ProjectService.js:copyReferenceInformationType(projectId, typeId, params)`: کپی مقدار مرکزی، تاریخچه و SyncLog؛ کپی تصویر در همان جریان و با حفظ سیاست Workflow.
 - `Router.js`: مسیر موجود `POST /projects/:projectId/reference-copy/:typeId` به متد بالا متصل است و کنترل دسترسی `PROJECT_EDIT` یا fallback مجاز `PROJECT_CREATE` را اعمال می‌کند.
@@ -34,7 +35,7 @@
 - metadata پیوست مقصد: همان TenantID، `EntityType=PROJECT`، `EntityID=ProjectID مقصد`، AttachmentType مناسب، وضعیت ACTIVE، نام و MIME معتبر، UploadedBy کاربر جاری.
 - فقط فیلدهای تصویری `image` در اطلاعات مرکزی و تصویر نمایه پروژه در محدوده‌اند؛ اسناد غیرتصویری خارج از تغییر باقی بمانند.
 - بازنویسی reference باید ساختار SINGLE/MULTIPLE و ردیف‌های چندستونی را حفظ کند.
-- کپی باید idempotent و retry-safe باشد؛ شکست میانی نباید reference خراب یا پیوست تکراری باقی بگذارد.
+- کپی باید idempotent و retry-safe باشد؛ ستون `SourceAttachmentID` در شیت `15_Attachments` نگاشت فایل مبدأ به مقصد را نگه می‌دارد تا retry همان فایل مقصد را بازیابی کند. شکست میانی نباید reference خراب یا پیوست تکراری باقی بگذارد.
 - tenant isolation، کنترل دسترسی پروژه، Audit، سیاست‌های Workflow و مسیر فعلی API حفظ شوند.
 
 ## 📋 Macro-Task Queue & Implementation Log
