@@ -140,7 +140,7 @@ const Router = {
       return ProjectService.projectFormLookups(params);
     }
 
-    const projectReferenceCopyMatch = path.match(/^\\/projects\\/([^/]+)\\/reference-copy\\/([^/]+)$/);
+    const projectReferenceCopyMatch = path.match(/^\/projects\/([^/]+)\/reference-copy\/([^/]+)$/);
     if (projectReferenceCopyMatch) {
       var copyProjectId = decodeURIComponent(projectReferenceCopyMatch[1]);
       try {
