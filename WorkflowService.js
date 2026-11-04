@@ -307,8 +307,15 @@ const WorkflowService = {
       var repeatPolicy = data.RepeatReferencePolicyJSON;
       if (typeof repeatPolicy === 'string') { try { repeatPolicy = JSON.parse(repeatPolicy); } catch (error) { throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.'); } }
       if (!repeatPolicy || typeof repeatPolicy !== 'object' || Array.isArray(repeatPolicy)) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'سیاست اطلاعات مرجع معتبر نیست.');
-      Object.keys(repeatPolicy).forEach(function(key) { if (['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(String(repeatPolicy[key]).toUpperCase()) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'مقدار سیاست اطلاعات مرجع معتبر نیست.'); });
+      var activeInformationTypes = InformationTypeRepository.findByTenant(user.TenantID).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+      Object.keys(repeatPolicy).forEach(function(key) {
+        var type = activeInformationTypes.find(function(item) { return String(item.ID) === String(key); });
+        var policy = String(repeatPolicy[key] || '').toUpperCase();
+        if (!type || ['LIVE_SYNC','INITIAL_COPY','INDEPENDENT'].indexOf(policy) === -1) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'نوع اطلاعات یا سیاست انتخاب‌شده معتبر نیست.');
+        repeatPolicy[key] = policy;
+      });
       updateData.RepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
+      updateData.PublishedRepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
     }
 
     if (data.WorkflowType !== undefined) {
@@ -324,7 +331,9 @@ const WorkflowService = {
       if (
         key !== 'ID' &&
         key !== 'TenantID' &&
-        key !== 'CreatedAt'
+        key !== 'CreatedAt' &&
+        key !== 'RepeatReferencePolicyJSON' &&
+        key !== 'PublishedRepeatReferencePolicyJSON'
       ) {
 
         updateData[key] =
@@ -336,6 +345,7 @@ const WorkflowService = {
 
     if (data.RepeatReferencePolicyJSON !== undefined) {
       updateData.RepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
+      updateData.PublishedRepeatReferencePolicyJSON = JSON.stringify(repeatPolicy);
     }
 
     /*
