@@ -727,12 +727,10 @@ const ProjectService = {
           var activeColumns = InformationTypeRepository.findColumns(type.ID).filter(function(col) {
             return String(col.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
           });
-          var hasImageFields = String(type.DataType || '').toLowerCase() === 'image' ||
-            activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'image'; });
-          var hasFileFields = String(type.DataType || '').toLowerCase() === 'file' ||
-            activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'file'; });
-          var requiresFileSkip = ProjectInformationService._isFileBased_(type.ID, type) &&
-            (!hasImageFields || hasFileFields);
+          var hasImageFields = activeColumns.length
+            ? activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'image'; })
+            : String(type.DataType || '').toLowerCase() === 'image';
+          var requiresFileSkip = ProjectInformationService._isFileBased_(type.ID, type) && !hasImageFields;
           var status = policy === 'INDEPENDENT' ? 'INDEPENDENT' :
             (!sourceInfo || !String(sourceInfo.ValueJSON || '') ? 'EMPTY' :
               (requiresFileSkip ? 'SKIPPED_FILE' : 'PENDING'));
@@ -851,10 +849,6 @@ const ProjectService = {
       if (String(type.DataType || '').toLowerCase() !== 'image') return null;
       return this._copyReferenceImageValue_(value, sourceProjectId, targetProjectId, user);
     }
-    var hasFileField = columns.some(function(col) {
-      return String(col.DataType || '').toLowerCase() === 'file';
-    });
-    if (hasFileField) return null;
     var imageCodes = columns.filter(function(col) {
       return String(col.DataType || '').toLowerCase() === 'image';
     }).map(function(col) { return String(col.Code); });
@@ -931,12 +925,11 @@ const ProjectService = {
       var activeColumns = InformationTypeRepository.findColumns(typeId).filter(function(col) {
         return String(col.Status || 'ACTIVE').toUpperCase() === 'ACTIVE';
       });
-      var hasImageFields = String(type.DataType || '').toLowerCase() === 'image' ||
-        activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'image'; });
-      var hasFileFields = String(type.DataType || '').toLowerCase() === 'file' ||
-        activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'file'; });
+      var hasImageFields = activeColumns.length
+        ? activeColumns.some(function(col) { return String(col.DataType || '').toLowerCase() === 'image'; })
+        : String(type.DataType || '').toLowerCase() === 'image';
       if (['COPIED','INDEPENDENT','EMPTY'].indexOf(String(item.status)) !== -1 ||
-          (String(item.status) === 'SKIPPED_FILE' && (!hasImageFields || hasFileFields))) {
+          (String(item.status) === 'SKIPPED_FILE' && !hasImageFields)) {
         return Response.success({ projectId: projectId, item: item, items: items, completed: items.every(function(entry) { return entry.status !== 'PENDING' && entry.status !== 'FAILED'; }) });
       }
       var policyMap = {};
