@@ -11,9 +11,10 @@
 
 ### مسیر کپی پروژه و API موجود
 - `ProjectService.js:create`: ایجاد پروژه تکراری، ساخت `ReferenceCopyStatusJSON` و `ReferenceCopyPlan` بر اساس سیاست Workflow.
-- `ProjectService.js:create`: انواع دارای فیلد تصویر و فاقد فیلد فایل را در برنامه کپی با وضعیت `PENDING` قرار می‌دهد؛ اگر پروژه مرجع تصویر نمایه داشته باشد، یک آیتم داخلی `__PROJECT_PROFILE_IMAGE__` نیز به همان برنامه اضافه می‌شود تا Frontend جریان موجود را اجرا کند؛ ترکیب دارای فیلد فایل همچنان `SKIPPED_FILE` می‌ماند.
+- `ProjectService.js:create`: هر نوع دارای ستون تصویر را حتی در صورت وجود ستون فایل غیرتصویری در همان فرم با وضعیت `PENDING` قرار می‌دهد؛ فقط نوع‌های بدون تصویر و فایل‌محور `SKIPPED_FILE` می‌مانند. تصویر نمایه نیز با آیتم داخلی `__PROJECT_PROFILE_IMAGE__` وارد برنامه می‌شود.
 - `ProjectService.js:copyReferenceInformationType`: آیتم ویژه `__PROJECT_PROFILE_IMAGE__` را نیز از همان endpoint پردازش می‌کند؛ آخرین تصویر نمایه فعال پروژه مرجع به‌صورت مستقل کپی می‌شود.
-- `ProjectService.js:_copyReferenceImageValue_` و `_copyReferenceInformationImages_`: کپی تصویرهای تکی و چندردیفی و جایگزینی AttachmentID با شناسه جدید مقصد.
+- `ProjectService.js:_copyReferenceImageValue_` و `_copyReferenceInformationImages_`: کپی تصویرهای تکی و چندردیفی و جایگزینی AttachmentID با شناسه جدید مقصد؛ ستون‌های فایل غیرتصویری در فرم‌های ترکیبی بدون تغییر باقی می‌مانند.
+- `ProjectService.js:copyReferenceInformationType`: وضعیت قدیمی `SKIPPED_FILE` را برای نوع‌های دارای ستون تصویر قابل پردازش مجدد می‌کند؛ نوع‌های صرفاً فایل همچنان رد می‌شوند.
 - `ProjectService.js:copyReferenceInformationType(projectId, typeId, params)`: کپی مقدار مرکزی، تاریخچه و SyncLog؛ کپی تصویر در همان جریان و با حفظ سیاست Workflow.
 - `Router.js`: مسیر موجود `POST /projects/:projectId/reference-copy/:typeId` به متد بالا متصل است و کنترل دسترسی `PROJECT_EDIT` یا fallback مجاز `PROJECT_CREATE` را اعمال می‌کند.
 - `js/modules/projects.js` در Frontend، برنامه کپی را اجرا و وضعیت را نمایش می‌دهد؛ API جدید یا مسیر موازی لازم نیست.
