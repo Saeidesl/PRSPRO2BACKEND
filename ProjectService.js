@@ -514,7 +514,10 @@ const ProjectService = {
         throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'پروژه مرجع پیدا نشد یا دسترسی به آن مجاز نیست.');
       }
       if (String(sourceProject.ID) === String(project.ID || '')) throw ErrorHandler.create(Constants.ERROR.VALIDATION_ERROR, 'پروژه نمی‌تواند مرجع خودش باشد.');
-      try { referencePolicy = JSON.parse(workflow.PublishedRepeatReferencePolicyJSON || workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
+      try { referencePolicy = JSON.parse(workflow.RepeatReferencePolicyJSON || '{}'); } catch (policyError) { referencePolicy = {}; }
+      if (!Object.keys(referencePolicy).length) {
+        try { referencePolicy = JSON.parse(workflow.PublishedRepeatReferencePolicyJSON || '{}'); } catch (publishedPolicyError) { referencePolicy = {}; }
+      }
       // The workflow is the only source of truth; ignore client policy overrides.
       var validInformationTypes = InformationTypeRepository.findByTenant(tenantId).filter(function(item) { return String(item.Status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
       Object.keys(referencePolicy).forEach(function(key) {
