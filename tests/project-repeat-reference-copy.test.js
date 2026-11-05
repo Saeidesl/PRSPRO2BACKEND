@@ -15,7 +15,7 @@ test('repeat project creation persists a per-information copy plan instead of co
   assert.match(block, /ReferenceCopyStatusJSON/);
   assert.match(block, /ReferenceCopyPlan/);
   assert.match(block, /PENDING/);
-  assert.match(block, /SKIPPED_FILE/);
+  assert.match(block, /\['COPIED','INDEPENDENT','EMPTY'\]/);
   assert.doesNotMatch(block, /ProjectInformationRepository\.insert\(/);
 });
 
