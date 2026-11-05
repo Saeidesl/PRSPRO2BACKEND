@@ -91,3 +91,25 @@ test('amendment preserves the current project code when the saved form still con
   assert.match(service,/clean\[key\]=String\(project\.ProjectCode\|\|''\)/);
   assert.match(service,/projectCodeChanged\[key\]&&!FormService\._isEmptyValue_\(next\)/);
 });
+
+
+test('event creation exposes separate persistence outcomes for reusable forms and central information',()=>{
+  const event=read('EventService.js');
+  const forms=read('FormService.js');
+  assert.match(event,/formPersistence: formPersistence/);
+  assert.match(event,/centralInformation: centralInformation/);
+  assert.match(forms,/centralInformationCount/);
+  assert.match(forms,/responseCount: responseCount/);
+});
+
+test('procurement retry route relies on the event service ownership-aware authorization',()=>{
+  const router=read('Router.js');
+  const service=read('EventService.js');
+  const start=router.indexOf('const procurementRetryMatch');
+  const end=router.indexOf("if (path === '/procurement/orders')",start);
+  const route=router.slice(start,end);
+  assert.match(route,/EventService\.retryProcurementIntegration/);
+  assert.doesNotMatch(route,/AccessControlService\.require/);
+  assert.match(service,/canManageIntegration/);
+  assert.match(service,/event\.CreatedBy/);
+});
