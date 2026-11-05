@@ -14,6 +14,7 @@ function loadService() {
   let failCompletionUpdate = false;
   const context = {
     AccessControlService: { getCurrentUser: () => currentUser },
+    FormRepository: { findResponsesByEvent: () => [] },
     EventRepository: { getAll: () => events, update: (id, patch) => { const found = events.find((item) => item.ID === id); if (found && !failCompletionUpdate) Object.assign(found, patch); return found; } },
     ProjectRepository: { findById: () => null },
     ProjectService: { _isProjectAvailableToUser_: () => false },
