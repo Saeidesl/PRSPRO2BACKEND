@@ -51,6 +51,7 @@
 ### Frontend — فایل‌ها و مسئولیت‌ها
 - `pages/events.html`: صفحه فعلی ثبت رویداد و میزبان ساختار/نقاط ورود فعلی.
 - `js/modules/events.js`: ماژول فعلی ثبت رویداد؛ بارگذاری زمینه، انواع رویداد، فرم پویا، ورودی‌های فیلد، ردیف‌های چندگانه، جمع‌آوری پاسخ‌ها، بارگذاری فایل فرم و ارسال ثبت.
+- `css/event-context.css`: استایل پنل اطلاعات جانبی رویداد در دسکتاپ و موبایل؛ از `index.html` فرانت‌اند بارگذاری می‌شود. توابع `loadEventContext` و `toggleEventContextHistory` در `js/modules/events.js` داده‌ها را از APIهای موجود دریافت می‌کنند.
 - `pages/project-detail.html`: صفحه جزئیات پروژه؛ دکمه موجود `project-add-event-button` نقطه ورود پروژه‌محور است. بخش‌های اطلاعات مرکزی، فرم‌های ثبت‌شده، آخرین رویدادها، تاریخچه مدیریتی و شناسنامه‌ها در همین صفحه وجود دارند.
 - `js/modules/project-detail.js`: مدیریت صفحه جزئیات پروژه، بارگذاری bundle داده‌های پروژه شامل `events`, `eventData`, `eventFields`، تابع/جریان `loadProjectForms` و اتصال دکمه ثبت رویداد.
 - `js/core/api.js`: لایه استاندارد درخواست‌ها؛ استفاده از `request/get/post/put/delete/getCached/getFresh/extractData/invalidate/invalidateMany` و حفظ مدیریت خطا/کش. درخواست مستقیم موازی ایجاد نشود.
