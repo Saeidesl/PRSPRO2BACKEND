@@ -573,7 +573,7 @@ const Router = {
 
     const procurementRetryMatch = path.match(/^\/events\/([^/]+)\/procurement-retry$/);
     if (procurementRetryMatch) {
-      AccessControlService.require(params, 'EVENT_EDIT');
+      // EventService enforces creator ownership or EVENT_EDIT/PROCUREMENT_MANAGE.
       return EventService.retryProcurementIntegration(procurementRetryMatch[1], params);
     }
 
