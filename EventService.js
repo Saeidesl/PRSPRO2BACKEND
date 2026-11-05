@@ -917,6 +917,8 @@ const EventService = {
             throw ErrorHandler.create(Constants.ERROR.NOT_FOUND, 'رویداد مورد نظر پیدا نشد.');
           }
         }
+        const replayFormResponses = (FormRepository.findResponsesByEvent(prior.ID) || [])
+          .filter(function(row) { return String(row.TenantID) === String(user.TenantID); });
         return Response.success({
           event: prior,
           project: project,
@@ -924,6 +926,15 @@ const EventService = {
           currentStepID: project ? project.CurrentStepID : '',
           projectStatus: project ? project.Status : '',
           availableDepartmentIDs: project ? this._parseArray_(project.AvailableDepartmentIDs) : [],
+          formPersistence: {
+            status: replayFormResponses.length ? 'SUCCEEDED' : 'NOT_APPLICABLE',
+            responseCount: replayFormResponses.length
+          },
+          centralInformation: {
+            status: replayFormResponses.length && project ? 'SUCCEEDED' : 'NOT_APPLICABLE',
+            updatedCount: 0,
+            projectCodeUpdated: false
+          },
           procurementIntegration: { status: 'ALREADY_PROCESSED' },
           idempotentReplay: true
         }, { message: 'این درخواست قبلاً ثبت شده است؛ از ایجاد رویداد تکراری جلوگیری شد.' });
@@ -1224,8 +1235,20 @@ const EventService = {
       ? this._getWorkflowRuleProgress_(project, user.TenantID)
       : null;
 
+    let formPersistence = { status: 'NOT_APPLICABLE', responseCount: 0 };
+    let centralInformation = { status: 'NOT_APPLICABLE', updatedCount: 0, projectCodeUpdated: false };
     if (validatedFormResponses.length) {
-      FormService.saveEventResponses(created, validatedFormResponses, user, requestParams);
+      const formSaveResult = FormService.saveEventResponses(created, validatedFormResponses, user, requestParams) || {};
+      formPersistence = {
+        status: 'SUCCEEDED',
+        responseCount: Number(formSaveResult.responseCount || validatedFormResponses.length)
+      };
+      const centralCount = Number(formSaveResult.centralInformationCount || 0);
+      centralInformation = {
+        status: centralCount ? 'SUCCEEDED' : 'NOT_APPLICABLE',
+        updatedCount: centralCount,
+        projectCodeUpdated: formSaveResult.projectCodeUpdated === true
+      };
     }
 
     let procurementIntegration = { status: 'NOT_CONFIGURED' };
@@ -1340,6 +1363,8 @@ const EventService = {
         availableDepartmentIDs: updatedProject
           ? this._parseArray_(updatedProject.AvailableDepartmentIDs)
           : [],
+        formPersistence: formPersistence,
+        centralInformation: centralInformation,
         procurementIntegration: procurementIntegration,
         workflowProgress: workflowProgressAfter
       },
