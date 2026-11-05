@@ -28,7 +28,7 @@ test('repeat project copies one information type at a time with history and live
   assert.match(block, /ProjectInformationRepository\.insertHistory\(/);
   assert.match(block, /ProjectInformationRepository\.insertSyncLog\(/);
   assert.match(block, /LockService\.getScriptLock\(\)/);
-  assert.match(block, /String\\(item\\.status\\) === 'SKIPPED_FILE' && !hasImageFields/);
+  assert.match(block, /String\(item\.status\) === 'SKIPPED_FILE' && !hasImageFields/);
   assert.match(block, /status = 'FAILED'/);
 });
 
