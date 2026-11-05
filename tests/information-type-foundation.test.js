@@ -58,7 +58,7 @@ test('new service and repository files contain no direct SpreadsheetApp access',
 
 test('project information excludes deleted definitions and protects the Sheets cell size limit', () => {
   const service = read('ProjectInformationService.js');
-  assert.match(service, /type\.Status \|\| 'ACTIVE'\)===\s*'ACTIVE'/);
+  assert.match(service, /String\\(type\\.Status \\|\\| 'ACTIVE'\\)\\.toUpperCase\\(\\)==='ACTIVE'/);
   assert.match(service, /valueJSON\.length>45000/);
 });
 
