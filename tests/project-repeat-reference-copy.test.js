@@ -39,7 +39,7 @@ test('project information list includes active copied values regardless of statu
   const block = source.slice(start, end);
   assert.match(block, /String\(row\.Status \|\| 'ACTIVE'\)\.toUpperCase\(\)==='ACTIVE'/);
   assert.match(block, /String\(type\.Status \|\| 'ACTIVE'\)\.toUpperCase\(\)==='ACTIVE'/);
-  assert.match(block, /row\.Value=this\._parse\(row\.ValueJSON,null\)/);
+  assert.ok(block.includes('Value:this._parse(row.ValueJSON,null)'));
 });
 
 test('repeat project create requests use a stable operation key to recover lost responses', () => {
