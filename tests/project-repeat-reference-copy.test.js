@@ -15,7 +15,7 @@ test('repeat project creation persists a per-information copy plan instead of co
   assert.match(block, /ReferenceCopyStatusJSON/);
   assert.match(block, /ReferenceCopyPlan/);
   assert.match(block, /PENDING/);
-  assert.match(block, /\['COPIED','INDEPENDENT','EMPTY'\]/);
+  assert.match(block, /SKIPPED_FILE/);
   assert.doesNotMatch(block, /ProjectInformationRepository\.insert\(/);
 });
 
@@ -28,7 +28,7 @@ test('repeat project copies one information type at a time with history and live
   assert.match(block, /ProjectInformationRepository\.insertHistory\(/);
   assert.match(block, /ProjectInformationRepository\.insertSyncLog\(/);
   assert.match(block, /LockService\.getScriptLock\(\)/);
-  assert.match(block, /\['COPIED','INDEPENDENT','EMPTY','SKIPPED_FILE'\]/);
+  assert.match(block, /String\\(item\\.status\\) === 'SKIPPED_FILE' && !hasImageFields/);
   assert.match(block, /status = 'FAILED'/);
 });
 
