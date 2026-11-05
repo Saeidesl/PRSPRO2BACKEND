@@ -324,11 +324,15 @@ const FormService = {
     return validated;
   },
   saveEventResponses: function(event, responses, user, params) {
+    var responseCount = 0;
+    var centralInformationCount = 0;
+    var projectCodeUpdated = false;
     (responses || []).forEach(function(response){
       var existing=FormRepository.findResponse(event.ID,response.FormID);
       var now=new Date().toISOString();
       var row={ID:existing?existing.ID:this._id('EFR'),TenantID:user.TenantID,EventID:event.ID,FormID:response.FormID,FormVersion:response.FormVersion,ResponseJSON:JSON.stringify(response.Values),DefinitionSnapshotJSON:JSON.stringify(response.DefinitionSnapshot),CreatedBy:user.ID,CreatedAt:now};
       if(existing)FormRepository.updateResponse(existing.ID,row);else FormRepository.insertResponse(row);
+      responseCount += 1;
       AuditService.log({TenantID:user.TenantID,UserID:user.ID,Action:Constants.ACTION.CREATE,EntityType:'EVENT_FORM_DATA',EntityID:event.ID,NewData:row,Reason:'ثبت پاسخ فرم متصل به رویداد'});
       // Keep the event snapshot and also update the project's current central
       // information. Empty/omitted values do not erase a previously saved value.
@@ -340,6 +344,8 @@ const FormService = {
           if (!informationType) return;
           if (String(informationType.Code || '').toUpperCase() === 'PROJECT_CODE') {
             ProjectService.updateProjectCodeFromEvent(event.ProjectID, value, event.ID, user);
+            projectCodeUpdated = true;
+            centralInformationCount += 1;
             return;
           }
           ProjectInformationService.save(event.ProjectID, typeId, {
@@ -347,9 +353,16 @@ const FormService = {
             SourceEventID: event.ID,
             Reason: 'به‌روزرسانی اطلاعات پروژه از فرم رویداد'
           }, params || {});
+          centralInformationCount += 1;
         });
       }
     },this);
+    return {
+      status: 'SUCCEEDED',
+      responseCount: responseCount,
+      centralInformationCount: centralInformationCount,
+      projectCodeUpdated: projectCodeUpdated
+    };
   },
   updateEventFormResponse: function(eventId, formId, body, params) {
     var user=this._user(params), event=EventRepository.findById(eventId); body=body||{};
